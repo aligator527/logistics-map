@@ -104,6 +104,8 @@ class AppState {
   /** 地理院タイル under the map ('' = none) and the opacity of the area fills over it */
   base = $state('');
   fillOp = $state(0.5);
+  /** map view "z/lat/lon" (地理院タイル zoom level), '' = whole map or framed by the selection */
+  mv = $state('');
   /** selected DPL site (index into dpl.sites) — -1 = none */
   site = $state(-1);
 
@@ -191,7 +193,8 @@ class AppState {
     if (this.base) p.set('bm', this.base);
     if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
     if (this.view !== 'map') p.set('v', this.view);
-    return p.toString();
+    if (this.mv) p.set('mv', this.mv);
+    return p.toString().replace(/%2F/g, '/');
   }
 
   fromHash(hash: string, lists: HashLists) {
@@ -261,6 +264,8 @@ class AppState {
     this.base = /^[a-z]{2,12}$/.test(p.get('bm') ?? '') ? p.get('bm')! : '';
     const fo = Number(p.get('fo'));
     this.fillOp = p.has('fo') && fo >= 0 && fo <= 1 ? fo : 0.5;
+    const mv = p.get('mv') ?? '';
+    this.mv = /^\d{1,2}(\.\d)?\/-?\d{1,3}(\.\d+)?\/-?\d{1,3}(\.\d+)?$/.test(mv) ? mv : '';
     this.view = p.get('v') === 'table' ? 'table' : 'map';
   }
 }

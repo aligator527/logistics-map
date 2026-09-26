@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { select } from 'd3-selection';
   import 'd3-transition';
   import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from 'd3-zoom';
@@ -12,6 +12,9 @@
   import { buildSat, placeCards, type Mask, type NewsGroup } from '../lib/newsmap';
   import { placeKey, type NewsLite, type Related } from '../lib/related';
   import { TILE_LAYERS, tileImage, tileUrl, visibleTiles, type TileLayer } from '../lib/tiles';
+  import { loadDetail, type Detail } from '../lib/detail';
+  import { project as projectLL, unproject } from '../lib/project';
+  import { measure, TSUBO } from '../lib/measure.svelte';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
@@ -33,6 +36,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
+        zoomZ = $bindable(0), mv = '', onmv,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -100,6 +104,11 @@
     /** the next click on the map picks a point (viewBox units) instead of an area */
     pickPoint?: boolean;
     onpoint?: (xy: [number, number]) => void;
+    /** current zoom as a 地理院タイル zoom level (bindable, read-only for the parent) */
+    zoomZ?: number;
+    /** map view for the URL: "z/lat/lon" ('' = whole of Japan / framed automatically) */
+    mv?: string;
+    onmv?: (mv: string) => void;
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -148,16 +157,169 @@
       // Keep the page scrollable: wheel zooms only with Ctrl/⌘ (trackpad pinch sends ctrlKey),
       // and one finger pans only once the map is zoomed in.
       .filter((e: Event) => {
-        if (e.type === 'wheel') return (e as WheelEvent).ctrlKey || (e as WheelEvent).metaKey;
+        if (e.type === 'wheel') {
+          const w = e as WheelEvent;
+          if (w.ctrlKey || w.metaKey || wheelOn) return true;
+          flashWheelHint();
+          return false;
+        }
         if (e.type === 'touchstart') return (e as TouchEvent).touches.length > 1 || transform.k > 1.01;
         if (e.type === 'dblclick') return false;
         return !(e as MouseEvent).button;
       })
-      .on('zoom', (e) => { transform = e.transform; hover = null; });
+      .on('zoom', (e) => { transform = e.transform; hover = null; })
+      .on('end', () => emitMv());
     select(svg).call(zb).on('dblclick.zoom', null);
     ready = true;
     return () => { select(svg).on('.zoom', null); };
   });
+
+  // ------------------------------------------------------------ zoom level, deep zoom
+  const UPM_Z = 156543.03 * Math.cos((36 * Math.PI) / 180);
+  /** 地理院タイル zoom level for a zoom factor k (screen px per metre at 36°N) */
+  const zOf = (k: number) => Math.log2(k * fit.s * geo.unitsPerMetre * UPM_Z);
+  const kOf = (z: number) => 2 ** z / (fit.s * geo.unitsPerMetre * UPM_Z);
+  const Z_MAX = 17.5;
+  $effect(() => { zoomZ = zOf(transform.k); });
+  // down to single buildings (about z17.5); the zoom-out limit stays the whole map
+  $effect(() => { if (ready && zb) zb.scaleExtent([1, Math.max(40, kOf(Z_MAX))]); });
+  const zNow = $derived(zOf(transform.k));
+  /** 1 = full colour; fades to outlines between z11.5 and z14.5 */
+  const fade = $derived(Math.max(0, Math.min(1, (14.5 - zNow) / 3)));
+  /** detailed boundaries and roads from this zoom */
+  const Z_DETAIL = 10.5;
+  const deep = $derived(zNow >= Z_DETAIL);
+
+  let details = $state.raw(new Map<string, Detail>());
+  const prefsInView = $derived.by(() => {
+    if (!deep) return [] as string[];
+    const { x0, y0, x1, y1 } = view;
+    return geo.prefs.filter((p) => p.bbox[0][0] < x1 && p.bbox[1][0] > x0 && p.bbox[0][1] < y1 && p.bbox[1][1] > y0).map((p) => p.code);
+  });
+  $effect(() => {
+    for (const pc of prefsInView) {
+      if (details.has(pc)) continue;
+      loadDetail(geo, pc).then((d) => { if (d && !details.has(pc)) details = new Map(details).set(pc, d); });
+    }
+  });
+  const detailOn = $derived(deep ? prefsInView.map((pc) => details.get(pc)).filter((d): d is Detail => !!d) : []);
+  /** the path to draw for a shape: street-level detail when zoomed in and loaded */
+  function dOf(s: Shape): string {
+    if (!deep) return s.d;
+    const d = details.get(s.code.slice(0, 2));
+    if (!d) return s.d;
+    return s.code.length === 2 ? d.pref : d.munis.get(s.code) ?? s.d;
+  }
+  const detailRoads = $derived(detailOn.length ? {
+    1: detailOn.map((d) => d.roads[1]).join(''), 2: detailOn.map((d) => d.roads[2]).join(''), 3: detailOn.map((d) => d.roads[3]).join(''),
+  } : null);
+
+  // ------------------------------------------------------------ view in the URL ("z/lat/lon")
+  /** viewBox point -> lon/lat (insets undone) */
+  function lonLatAt([vx, vy]: [number, number]): [number, number] | null {
+    if (!geo.layout) return null;
+    const inset = geo.insets.find((r) => vx >= r.x && vx <= r.x + r.w && vy >= r.y && vy <= r.y + r.h);
+    return unproject(toPlanar(vx, vy), geo.layout, inset ? (inset.key as 'okinawa' | 'ogasawara') : 'main');
+  }
+  function viewBoxAt(lon: number, lat: number): [number, number] | null {
+    if (!geo.layout) return null;
+    const { p, space } = projectLL(lon, lat, geo.layout);
+    return space === 'outside' ? null : geo.P(p);
+  }
+  let lastMv = '';
+  function emitMv() {
+    if (!onmv) return;
+    let out = '';
+    if (transform.k > 1.05) {
+      const c = transform.invert([geo.width / 2, geo.height / 2]) as [number, number];
+      const ll = lonLatAt(c);
+      if (ll) out = `${zNow.toFixed(1)}/${ll[1].toFixed(5)}/${ll[0].toFixed(5)}`;
+    }
+    if (out !== lastMv) { lastMv = out; onmv(out); }
+  }
+  function applyMv(s: string, ms = 550) {
+    const [z, lat, lon] = s.split('/').map(Number);
+    const xy = [z, lat, lon].every(isFinite) ? viewBoxAt(lon, lat) : null;
+    if (!xy) return false;
+    lastMv = s;
+    const k = Math.max(1, Math.min(kOf(Z_MAX), kOf(z)));
+    go(zoomIdentity.translate(geo.width / 2 - k * xy[0], geo.height / 2 - k * xy[1]).scale(k), ms);
+    return true;
+  }
+  // a view given in the URL at load wins over framing the selected prefecture
+  let startMv = untrack(() => mv);
+  $effect(() => {
+    const m = mv;
+    if (!ready || startMv) return;
+    untrack(() => {
+      if (m && m !== lastMv) applyMv(m);
+      // the URL lost its view (another link, a guide step): back to the selection or the whole map
+      else if (!m && lastMv) {
+        lastMv = '';
+        const bb = focus && zoomFocus && !compare ? geo.prefFrame.get(focus) : null;
+        if (bb) frame(bb, 30, true); else go(zoomIdentity, 400);
+      }
+    });
+  });
+
+  // ------------------------------------------------------------ wheel, double click / tap
+  /** the wheel zooms without Ctrl once the map has been clicked (until a click elsewhere or Escape) */
+  let wheelOn = $state(false);
+  let wheelHint = $state(false);
+  let wheelTimer = 0;
+  function flashWheelHint() {
+    wheelHint = true;
+    clearTimeout(wheelTimer);
+    wheelTimer = window.setTimeout(() => (wheelHint = false), 1600);
+  }
+  onMount(() => {
+    const off = (e: PointerEvent) => { if (wrap && !wrap.contains(e.target as Node)) wheelOn = false; };
+    document.addEventListener('pointerdown', off, true);
+    return () => document.removeEventListener('pointerdown', off, true);
+  });
+  function zoomAt(e: { clientX: number; clientY: number }, f: number) {
+    if (!wrap) return;
+    const { x, y } = local(e);
+    const p: [number, number] = [(x - fit.ox) / fit.s, (y - fit.oy) / fit.s];
+    select(svg).transition().duration(reduce() ? 0 : 300).call(zb.scaleBy as never, f, p);
+  }
+  function ondblclick(e: MouseEvent) {
+    if (pickPoint || measure.armed) { if (measure.armed && measure.pts.length > 2) measure.closed = true; e.preventDefault(); return; }
+    zoomAt(e, e.shiftKey ? 0.5 : 2);
+  }
+  let lastTap: { t: number; x: number; y: number } | null = null;
+  function onpointerup(e: PointerEvent) {
+    if (e.pointerType !== 'touch' || pickPoint || measure.armed) return;
+    const now = performance.now();
+    if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
+      lastTap = null;
+      zoomAt(e, 2);
+      return;
+    }
+    lastTap = { t: now, x: e.clientX, y: e.clientY };
+  }
+
+  // ------------------------------------------------------------ scale bar
+  const scaleBar = $derived.by(() => {
+    const c = transform.invert([geo.width / 2, geo.height / 2]) as [number, number];
+    const inset = geo.insets.find((r) => c[0] >= r.x && c[0] <= r.x + r.w && c[1] >= r.y && c[1] <= r.y + r.h);
+    const ks = inset?.key === 'okinawa' ? geo.insetScale.okinawa : inset?.key === 'ogasawara' ? geo.insetScale.ogasawara : 1;
+    const mpp = 1 / (transform.k * fit.s * geo.unitsPerMetre * ks);
+    const max = mpp * 110;
+    const pow = 10 ** Math.floor(Math.log10(max));
+    const m = [5, 2, 1].map((f) => f * pow).find((v) => v <= max) ?? pow;
+    return { w: m / mpp, label: m >= 1000 ? `${m / 1000} km` : `${m} m` };
+  });
+
+  // ------------------------------------------------------------ measuring
+  const measureXY = $derived(measure.pts.map(([lon, lat]) => viewBoxAt(lon, lat)).filter((p): p is [number, number] => !!p));
+  const measurePath = $derived.by(() => {
+    if (!measureXY.length) return '';
+    const s = measureXY.map((p) => transform.apply(p));
+    return s.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join('') + (measure.closed ? 'Z' : '');
+  });
+  const fmtLen = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10_000 ? 1 : 2)} km` : `${Math.round(m)} m`);
+  const fmtArea = (a: number) => (a >= 1e6 ? `${(a / 1e6).toFixed(2)} km²` : `${Math.round(a).toLocaleString()} m²`);
 
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   function go(target: ZoomTransform, ms = 550) {
@@ -165,9 +327,11 @@
     if (reduce()) sel.call(zb.transform, target);
     else sel.transition().duration(ms).call(zb.transform as never, target);
   }
-  function frame(bbox: Shape['bbox'], maxK = 30) {
+  function frame(bbox: Shape['bbox'], maxK = 30, force = false) {
     const [[x0, y0], [x1, y1]] = bbox;
     const k = Math.max(1, Math.min(maxK, 0.85 / Math.max((x1 - x0) / geo.width, (y1 - y0) / geo.height)));
+    const v = view;
+    if (!force && transform.k >= k && x0 < v.x1 && x1 > v.x0 && y0 < v.y1 && y1 > v.y0) return;
     go(zoomIdentity.translate(geo.width / 2 - k * (x0 + x1) / 2, geo.height / 2 - k * (y0 + y1) / 2).scale(k));
   }
   function frameAB() {
@@ -177,11 +341,22 @@
            [Math.max(...boxes.map((x) => x[1][0])), Math.max(...boxes.map((x) => x[1][1]))]], 8);
   }
 
+  let lastSel = '';
+  // reframe when the selection changes (only then: the current zoom is read, not tracked)
   $effect(() => {
     if (!ready) return;
-    if (compare) { void a; void b; if (zoomFocus) frameAB(); else go(zoomIdentity, 400); return; }
-    if (focus && zoomFocus) { const bb = geo.prefFrame.get(focus); if (bb) frame(bb); }
-    else go(zoomIdentity, 400);
+    const cmp = compare, f = focus, zf = zoomFocus, bb = f ? geo.prefFrame.get(f) : null;
+    const sel = `${cmp}|${a}|${b}|${f}`;
+    untrack(() => {
+      // data arriving later (municipal frames, the layer's zoom rule) must not throw away a view the user is in
+      const selChanged = sel !== lastSel;
+      lastSel = sel;
+      if (startMv) { const m = startMv; startMv = ''; if (applyMv(m, 0)) return; }
+      if (!selChanged && lastMv) return;
+      if (cmp) { if (zf) frameAB(); else go(zoomIdentity, 400); return; }
+      if (f && zf) { if (bb) frame(bb); }
+      else go(zoomIdentity, 400);
+    });
   });
 
   /** centre the map on a point (viewBox units) at zoom k */
@@ -290,10 +465,22 @@
     hoverFlow = tg?.flow ?? null;
   }
   let down: { x: number; y: number } | null = null;
-  function onpointerdown(e: PointerEvent) { down = { x: e.clientX, y: e.clientY }; }
+  function onpointerdown(e: PointerEvent) { down = { x: e.clientX, y: e.clientY }; wheelOn = true; }
   function onclick(e: MouseEvent) {
     if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return; // ended a drag
     const touch = (e as PointerEvent).pointerType === 'touch';
+    if (measure.armed && wrap) {
+      const { x, y } = local(e);
+      const vb = transform.invert([(x - fit.ox) / fit.s, (y - fit.oy) / fit.s]) as [number, number];
+      // a click on the first point closes the polygon
+      if (measure.pts.length > 2 && measureXY[0]) {
+        const [fx, fy] = transform.apply(measureXY[0]);
+        if (Math.hypot(fx * fit.s + fit.ox - x, fy * fit.s + fit.oy - y) < 12) { measure.closed = true; return; }
+      }
+      const ll = lonLatAt(vb);
+      if (ll) measure.add(ll);
+      return;
+    }
     if (pickPoint && onpoint && wrap) {
       const { x, y } = local(e);
       onpoint(transform.invert([(x - fit.ox) / fit.s, (y - fit.oy) / fit.s]) as [number, number]);
@@ -318,6 +505,12 @@
   // Roving focus over prefectures (arrow keys), Enter selects, Escape goes back to Japan.
   let kbd = $state<string | null>(null);
   function onkeydown(e: KeyboardEvent) {
+    if (measure.armed && (e.key === 'Escape' || e.key === 'Backspace')) {
+      e.preventDefault();
+      if (e.key === 'Escape') measure.stop(); else measure.undo();
+      return;
+    }
+    if (e.key === 'Escape') wheelOn = false;
     // inside a focused prefecture the arrows walk its municipalities (when they are on the map)
     const munisHere = focus && !compare && geo.munis.length ? geo.munis.filter((m) => m.code.startsWith(focus)) : [];
     if (munisHere.length && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(e.key)) {
@@ -588,7 +781,8 @@
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 </script>
 
-<div class="map" class:picking={pickPoint} class:tiled={!!tileLayer} bind:this={wrap} style:--fo={fillOpacity}>
+<div class="map" class:picking={pickPoint || measure.armed} class:tiled={!!tileLayer} bind:this={wrap}
+     style:--fo={fillOpacity * (0.06 + 0.94 * fade)} style:--fade={fade}>
   {#if tileLayer}
     <canvas class="tiles" class:inv={dark && (tileLayer.thematic ? TILE_LAYERS[0] : tileLayer).invertDark} bind:this={baseCanvas}
             style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
@@ -607,12 +801,14 @@
     {onpointermove}
     onpointerleave={() => (hover = null)}
     {onpointerdown}
+    {onpointerup}
     {onclick}
+    {ondblclick}
     {onkeydown}
     onblur={() => { kbd = null; hover = null; }}
   >
     <defs>
-      <pattern id="pat-nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <pattern id="pat-nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / transform.k})">
         <rect width="6" height="6" fill="var(--land)" />
         <line x1="0" y1="0" x2="0" y2="6" stroke="var(--hatch)" stroke-width="1.4" />
       </pattern>
@@ -630,21 +826,27 @@
         <rect class="inset" x={f.x} y={f.y} width={f.w} height={f.h} rx="4" />
       {/each}
 
-      <g class="areas" class:muni={level === 'muni'}>
+      <g class="areas" class:muni={level === 'muni'} class:deep={fade < 1}>
         {#each areaShapes as s (s.code)}
-          <path d={s.d} data-code={s.code} fill={fill(s.code)} class:dim={dimmed(s.code)}
+          {@const f = fill(s.code)}
+          <path d={dOf(s)} data-code={s.code} fill={f} class:dim={dimmed(s.code)}
+                style:stroke={fade < 1 ? (f.startsWith('url') ? 'var(--hatch)' : f) : null}
                 class:faded={level === 'pref' && !!focus && !compare && s.code !== focus} />
         {/each}
       </g>
-      <path class="pref-borders" class:strong={level === 'muni'} d={geo.prefBorders} />
+      {#if detailOn.length}
+        <path class="pref-borders" class:strong={level === 'muni'} d={detailOn.map((d) => d.outline).join('')} />
+      {:else}
+        <path class="pref-borders" class:strong={level === 'muni'} d={geo.prefBorders} />
+      {/if}
 
       {#if focusMunis.length}
         <g class="munis">
           {#each focusMunis as m (m.code)}
-            <path d={m.d} data-muni={m.code} />
+            <path d={dOf(m)} data-muni={m.code} />
           {/each}
         </g>
-        <path class="muni-borders" d={geo.muniBorders(focus!)} />
+        <path class="muni-borders" d={deep && details.get(focus!) ? details.get(focus!)!.borders : geo.muniBorders(focus!)} />
       {/if}
 
       {#if zoning}
@@ -656,10 +858,10 @@
       {/if}
       {#if roads && showRoads}
         <g class="roads" class:far={transform.k < 2} aria-hidden="true">
-          <path class="halo" d={roads.d[1] + roads.d[2] + roads.d[3]} />
-          <path class="r3" d={roads.d[3]} />
-          <path class="r2" d={roads.d[2]} />
-          <path class="r1" d={roads.d[1]} />
+          <path class="halo" d={(detailRoads ?? roads.d)[1] + (detailRoads ?? roads.d)[2] + (detailRoads ?? roads.d)[3]} />
+          <path class="r3" d={(detailRoads ?? roads.d)[3]} />
+          <path class="r2" d={(detailRoads ?? roads.d)[2]} />
+          <path class="r1" d={(detailRoads ?? roads.d)[1]} />
         </g>
       {/if}
 
@@ -670,35 +872,35 @@
         <path class="track {tr.kind}" d={tr.d} />
       {/each}
       {#if hoverShape}
-        <path class="hover" d={hoverShape.d} />
+        <path class="hover" d={dOf(hoverShape)} />
       {/if}
       {#if focusShape && !compare}
-        <path class="focus" class:thin={level === 'muni'} d={focusShape.d} />
+        <path class="focus" class:thin={level === 'muni'} d={dOf(focusShape)} />
       {/if}
       {#if selMuniShape}
-        <path class="focus sel-muni" d={selMuniShape.d} />
+        <path class="focus sel-muni" d={dOf(selMuniShape)} />
       {/if}
-      {#if muniB && muniByCode.get(muniB)}<path class="sel-b" d={muniByCode.get(muniB)!.d} />{/if}
-      {#if muniA && muniByCode.get(muniA)}<path class="sel-a" d={muniByCode.get(muniA)!.d} />{/if}
+      {#if muniB && muniByCode.get(muniB)}<path class="sel-b" d={dOf(muniByCode.get(muniB)!)} />{/if}
+      {#if muniA && muniByCode.get(muniA)}<path class="sel-a" d={dOf(muniByCode.get(muniA)!)} />{/if}
       {#if compare}
-        {#if b && prefByCode.get(pad2(b))}<path class="sel-b" d={prefByCode.get(pad2(b))!.d} />{/if}
-        {#if a && prefByCode.get(pad2(a))}<path class="sel-a" d={prefByCode.get(pad2(a))!.d} />{/if}
+        {#if b && prefByCode.get(pad2(b))}<path class="sel-b" d={dOf(prefByCode.get(pad2(b))!)} />{/if}
+        {#if a && prefByCode.get(pad2(a))}<path class="sel-a" d={dOf(prefByCode.get(pad2(a))!)} />{/if}
       {/if}
       {#if kbd && shapeOf(kbd)}
-        <path class="kbd" d={shapeOf(kbd)!.d} />
+        <path class="kbd" d={dOf(shapeOf(kbd)!)} />
       {/if}
     </g>
   </svg>
 
   {#if raster}
-    <canvas class="raster" bind:this={rasterCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+    <canvas class="raster" bind:this={rasterCanvas} style:width="{boxW}px" style:height="{boxH}px" style:opacity={0.35 + 0.65 * fade} aria-hidden="true"></canvas>
   {/if}
 
   <!-- Point layers live outside the zoom group so they keep their size on screen.
        Keyboard access to DPL sites is through the site list in the side panel. -->
   <svg class="overlay" viewBox="0 0 {geo.width} {geo.height}" aria-hidden="true"
        bind:clientWidth={boxW} bind:clientHeight={boxH}
-       {onpointermove} onpointerleave={() => { hover = null; hoverFlow = null; }} {onpointerdown} {onclick}>
+       {onpointermove} onpointerleave={() => { hover = null; hoverFlow = null; }} {onpointerdown} {onpointerup} {onclick} {ondblclick}>
     {#if arcs.length}
       <g transform="scale({px})">
         {#each arcs as a (a.f.key)}
@@ -775,6 +977,17 @@
         {#if labelled.has(`s${m.i}`)}<text x={siteR + 5} dy="0.35em">{m.label}</text>{/if}
       </g>
     {/each}
+    {#if measure.armed && measureXY.length}
+      <g class="measure">
+        {#if measure.closed}<path class="ms-fill" d={measurePath} />{/if}
+        <path class="ms-halo" d={measurePath} />
+        <path class="ms-line" d={measurePath} />
+        {#each measureXY as p, i (i)}
+          {@const [x, y] = transform.apply(p)}
+          <circle class="ms-pt" class:first={i === 0} cx={x} cy={y} r={(i === 0 && measure.pts.length > 2 && !measure.closed ? 6 : 4) * px} style:stroke-width="{2}" />
+        {/each}
+      </g>
+    {/if}
   </svg>
 
   {#if callouts.length || focusLink}
@@ -826,8 +1039,37 @@
     </div>
   {/if}
 
+  <div class="scalebar" aria-hidden="true"><span class="sb" style:width="{scaleBar.w}px"></span>{scaleBar.label}</div>
+
+  {#if wheelHint}
+    <p class="wheel-hint" role="status">{t(lang, 'wheelHint')}</p>
+  {/if}
+
+  {#if measure.armed}
+    <div class="measure-box" role="group" aria-label={t(lang, 'measure')}>
+      <p class="mb-h">{t(lang, 'measure')}</p>
+      {#if measure.pts.length < 2}
+        <p class="small">{t(lang, 'measureHint')}</p>
+      {:else}
+        <p class="mb-v tnum">{t(lang, measure.closed ? 'perimeter' : 'distance')} <strong>{fmtLen(measure.length)}</strong></p>
+        {#if measure.closed}
+          <p class="mb-v tnum">{t(lang, 'areaLabel')} <strong>{fmtArea(measure.area)}</strong></p>
+          <p class="small tnum">{(measure.area / 1e4).toFixed(2)} ha · {Math.round(measure.area / TSUBO).toLocaleString()} 坪</p>
+        {:else if measure.pts.length > 2}
+          <p class="small">{t(lang, 'measureClose')}</p>
+        {/if}
+      {/if}
+      <p class="mb-acts">
+        {#if measure.pts.length > 2 && !measure.closed}<button type="button" class="btn" onclick={() => (measure.closed = true)}>{t(lang, 'measureArea')}</button>{/if}
+        <button type="button" class="btn" disabled={!measure.pts.length} onclick={() => measure.undo()}>{t(lang, 'undo')}</button>
+        <button type="button" class="btn" disabled={!measure.pts.length} onclick={() => measure.clear()}>{t(lang, 'clearAll')}</button>
+        <button type="button" class="btn" onclick={() => measure.stop()}>{t(lang, 'finish')}</button>
+      </p>
+    </div>
+  {/if}
+
   <div class="zoom" role="group" aria-label="Zoom">
-    <button type="button" class="zbtn" aria-label={t(lang, 'zoomIn')} title={t(lang, 'zoomIn')} onclick={() => zoomBy(1.8)}>
+    <button type="button" class="zbtn" aria-label={t(lang, 'zoomIn')} title={t(lang, 'zoomIn')} onclick={() => zoomBy(1.8)} disabled={zNow >= Z_MAX - 0.05}>
       <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2v10M2 7h10" stroke="currentColor" stroke-width="1.6" /></svg>
     </button>
     <button type="button" class="zbtn" aria-label={t(lang, 'zoomOut')} title={t(lang, 'zoomOut')} onclick={() => zoomBy(1 / 1.8)}>
@@ -845,10 +1087,30 @@
   .tiles { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
   .tiles.inv { filter: invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
   .map.tiled > svg:first-of-type { position: relative; z-index: 1; }
-  .map.tiled .areas path { fill-opacity: var(--fo); }
+  .areas path { fill-opacity: var(--fo); }
+  .map .areas.deep path { stroke-width: 2; stroke-opacity: calc(1 - var(--fade) * 0.7); vector-effect: non-scaling-stroke; stroke-linejoin: round; }
   .map.tiled .overlay, .map.tiled .raster { z-index: 2; }
   .map.tiled .zoom { z-index: 3; }
   .map.tiled .inset { stroke: var(--ink-2); }
+  .scalebar { position: absolute; left: 8px; bottom: 8px; z-index: 3; display: flex; align-items: flex-end; gap: 6px; font-size: 11.5px;
+              color: var(--ink-2); pointer-events: none; padding: 2px 7px 3px; border-radius: 4px;
+              background: color-mix(in oklab, var(--surface) 85%, transparent); }
+  .scalebar .sb { display: block; height: 6px; border: 1.5px solid var(--ink-2); border-top: 0; box-shadow: 0 1px 0 var(--bg); }
+  .wheel-hint { position: absolute; inset: 0; margin: 0; display: grid; place-items: center; z-index: 7; pointer-events: none;
+                background: rgb(0 0 0 / 0.35); color: #fff; font-size: 15px; font-weight: 600; text-align: center; padding: 16px; }
+  .measure .ms-line { fill: none; stroke: var(--accent); stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .measure .ms-halo { fill: none; stroke: var(--bg); stroke-width: 5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .measure .ms-fill { fill: var(--accent); fill-opacity: 0.15; stroke: none; }
+  .measure .ms-pt { fill: var(--bg); stroke: var(--accent); vector-effect: non-scaling-stroke; }
+  .measure .ms-pt.first { fill: var(--accent); }
+  .measure-box { position: absolute; left: 8px; top: 8px; z-index: 6; max-width: min(280px, calc(100% - 70px)); padding: 10px 12px;
+                 background: var(--surface); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 8px;
+                 box-shadow: 0 4px 14px rgb(0 0 0 / 0.12); font-size: 13px; }
+  .measure-box p { margin: 0; }
+  .measure-box .mb-h { font-weight: 600; margin-bottom: 4px; }
+  .measure-box .mb-v strong { font-size: 16px; margin-left: 4px; }
+  .measure-box .mb-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .measure-box .btn { min-height: 30px; padding: 0 10px; font-size: 12.5px; }
   .tiles-hint { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 6; margin: 0; padding: 4px 10px; font-size: 12px;
                 background: color-mix(in oklab, var(--surface) 92%, transparent); border: 1px solid var(--line-strong); border-radius: 999px; }
   svg {

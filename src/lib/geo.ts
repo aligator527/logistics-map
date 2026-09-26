@@ -33,6 +33,8 @@ export interface GeoData {
   muniBorders: (pref: string) => string;
   /** planar metres -> SVG coordinates */
   P: (p: [number, number]) => [number, number];
+  /** planar GeoJSON -> SVG path with enough digits for street-level zoom (detail boundaries) */
+  finePath: (g: GeoJSON.GeoJsonObject) => string;
   /** prefectural office positions (SVG coordinates), index 0..46 — flow arc anchors */
   anchors: [number, number][];
   /** prefectures sharing a border: "11-13" (codes as numbers, smaller first) */
@@ -61,7 +63,7 @@ function projector(meta: Meta) {
   const k = (WIDTH - 2 * pad) / (bounds.x1 - bounds.x0);
   const height = Math.ceil((bounds.y1 - bounds.y0) * k + 2 * pad);
   const proj = geoIdentity().reflectY(true).scale(k).translate([pad - bounds.x0 * k, pad + bounds.y1 * k]);
-  return { k, height, path: geoPath(proj), P: (p: [number, number]) => proj(p) as [number, number] };
+  return { k, height, path: geoPath(proj), fine: geoPath(proj).digits(5), P: (p: [number, number]) => proj(p) as [number, number] };
 }
 
 function shapes(topo: Topo, obj: GeometryCollection, path: ReturnType<typeof geoPath>, enName: (code: string) => string): Shape[] {
@@ -91,7 +93,7 @@ async function json<T>(name: string, fallback?: T): Promise<T> {
 export async function loadGeo(): Promise<GeoData> {
   const [topo, anchorsRaw] = await Promise.all([json<Topo>('pref.topo.json'), json<[number, number][]>('anchors.json', [])]);
   const { insets } = topo.meta;
-  const { k, height, path, P } = projector(topo.meta);
+  const { k, height, path, fine, P } = projector(topo.meta);
   const prefObj = topo.objects.pref as GeometryCollection;
   const prefs = shapes(topo, prefObj, path, () => '').sort((a, b) => Number(a.code) - Number(b.code));
 
@@ -113,6 +115,7 @@ export async function loadGeo(): Promise<GeoData> {
     prefFrame: new Map(prefs.map((p) => [p.code, p.bbox])),
     muniBorders: () => '',
     P,
+    finePath: (g) => fine(g as never) ?? '',
     unitsPerMetre: k,
     layout: topo.meta.layout,
     insetScale: { okinawa: topo.meta.layout?.okinawa.k ?? 1, ogasawara: topo.meta.layout?.ogasawara.k ?? 1 },
@@ -180,7 +183,7 @@ export function roadPaths(geo: GeoData, roads: Roads) {
     for (const part of r.c) {
       d[r.t] += part.map((p, i) => {
         const [x, y] = geo.P(p);
-        return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+        return `${i ? 'L' : 'M'}${x.toFixed(3)},${y.toFixed(3)}`;
       }).join('');
     }
   }

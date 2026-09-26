@@ -31,6 +31,7 @@
   import PointPanel from './panels/PointPanel.svelte';
   import ExportMenu from './components/ExportMenu.svelte';
   import Tour from './components/Tour.svelte';
+  import { measure } from './lib/measure.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -432,6 +433,9 @@
               tip: { title: tt('pointInfo'), rows: pointRows(i) } }];
   });
   const tileLayer = $derived(TILE_LAYERS.find((l) => l.key === app.base) ?? null);
+  // zoomed in close without a background map: the pale map comes in on its own (the choice itself is unchanged)
+  let mapZ = $state(0);
+  const mapTile = $derived(tileLayer ?? (mapZ >= 11.5 ? TILE_LAYERS[0] : null));
   // ------------------------------------------------------------ industrial zoning (A29) of the focused prefecture
   let zoningIndex = $state.raw<{ source: { ja: string; en: string; url: string } } | null>(null);
   let zoningData = $state.raw<Map<number, Record<string, [number, number][][][]>>>(new Map());
@@ -447,7 +451,7 @@
     if (!d || !geo) return null;
     const out: Record<string, string> = {};
     for (const [k, polys] of Object.entries(d)) {
-      out[k] = polys.map((poly) => poly.map((ring) => ring.map((p, i) => { const [x, y] = geo!.P(p); return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`; }).join('') + 'Z').join('')).join('');
+      out[k] = polys.map((poly) => poly.map((ring) => ring.map((p, i) => { const [x, y] = geo!.P(p); return `${i ? 'L' : 'M'}${x.toFixed(4)},${y.toFixed(4)}`; }).join('') + 'Z').join('')).join('');
     }
     return out;
   });
@@ -909,6 +913,9 @@
         <button type="button" class="btn chip" aria-pressed={s.inspectArmed} onclick={() => (s.inspectArmed = !s.inspectArmed)} title={tt('inspectHint')}>
           <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 13.5S1 8.6 1 5.4a5 5 0 0 1 10 0C11 8.6 6 13.5 6 13.5z" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="6" cy="5.4" r="1.7" fill="currentColor" /></svg>
           {tt('inspectPoint')}</button>
+        <button type="button" class="btn chip" aria-pressed={measure.armed} onclick={() => (measure.armed ? measure.stop() : ((measure.armed = true), (s.inspectArmed = false)))}>
+          <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M1.5 9.5l5-7 4 5 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><circle cx="1.5" cy="9.5" r="1.4" fill="currentColor" /><circle cx="14.5" cy="3.5" r="1.4" fill="currentColor" /></svg>
+          {tt('measure')}</button>
         {#if tileLayer}
           <label class="fo"><span class="sr-only">{tt('fillStrength')}</span>
             <span aria-hidden="true" class="small">{tt('fillStrength')}</span>
@@ -985,7 +992,8 @@
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
           {relatedFor} {timelineFor} {locateNews} bind:newsOpen={app.newsOpen}
           {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed} onpoint={onpointAny} {zoning}
-          tileLayer={tileLayer} fillOpacity={tileLayer ? app.fillOp : 1} dark={app.dark}
+          tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
+          bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -1033,7 +1041,7 @@
           </p>
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
-          {#if tileLayer} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{tileLayer[L]}{tileLayer.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}</p>
+          {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}</p>
       </div>
     </div>
 
