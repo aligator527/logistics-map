@@ -699,7 +699,7 @@
               {#if app.preset !== 'balanced'}<button type="button" class="linkish" onclick={() => { app.preset = 'balanced'; app.weights = {}; }}>{tt('resetWeights')}</button>{/if}
             </div>
             <WeightPanel criteria={scv!.criteria} weights={scv!.weights} lang={L} onweight={(k, v) => scv!.setWeight(k, v)} />
-            <p class="src note">{tt('scoreCaveat')}{#if muniLevel} {tt('inheritedNote')}{/if}</p>
+            <p class="src note">{tt('scoreCaveat')}{#if muniLevel} {tt('inheritedNote')}{/if} <a href="#method" onclick={() => { const d = document.getElementById('method') as HTMLDetailsElement | null; if (d) d.open = true; }}>{tt('method')}</a></p>
           </section>
           {#if muniLevel && msc && app.muni && msc.indexOf(app.muni) >= 0}
             <section class="panel">
@@ -835,6 +835,10 @@
       <dt>{tt('boundaries')}</dt>
       <dd>{tt('boundarySource')}</dd>
     </dl>
+    <details id="method" class="method">
+      <summary>{tt('method')}</summary>
+      <p>{tt('methodBody')}</p>
+    </details>
     <p class="next">{tt('phaseNext')}</p>
   </footer>
   {#if dossierOpen && dossier}
@@ -928,6 +932,9 @@
   .foot dt { color: var(--muted); }
   .foot dd { margin: 0; }
   .next { margin: 16px 0 0; color: var(--muted); }
+  .method { margin-top: 16px; max-width: 110ch; }
+  .method summary { cursor: pointer; font-weight: 600; color: var(--ink); min-height: 32px; }
+  .method p { margin: 6px 0 0; line-height: 1.7; }
 
   @media (max-width: 1080px) {
     .grid { grid-template-columns: 1fr; }
