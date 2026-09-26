@@ -359,8 +359,8 @@
     const order: NewsGroup[] = [];
     const add = (g: NewsGroup | undefined) => { if (g && !order.includes(g) && inView(g)) order.push(g); };
     for (const k of newsPins) add(byKey.get(k));
-    if (newsFocus) add(byKey.get(newsFocus));
-    // the latest places, skipping one whose newest article is already on a card (an article naming two wards)
+    // the latest places, skipping one whose newest article is already on a card (an article naming two wards).
+    // Independent of the focus, so hovering a card never changes which cards are shown.
     const shown = new Set(order.map((g) => g.items[0].link));
     let n = 0;
     for (const g of news.filter((g) => g.xy && !dismissed.includes(g.key) && !newsPins.includes(g.key) && inView(g))
@@ -369,6 +369,8 @@
       if (shown.has(g.items[0].link)) continue;
       shown.add(g.items[0].link); add(g); n++;
     }
+    // a place hovered in the side list gets a card too — last, so the cards already placed stay put
+    if (newsFocus) add(byKey.get(newsFocus));
     const pts = news.filter((g) => g.xy).map((g) => toScreen(g.xy!));
     // keep the zoom buttons clear
     const clear: [number, number, number, number][] = [[boxW - 56, boxH - 150, boxW, boxH], [0, 0, 200, 44]];
