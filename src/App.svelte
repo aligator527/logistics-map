@@ -29,6 +29,7 @@
   import { pointInfo, groundRisk, type PointInfo } from './lib/pointinfo';
   import { unproject } from './lib/project';
   import PointPanel from './panels/PointPanel.svelte';
+  import ExportMenu from './components/ExportMenu.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -938,6 +939,7 @@
           <button type="button" class="linkish" onclick={clearFocus}>← {tt('backToJapan')}</button>
         {/if}
         {#if app.view === 'table'}<button type="button" class="btn" onclick={exportTable}>{tt('exportCsv')}</button>{/if}
+        <ExportMenu />
         <div class="search-slot"><PlaceSearch {places} lang={L} onpick={onplace} /></div>
         {#if app.layer === 'flows' && fl.loading}<span class="small" role="status">{tt('loadingFlows')}</span>{/if}
       </div>

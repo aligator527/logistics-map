@@ -6,6 +6,7 @@ import type { GeoData, Shape } from './geo';
 import { app } from './state.svelte';
 import { prefName, t, type Key } from './i18n';
 import { fmtMinutes, fmtNum } from './scale';
+import { unproject } from './project';
 import type { News } from '../components/NewsFeed.svelte';
 import type { Catchment } from '../components/SiteCard.svelte';
 import type { WarehouseTheme } from '../themes/warehouse.svelte';
@@ -118,6 +119,15 @@ class Store {
   clearFocus = () => { app.pref = 0; app.site = -1; app.muni = ''; };
   showReach = (key: string) => { app.stopCompare(); app.layer = 'local'; app.lmet = 'iso'; app.iso = key; };
 
+  /** a municipality's population centre as lon/lat (from its map position, insets undone) */
+  muniLonLat = (code: string): [number, number] | null => {
+    const m = this.muni, g = this.geo;
+    if (!m || !g?.layout) return null;
+    const xy = m.xy?.[m.codes.indexOf(code)];
+    if (!xy) return null;
+    const space = code === '13421' ? 'ogasawara' : code.startsWith('47') ? 'okinawa' : 'main';
+    return unproject(xy, g.layout, space);
+  };
   /** a DPL site's nearest port / airport / rail station: road time once the network is in, else distance */
   hubRows = (name: string): [string, string][] => {
     const L = app.lang, lt = this.lt;
