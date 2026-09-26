@@ -196,3 +196,16 @@ test('facility registry from the news', () => {
   if (kitamoto) assert.equal(kitamoto.muni, '11233', '北本市 from the facility name');
   assert.ok(!f.items.some((x) => x.name.includes('千葉ニュータウン') && x.muni === '12101'), 'not 千葉市中央区');
 });
+
+test('demand, wages and land trend', () => {
+  const m = load('data/muni.json');
+  const ix = (c) => m.codes.indexOf(c);
+  for (const k of ['hh', 'mig', 'income', 'retail', 'mailorder', 'land5', 'land10']) assert.equal(m.m[k].length, 1898, k);
+  assert.ok(m.m.income[ix('13101')] > 1000, '千代田区: income per taxpayer > 1,000万円');
+  assert.equal(m.m.income[ix('14101')], m.m.income[ix('14102')], 'wards of 横浜市 take the city figure');
+  assert.ok(m.m.hh[ix('11203')] > 250000 && m.m.hh[ix('11203')] < 400000, '川口市 households');
+  assert.equal(m.wage.perPref.length, 47);
+  assert.equal(m.wage.perPref[12].at(-1), 1226, '東京 minimum wage 令和7年度');
+  assert.equal(m.landTrend.japan[m.landTrend.years.indexOf(2016)], 100);
+  assert.ok(m.landTrend.japan.at(-1) > 100, 'industrial land up since 2016');
+});

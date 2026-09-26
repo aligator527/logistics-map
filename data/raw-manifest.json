@@ -548,6 +548,27 @@
    "script": "etl-muni"
   },
   {
+   "file": "data/raw/demand/J51-25-11.xlsx",
+   "bytes": 65981,
+   "sha256": "0e02e37bab05b1ca2816c86135eac6f17aaba7354ecb653644926dc5dd916228",
+   "source": "https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09_25.html",
+   "script": "etl-demand"
+  },
+  {
+   "file": "data/raw/demand/J51-25-b.xlsx",
+   "bytes": 404636,
+   "sha256": "96b36f36a4181fc24859b87bfd7bb15242489dd6208671fee503f8cf0c9d5294",
+   "source": "https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09_25.html",
+   "script": "etl-demand"
+  },
+  {
+   "file": "data/raw/demand/juki_R8_muni.xlsx",
+   "bytes": 402241,
+   "sha256": "0d044766466d28c4988414e93238148ecb1d764642542d48332064d51cdff3bc",
+   "source": "https://www.soumu.go.jp/main_sosiki/jichi_gyousei/daityo/jinkou_jinkoudoutai-setaisuu.html",
+   "script": "etl-demand"
+  },
+  {
    "file": "data/raw/diesel/260916s5.xlsx",
    "bytes": 2648192,
    "sha256": "b6e2a35b69253e4a89a083631c106212d12ccc42e2df7927baa722b895b4c1bd",
@@ -784,6 +805,13 @@
    "sha256": "5351835d49eab0e3e05c345fbd061be0b431e75c687da0b98c4391921ea94052",
    "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
    "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/wage/mw.xlsx",
+   "bytes": 21940,
+   "sha256": "113483342067819a8d039ebae17558b5a4e5c667eb744ff703f0f100607f6058",
+   "source": "https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/minimumichiran/",
+   "script": "etl-demand"
   },
   {
    "file": "data/raw/zoning/A29-19_01_GML.zip",

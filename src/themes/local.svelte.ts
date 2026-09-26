@@ -15,7 +15,7 @@ import type { Ctx, ThemeView } from './types';
 
 export interface LocalMetric extends Label {
   key: string;
-  group: 'people' | 'access' | 'land' | 'industry' | 'labour' | 'risk';
+  group: 'people' | 'demand' | 'access' | 'land' | 'industry' | 'labour' | 'risk';
   /** value for municipality index i */
   get: (i: number) => number;
   fmt: (v: number) => string;
@@ -128,7 +128,25 @@ export class LocalTheme implements ThemeView {
   });
 
   readonly flows = [];
-  readonly trend = null;
+  /** industrial land price index (2016 = 100) for the land metrics: the focused prefecture, else Japan */
+  readonly trend = $derived.by(() => {
+    const lt = (this.d as unknown as { landTrend?: { years: number[]; japan: number[]; prefs: number[][] } }).landTrend;
+    if (!lt || !['land', 'landChg', 'land5', 'land10'].includes(this.metric.key)) return null;
+    const pc = app.pref, L = this.L;
+    const series: { key: string; label: string; kind: 'main' | 'a' | 'b'; values: number[] }[] = pc
+      ? [{ key: 'p', label: this.ctx.pname(pc), kind: 'a', values: lt.prefs[pc - 1] }, { key: 'jp', label: this.ctx.tt('japan'), kind: 'b', values: lt.japan }]
+      : [{ key: 'jp', label: this.ctx.tt('japan'), kind: 'main', values: lt.japan }];
+    return {
+      series,
+      periods: lt.years.map((y) => ({ id: String(y), ja: `${y}年`, en: String(y) })),
+      q: lt.years.length - 1,
+      setQ: () => {},
+      label: L === 'ja' ? '工業地の地価指数（2016年=100）' : 'Industrial land price index (2016 = 100)',
+      fmt: (v: number) => fmtNum(L, v, 1),
+      tick: (v: number) => fmtNum(L, v, 0),
+      xticks: lt.years.map((y, i) => ({ i, label: String(y) })).filter((x) => x.i % 5 === 0 || x.i === lt.years.length - 1),
+    };
+  });
   private get L() { return this.ctx.L; }
   muniName: (code: string) => string = (c) => c;
   setNamer(f: (code: string) => string) { this.muniName = f; }
@@ -161,6 +179,16 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '市区町村の人口', en: 'Residents of the municipality' }, source: src('mesh') },
       { key: 'ic', ja: '最寄りICまでの距離', en: 'Distance to an interchange', group: 'access', get: v('ic'), fmt: (x) => `${fmtNum(L, x, 1)} km`, better: -1,
         hint: { ja: '人口重心から最寄りのIC・スマートICまで', en: 'From the population centre to the nearest IC' }, source: src('ic') },
+      { key: 'hh', ja: '世帯数', en: 'Households', group: 'demand', get: v('hh'), fmt: (x) => `${fmtCompact(L, x)}${L === 'ja' ? '世帯' : ''}`, better: 1,
+        hint: { ja: '宅配・ラストワンマイルの需要（2026年1月1日、住民基本台帳）', en: 'Parcel / last-mile demand (1 Jan 2026, resident register)' }, source: src('juki') },
+      { key: 'mig', ja: '転入超過率（2025年）', en: 'Net migration 2025', group: 'demand', get: v('mig'), fmt: signed, diverging: true, better: 1,
+        hint: { ja: '（転入−転出）÷人口。人が集まっている地域', en: '(in − out) ÷ residents: where people are moving to' }, source: src('juki') },
+      { key: 'income', ja: '納税者1人当たり所得', en: 'Income per taxpayer', group: 'demand', get: v('income'), fmt: (x) => `${fmtNum(L, x, 0)}${L === 'ja' ? '万円' : ' ×10k ¥'}`, better: 1,
+        hint: { ja: '課税対象所得÷所得割の納税義務者数（令和7年度）。購買力の目安。政令市の区は市の値', en: 'Taxable income ÷ taxpayers (FY2025): purchasing power; wards take the city value' }, source: src('income') },
+      { key: 'retail', ja: '小売業の従業者', en: 'Retail employees', group: 'demand', get: v('retail'), fmt: people, better: 1,
+        hint: { ja: '店舗配送の需要（2021年）', en: 'Store-delivery demand (2021)' }, source: src('retail') },
+      { key: 'mailorder', ja: '通信販売・EC事業者の従業者', en: 'Mail-order / e-commerce employees', group: 'demand', get: v('mailorder'), fmt: people, better: 1,
+        hint: { ja: '通信販売・訪問販売小売業（2021年）。EC関連の集積', en: 'Mail-order and door-to-door retail (2021): e-commerce cluster' }, source: src('retail') },
       { key: 'iso', ja: '到達時間（起点から）', en: 'Travel time from the origin', group: 'access', get: arr(this.isoTimes), fmt: mins, better: -1, time: true,
         hint: { ja: '選んだ市区町村・DPL物件からトラックで何分か（推計）', en: 'Minutes by truck from the chosen municipality or DPL site (estimate)' }, source: net },
       { key: 'shift', ja: '運行区分（2024年ルール）', en: 'Trip type (2024 driving rules)', group: 'access', get: (i: number) => LocalTheme.tripClass(arr(this.isoTimes)(i)),
@@ -177,6 +205,10 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '地価公示・地価調査2026（地点がない市町村は周辺・県の中央値）', en: 'Official land prices 2026 (nearby / prefecture median where no point)' }, source: src('land') },
       { key: 'landChg', ja: '工業地地価の変動率', en: 'Industrial land price change', group: 'land', get: v('landChg'), fmt: signed, diverging: true, better: -1,
         hint: { ja: '前年比。上昇が続く地域は需要が強い一方、取得コストも上がる', en: 'Year on year: strong demand, but rising cost' }, source: src('land') },
+      { key: 'land5', ja: '工業地地価の5年変化', en: 'Industrial land price, 5-year change', group: 'land', get: v('land5'), fmt: signed, diverging: true, better: -1,
+        hint: { ja: '2021→2026年、継続地点の中央値（地価公示）', en: '2021→2026, median of continuing points (official land prices)' }, source: src('land') },
+      { key: 'land10', ja: '工業地地価の10年変化', en: 'Industrial land price, 10-year change', group: 'land', get: v('land10'), fmt: signed, diverging: true, better: -1,
+        hint: { ja: '2016→2026年、継続地点の中央値', en: '2016→2026, median of continuing points' }, source: src('land') },
       { key: 'zone', ja: '工業系用途地域', en: 'Industrial zoning', group: 'land', get: v('zone'), fmt: ha, better: 1,
         hint: { ja: '準工業・工業・工業専用地域の面積', en: 'Light-industrial, industrial and exclusively industrial zones' }, source: src('zone') },
       { key: 'urban', ja: '市街化区域の割合', en: 'Urbanisation area share', group: 'land', get: share('urban'), fmt: pct(0), better: 1,

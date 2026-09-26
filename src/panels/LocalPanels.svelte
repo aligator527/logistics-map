@@ -9,6 +9,7 @@
   import Segmented from '../components/Segmented.svelte';
   import { shortlist } from '../lib/shortlist.svelte';
   import SimPanel from './SimPanel.svelte';
+  import CostPanel from './CostPanel.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -87,6 +88,7 @@
       <p class="src note">{tt('isoNote')} {#if app.lmet === 'shift'}{tt('tripNote')} {/if}<a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
     </section>
   {/if}
+  <CostPanel />
   <SimPanel />
   {#if app.muni && lt.indexOf(app.muni) >= 0}
     <section class="panel">

@@ -9,6 +9,7 @@
   import { WARN_COLORS } from '../lib/warncolors';
   import type { DossierTable } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
+  import { estimate } from '../lib/costs.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -153,7 +154,7 @@
       ...(sc ? [row(`${tt('layerScore')}（${tt('byPref')}）`, items.map((it) => sc!.result.total[prefOf(it) - 1] ?? NaN), (v) => fmtNum(L, v, 0), 1)] : []),
       ...(msc ? [row(`${tt('layerScore')}（${tt('byMuni')}）`, items.map((it) => metricOf(it, (i) => msc!.result.total[i])), (v) => fmtNum(L, v, 0), 1)] : []),
     ] });
-    for (const g of ['people', 'access', 'land', 'industry', 'labour', 'risk'] as const) {
+    for (const g of ['people', 'demand', 'access', 'land', 'industry', 'labour', 'risk'] as const) {
       const ms = lt.metrics.filter((m) => m.group === g && m.key !== 'iso' && m.key !== 'shift');
       groups.push({ title: tt(`lg_${g}` as Key), rows: ms.map((m) => row(m[L], items.map((it) => metricOf(it, m.get)), m.fmt, m.better)) });
     }
@@ -176,6 +177,16 @@
                 (v) => tt(v === 1 ? 'risk_low' : v === 2 ? 'risk_mid' : 'risk_high'), -1) },
           ];
         })(),
+      ] });
+    }
+    {
+      // コスト試算 with the assumptions set in the cost panel
+      const est = items.map((it) => { const mc = muniOf(it); return mc ? estimate(lt!.indexOf(mc)) : null; });
+      const oku = (y: number) => (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`);
+      groups.push({ title: tt('costTitle'), rows: [
+        row(tt('costLand'), est.map((e) => e?.land ?? NaN), oku, -1),
+        row(tt('costStaffYear'), est.map((e) => e?.staff ?? NaN), oku, -1),
+        row(tt('costFuelYear'), est.map((e) => e?.fuel ?? NaN), oku, -1),
       ] });
     }
     if (live.warnTime) groups.push({ title: tt('cmpLive'), rows: [{ label: tt('liveWarn'), cells: items.map((it) => { const a = shortAlert(it); return a.level >= 2 ? `${nt?.levelName(a.level) ?? a.level}：${a.text}` : '–'; }) }] });

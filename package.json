@@ -13,7 +13,7 @@
     "geo": "node scripts/build-geo.mjs",
     "roads": "node scripts/build-roads.mjs",
     "labels": "node scripts/build-labels.mjs",
-    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run etl:mesh && npm run etl:hazard && npm run etl:muni && npm run etl:multimodal && npm run network && npm run jma-areas && npm run etl:diesel && npm run news",
+    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run etl:mesh && npm run etl:hazard && npm run etl:muni && npm run etl:demand && npm run etl:multimodal && npm run network && npm run jma-areas && npm run etl:diesel && npm run news",
     "etl:census": "node scripts/etl-census.mjs",
     "etl:ssw": "node scripts/etl-ssw.mjs",
     "etl:jobs": "node scripts/etl-jobs.mjs",
@@ -35,7 +35,8 @@
     "raw:update": "node scripts/raw-manifest.mjs --update",
     "zoning": "node scripts/build-zoning.mjs",
     "visual": "docker run --rm --ipc=host -v \"$PWD\":/work -v /work/node_modules -w /work mcr.microsoft.com/playwright:v1.63.0-noble bash -c 'npm ci --no-audit --no-fund >/dev/null && VISUAL=1 CI=1 npx playwright test e2e/visual.spec.ts'",
-    "visual:update": "docker run --rm --ipc=host -v \"$PWD\":/work -v /work/node_modules -w /work mcr.microsoft.com/playwright:v1.63.0-noble bash -c 'npm ci --no-audit --no-fund >/dev/null && VISUAL=1 CI=1 npx playwright test e2e/visual.spec.ts --update-snapshots'"
+    "visual:update": "docker run --rm --ipc=host -v \"$PWD\":/work -v /work/node_modules -w /work mcr.microsoft.com/playwright:v1.63.0-noble bash -c 'npm ci --no-audit --no-fund >/dev/null && VISUAL=1 CI=1 npx playwright test e2e/visual.spec.ts --update-snapshots'",
+    "etl:demand": "node scripts/etl-demand.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

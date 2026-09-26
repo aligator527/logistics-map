@@ -823,7 +823,7 @@
         <label class="ctl">
           <span class="lab">{tt('localMetric')}</span>
           <select class="sel" value={app.lmet} onchange={(e) => (app.lmet = e.currentTarget.value)}>
-            {#each ['people', 'access', 'land', 'industry', 'labour', 'risk'] as g (g)}
+            {#each ['people', 'demand', 'access', 'land', 'industry', 'labour', 'risk'] as g (g)}
               <optgroup label={tt(`lg_${g}` as Key)}>
                 {#each lt.metrics.filter((m) => m.group === g) as m (m.key)}<option value={m.key}>{m[L]}</option>{/each}
               </optgroup>

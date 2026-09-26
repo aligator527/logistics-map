@@ -11,7 +11,7 @@
     onmetric: (key: string) => void;
   } = $props();
 
-  const groups = ['people', 'access', 'land', 'industry', 'labour', 'risk'] as const;
+  const groups = ['people', 'demand', 'access', 'land', 'industry', 'labour', 'risk'] as const;
 </script>
 
 <div class="prof">

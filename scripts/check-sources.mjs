@@ -70,6 +70,19 @@ for (const [name, have, url] of [
   add(name, unknown && !newest ? 'unknown' : newest ? 'NEW' : 'ok', `have ${have}${newest ? `; ${newest} is published` : ''}`);
 }
 
+// demand and cost inputs (etl-demand): yearly releases with new file names
+{
+  const tax = await text('https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09_26.html');
+  add('課税対象所得（市町村税課税状況等の調）', tax === null ? 'ok' : 'NEW', tax ? '令和8年度 is published — download 市町村別内訳 第11表 into data/raw/demand/ and update etl-demand' : 'have 令和7年度');
+  // the 総務省 pages are Shift_JIS
+  const juki = await fetch('https://www.soumu.go.jp/main_sosiki/jichi_gyousei/daityo/jinkou_jinkoudoutai-setaisuu.html', { headers: UA })
+    .then(async (r) => (r.ok ? new TextDecoder('shift_jis').decode(await r.arrayBuffer()) : null)).catch(() => null);
+  const r9 = !!juki && juki.includes('令和9年');
+  add('世帯数・人口動態（住民基本台帳）', juki === null ? 'unknown' : r9 ? 'NEW' : 'ok', r9 ? '令和9年 is published' : 'have 令和8年1月1日');
+  const mw = await text('https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/minimumichiran/');
+  add('地域別最低賃金', mw === null ? 'unknown' : /令和８年度|令和8年度/.test(mw) ? 'NEW' : 'ok', 'have 令和7年度 (data/raw/wage/mw.xlsx)');
+}
+
 // hazard-zone shares (ハザードマップポータル tiles, updated continuously): re-sample once a year
 {
   const m = read('public/data/muni.json');
