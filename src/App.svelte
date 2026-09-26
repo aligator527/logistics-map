@@ -1237,7 +1237,7 @@
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
           {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}
-          {#if app.showBcp && bcpData} · <a href={bcpData.source.emergency.url}>{bcpData.source.emergency[L]}</a> · <a href={bcpData.source.logistics.url}>{bcpData.source.logistics[L]}</a>（{bcpData.source.note[L]}）{/if}
+          {#if app.showBcp && bcpData} · <a href={bcpData.source.emergency.url}>{bcpData.source.emergency[L]}</a> · <a href={bcpData.source.logistics.url}>{bcpData.source.logistics[L]}</a>（{bcpData.source.note[L]}） · <a href="https://www.tokusya.ktr.mlit.go.jp/PR/download/oogatasya_map.html">{L === 'ja' ? '大型車誘導区間 通行条件マップ（国交省・PDF）' : 'Large-vehicle route maps (MLIT, PDF)'}</a>{/if}
           {#if app.showBld && mapZ >= 15} · <a href="https://github.com/gsi-cyberjapan/optimal_bvmap">{tt('bldSource')}</a>{/if}
           {#if app.showFude && mapZ >= 16} · <a href="https://www.moj.go.jp/MINJI/minji05_00494.html">{tt('fudeSource')}</a>（<a href="https://tiles.kmproj.com">KotobaMedia</a>）{/if}</p>
       </div>

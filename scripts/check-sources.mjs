@@ -123,6 +123,24 @@ for (const [name, have, url] of [
   add('軽油価格 (auto)', age > 16 ? 'CHECK' : 'ok', `latest week ${d.dates.at(-1)} (${age} days ago)${age > 16 ? ' — the site may be blocking automated downloads (AWS WAF); save the latest …s5.xlsx from a browser into data/raw/diesel/' : ''}`);
 }
 
+// 大型車誘導区間 通行条件マップ (PDF, linked from the site memo): a new edition changes the file names.
+// The server still needs legacy TLS renegotiation, which Node's fetch refuses: curl with a one-off OpenSSL setting.
+{
+  const have = readFileSync(resolve(root, 'src/lib/karte.ts'), 'utf8').match(/_oogatasya_map_(\d{6})\.pdf/)?.[1];
+  let page = null;
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const { mkdtempSync, writeFileSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const cnf = resolve(mkdtempSync(resolve(tmpdir(), 'ossl-')), 'openssl.cnf');
+    writeFileSync(cnf, 'openssl_conf = i\n[i]\nssl_conf = s\n[s]\nsystem_default = d\n[d]\nOptions = UnsafeLegacyRenegotiation\n');
+    page = execFileSync('curl', ['-s', '-m', '30', 'https://www.tokusya.ktr.mlit.go.jp/PR/download/oogatasya_map.html'], { env: { ...process.env, OPENSSL_CONF: cnf } }).toString();
+  } catch { page = null; }
+  const now = page?.match(/_oogatasya_map_(\d{6})\.pdf/)?.[1];
+  add('大型車誘導区間マップ', !page || !now ? 'unknown' : now !== have ? 'NEW' : 'ok',
+    now && now !== have ? `edition ${now} is out (links use ${have}): update OOGATA links in src/lib/karte.ts` : `edition ${have}`);
+}
+
 const md = ['### Data sources', '', '| source | state | note |', '|---|---|---|',
   ...rows.map((r) => `| ${r.source} | ${r.state === 'ok' ? 'ok' : `**${r.state}**`} | ${r.note} |`)].join('\n');
 console.log(md);

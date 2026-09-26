@@ -488,7 +488,7 @@ const strings = {
   rpCandidates: { ja: '候補とステータス', en: 'Candidates and status' },
   rpNote: { ja: '条件はリンク（URL）に保存されています。同じリンクから画面を再現できます。', en: 'The settings are in the link (URL): it reproduces this view.' },
   layerBcp: { ja: '緊急輸送・重要物流道路', en: 'Emergency & key logistics roads' },
-  bcpHint: { ja: '緊急輸送道路（第1次〜第3次）と重要物流道路・代替補完路。大型車誘導区間は公開データがないため含みません。', en: 'Emergency transport roads (primary–tertiary) and key logistics roads with alternatives. Large-vehicle routes are not open data and not shown.' },
+  bcpHint: { ja: '緊急輸送道路（第1次〜第3次）と重要物流道路・代替補完路。大型車誘導区間は二次利用不可のPDFのみのため表示せず、地点カルテから国交省の通行条件マップにリンクしています。', en: 'Emergency transport roads (primary–tertiary) and key logistics roads with alternatives. Large-vehicle routes exist only as PDFs that may not be reused: the site memo links to them.' },
   bcpLogi: { ja: '重要物流道路', en: 'Key logistics road' },
   bcpE1: { ja: '第1次緊急輸送道路', en: 'Primary emergency route' },
   bcpE2: { ja: '第2次（点線）', en: 'Secondary (dashed)' },

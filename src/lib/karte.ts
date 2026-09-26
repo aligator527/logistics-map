@@ -38,6 +38,8 @@ async function zoningAt(pref: number, p: [number, number]) {
 
 export interface Karte { title: string; subtitle: string; sections: DossierSection[]; sources: string[]; figure: string }
 
+const OOGATA = 'https://www.tokusya.ktr.mlit.go.jp/PR/download/';
+
 export async function buildKarte(lon: number, lat: number): Promise<Karte> {
   const L: Lang = app.lang, tt = (k: Key) => t(L, k), s = store;
   const geo = s.geo!, lt = s.lt, muni = s.muni;
@@ -90,6 +92,16 @@ export async function buildKarte(lon: number, lat: number): Promise<Karte> {
         [tt('bcpLogi'), `${fmtNum(L, nearestKm(bcp, lon, lat, 'logistics', '1', geo.layout), 1)} km`],
       ] as [string, string][]) : []),
     ], note: `${tt('isoNote')}${bcp ? (L === 'ja' ? ' 緊急輸送道路・重要物流道路までは直線距離。' : ' Emergency / key logistics roads: straight-line distance.') : ''}` });
+  }
+
+  // 3b. large vehicles: the official 大型車誘導区間 condition maps are PDFs that may only be read, not reused (the
+  //     notice on every file), so the memo links to the prefecture's map instead of drawing the routes
+  if (mcode) {
+    const pc = mcode.slice(0, 2);
+    sections.push({ title: L === 'ja' ? '大型車の通行' : 'Large vehicles', list: [
+      { label: L === 'ja' ? `大型車誘導区間 通行条件マップ（${s.pname(Number(pc))}・PDF、国土交通省）` : `Large-vehicle route conditions map (${s.pname(Number(pc))}, PDF, MLIT)`, href: `${OOGATA}${pc}_oogatasya_map_202603.pdf` },
+      { label: L === 'ja' ? '通行条件マップ 一覧（最新版はこちら）' : 'All condition maps (latest editions)', href: `${OOGATA}oogatasya_map.html` },
+    ], note: L === 'ja' ? '大型車誘導区間は公開の電子データがなく、マップは確認以外の二次利用が禁止されているため、地図には表示していません。重要物流道路・緊急輸送道路の近さは上の到達性を参照。' : 'There is no open data for large-vehicle routes and the maps may not be reused, so they are linked, not drawn.' });
   }
 
   // 4. nearby

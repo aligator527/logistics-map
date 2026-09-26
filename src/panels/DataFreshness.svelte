@@ -41,6 +41,7 @@
       ['最低賃金', 'Minimum wage', '令和7年度', '毎年', 'Yearly', '2026年10月', 'October 2026'],
       ['緊急輸送道路（N10）', 'Emergency roads (N10)', '2024年3月', '不定期', 'Irregular', '–', '–'],
       ['重要物流道路（N12）', 'Key logistics roads (N12)', '2021年4月', '不定期', 'Irregular', '–', '–'],
+      ['大型車誘導区間（リンクのみ）', 'Large-vehicle routes (link only)', '2026年3月版', '不定期', 'Irregular', '新版で自動チェック', 'checked for new editions'],
       ['地震動予測（J-SHIS）', 'Earthquake hazard (J-SHIS)', '2024年版', '毎年', 'Yearly', '2025年版', '2025 edition'],
       ['登記所備付地図', 'Registry maps', '2025年', '毎年', 'Yearly', '2026年版（公開後）', '2026 edition (when out)'],
     ];
