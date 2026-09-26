@@ -354,6 +354,25 @@
   function onnewsplace(code: string) { onpick(code); }
   $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
   const pois = $derived.by(() => [...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois]);
+  // ------------------------------------------------------------ industrial zoning (A29) of the focused prefecture
+  let zoningIndex = $state.raw<{ source: { ja: string; en: string; url: string } } | null>(null);
+  let zoningData = $state.raw<Map<number, Record<string, [number, number][][][]>>>(new Map());
+  $effect(() => {
+    const pc = app.pref;
+    if (!app.showZone || !pc || zoningData.has(pc)) return;
+    if (!zoningIndex) fetch(`${import.meta.env.BASE_URL}geo/zoning/index.json`).then((r) => r.json()).then((j) => (zoningIndex = j)).catch(() => {});
+    fetch(`${import.meta.env.BASE_URL}geo/zoning/${pad2(pc)}.json`).then((r) => (r.ok ? r.json() : {}))
+      .then((d) => (zoningData = new Map(zoningData).set(pc, d))).catch(() => {});
+  });
+  const zoning = $derived.by(() => {
+    const d = app.showZone && app.pref ? zoningData.get(app.pref) : null;
+    if (!d || !geo) return null;
+    const out: Record<string, string> = {};
+    for (const [k, polys] of Object.entries(d)) {
+      out[k] = polys.map((poly) => poly.map((ring) => ring.map((p, i) => { const [x, y] = geo!.P(p); return `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`; }).join('') + 'Z').join('')).join('');
+    }
+    return out;
+  });
   // ------------------------------------------------------------ other developers' facilities (from the news)
   interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; events: { stage: string; date: string; link: string; t: string }[] }
   let facilities = $state.raw<Facility[] | null>(null);
@@ -785,6 +804,9 @@
             <svg width="16" height="12" aria-hidden="true"><rect x="1" y="1.5" width="14" height="9" rx="4.5" class="k-news" /></svg>{tt('layerNews')}
           </button>
         {/if}
+        <button type="button" class="btn chip" aria-pressed={app.showZone} onclick={() => (app.showZone = !app.showZone)}>
+          <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" class="k-zone" /></svg>{tt('layerZone')}
+        </button>
         <button type="button" class="btn chip" aria-pressed={app.showFac} onclick={() => (app.showFac = !app.showFac)}>
           <svg width="12" height="12" aria-hidden="true"><rect x="3" y="3" width="6" height="6" transform="rotate(45 6 6)" class="k-fac" /></svg>{tt('layerFac')}
         </button>
@@ -834,7 +856,7 @@
           onnewshover={(k) => (newsFocus = k)}
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
           {relatedFor} {timelineFor} {locateNews}
-          {raster} pickPoint={s.pickArmed && !!lt?.grid} {onpoint}
+          {raster} pickPoint={s.pickArmed && !!lt?.grid} {onpoint} {zoning}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -871,6 +893,15 @@
                 categories={view.categories ?? null} bind:highlight />
         {#if app.layer === 'flows' && view.flows.length}
           <p class="src">{!app.pref && !app.compare ? `${tt(app.near ? 'arcsNationalNear' : 'arcsNational')}${L === 'ja' ? '。' : '. '}` : ''}{tt('flowArcNote')}</p>
+        {/if}
+        {#if app.showZone}
+          <p class="src zone-note">
+            <span class="zk"><svg width="14" height="10" aria-hidden="true"><rect width="14" height="10" fill="url(#pz1)" stroke="var(--clay)" /></svg>{L === 'ja' ? '準工業' : 'Light industrial'}</span>
+            <span class="zk"><svg width="14" height="10" aria-hidden="true"><rect width="14" height="10" fill="url(#pz2)" stroke="var(--clay)" /></svg>{L === 'ja' ? '工業' : 'Industrial'}</span>
+            <span class="zk"><svg width="14" height="10" aria-hidden="true"><rect width="14" height="10" fill="var(--clay)" fill-opacity="0.55" stroke="var(--clay)" /></svg>{L === 'ja' ? '工業専用' : 'Exclusively industrial'}</span>
+            {app.pref ? '' : tt('zonePickPref')} {tt('zoneNote')}
+            {#if zoningIndex}<a href={zoningIndex.source.url}>{zoningIndex.source[L]}</a>{/if}
+          </p>
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a></p>
       </div>

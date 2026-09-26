@@ -36,6 +36,7 @@ const SOURCES = [
   [/^data\/raw\/multimodal\/airport/, 'https://www.mlit.go.jp/koku/15_bf_000185.html (空港管理状況調書)', 'etl-multimodal'],
   [/^data\/raw\/multimodal\/port/, 'https://www.mlit.go.jp/k-toukei/kowan.html (港湾統計)', 'etl-multimodal'],
   [/^data\/raw\/multimodal\/p31/, 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P31.html', 'etl-multimodal'],
+  [/^data\/raw\/zoning\//, 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html', 'build-zoning'],
   [/^data\/raw\/diesel\//, 'https://www.enecho.meti.go.jp/statistics/petroleum_and_lpgas/pl007/results.html', 'etl-diesel'],
 ];
 // downloaded sources only: caches and intermediates (tiles, API answers, *.json we derive) are left out

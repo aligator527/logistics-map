@@ -31,7 +31,7 @@
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
-        onnewspin, relatedFor, timelineFor, locateNews, raster = null, pickPoint = false, onpoint,
+        onnewspin, relatedFor, timelineFor, locateNews, raster = null, pickPoint = false, onpoint, zoning = null,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -87,6 +87,8 @@
     /** 1 km cells drawn on a canvas: centres in viewBox units (x0, y0, x1, y1 …), a colour per cell
      *  (null = not drawn) and the cell size in viewBox units */
     raster?: { xy: Float32Array; color: (i: number) => string | null; size: number; version: unknown } | null;
+    /** industrial zoning paths (viewBox units) per class: 1 準工業, 2 工業, 3 工業専用 */
+    zoning?: Record<string, string> | null;
     /** the next click on the map picks a point (viewBox units) instead of an area */
     pickPoint?: boolean;
     onpoint?: (xy: [number, number]) => void;
@@ -518,6 +520,13 @@
         <rect width="6" height="6" fill="var(--land)" />
         <line x1="0" y1="0" x2="0" y2="6" stroke="var(--hatch)" stroke-width="1.4" />
       </pattern>
+      <!-- industrial zoning: sparse hatch / dense hatch / solid, all in clay -->
+      <pattern id="pz1" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / transform.k})">
+        <line x1="0" y1="0" x2="0" y2="5" stroke="var(--clay)" stroke-width="1.2" />
+      </pattern>
+      <pattern id="pz2" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45) scale({1 / transform.k})">
+        <line x1="0" y1="0" x2="0" y2="3" stroke="var(--clay)" stroke-width="1.3" />
+      </pattern>
     </defs>
 
     <g transform={transform.toString()}>
@@ -542,6 +551,13 @@
         <path class="muni-borders" d={geo.muniBorders(focus!)} />
       {/if}
 
+      {#if zoning}
+        <g class="zoning" aria-hidden="true">
+          {#each ['1', '2', '3'] as k (k)}
+            {#if zoning[k]}<path class="z{k}" d={zoning[k]} fill={k === '3' ? 'var(--clay)' : `url(#pz${k})`} />{/if}
+          {/each}
+        </g>
+      {/if}
       {#if roads && showRoads}
         <g class="roads" class:far={transform.k < 2} aria-hidden="true">
           <path class="halo" d={roads.d[1] + roads.d[2] + roads.d[3]} />
@@ -761,6 +777,8 @@
     fill: none; stroke: var(--bg); stroke-opacity: 0.8; stroke-width: 0.6;
     vector-effect: non-scaling-stroke; pointer-events: none;
   }
+  .zoning path { fill-rule: evenodd; stroke: var(--clay); stroke-width: 0.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .zoning .z3 { fill-opacity: 0.55; }
   .roads path { fill: none; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; pointer-events: none; }
   .roads.far { opacity: 0.45; }
   .roads.far .r2, .roads.far .r3 { display: none; }

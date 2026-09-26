@@ -784,6 +784,335 @@
    "sha256": "5351835d49eab0e3e05c345fbd061be0b431e75c687da0b98c4391921ea94052",
    "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
    "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_01_GML.zip",
+   "bytes": 9136548,
+   "sha256": "3375b81bf485cd8f59360cc0bce0eef45f170bc39bc35896323d0df110c76f9c",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_02_GML.zip",
+   "bytes": 2558507,
+   "sha256": "6ab16d61fabf49057e935f5d51a62c510249e6db300455c1ab1fa61a6fc9d8ed",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_03_GML.zip",
+   "bytes": 3843987,
+   "sha256": "141f32d6fcc1318fd4bffcd076405e2e64c69bc6c2c9750b8604eb189dbd6b5a",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_04_GML.zip",
+   "bytes": 5305731,
+   "sha256": "69ad28f75c65423807955d224897b4f15f9f2879da15de79ee20289803cb7612",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_05_GML.zip",
+   "bytes": 1928964,
+   "sha256": "30c1f2952e58630896e182f65b28baf5e21aba07cd8adbd458b69b8f63332de8",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_06_GML.zip",
+   "bytes": 2027060,
+   "sha256": "3f107a9386ae559ba76b4937055d4f3fcb7ddf3bd47e8978a88b17d115f8e49e",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_07_GML.zip",
+   "bytes": 5147184,
+   "sha256": "192dd1effd6ab39222000fe49ae82feb95ce5261116a90d6c3b997cb08f2256b",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_08_GML.zip",
+   "bytes": 7559224,
+   "sha256": "f55c9a89089aaf152d6d7c7dab93b55d60fa6a9797539ff98fd1fd8bab129ff8",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_09_GML.zip",
+   "bytes": 4035015,
+   "sha256": "cf3b4a0d9858f437748ff551980588ff1ca745a13953fe008d4cdda3d69e13db",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_10_GML.zip",
+   "bytes": 4958373,
+   "sha256": "f044efbb4b506d7fc4b6420802935594bbaf0f299668d51723aaef96f06a8aaa",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_11_GML.zip",
+   "bytes": 12257546,
+   "sha256": "0b7797ab1ffeeccaa1fe38bedeb16c6cae29d63e81135e0e363ce4fe92f6f055",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_12_GML.zip",
+   "bytes": 13602389,
+   "sha256": "e4de856bdcc8bf89efba83f870dd57987847ef9d30b04acf2f259690b95db800",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_13_GML.zip",
+   "bytes": 45640257,
+   "sha256": "57fc822d580cf744e5596b7006363aa2a5685ceec0720b0053430760e12fc3c2",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_14_GML.zip",
+   "bytes": 21219728,
+   "sha256": "11ef6dfc829706bf749b8fe71fe48278f86410bdce848dcbe4f107d196fd8a3d",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_15_GML.zip",
+   "bytes": 2900202,
+   "sha256": "5bf87fdeadec4384422fa642a7fd104facb2662db1fe524e66570066790feac3",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_16_GML.zip",
+   "bytes": 1743952,
+   "sha256": "49d40a2e8e1e90db168da80a82f045f5380844a746e3a3688a40f5a9be45111e",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_17_GML.zip",
+   "bytes": 3258362,
+   "sha256": "84843d48c62323436e034a9633eb132cf224fd8479f4a0f0739e537b807ddee5",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_18_GML.zip",
+   "bytes": 1310375,
+   "sha256": "d330c3c11031f9b26e7bbab37bb4cb5baa1a7c0d9b8c4cb7ce0f4e72442fd972",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_19_GML.zip",
+   "bytes": 1488801,
+   "sha256": "6b583c3f3dc121694f7870311f7630f20836387edf695a3a44bf30d84719f9ed",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_20_GML.zip",
+   "bytes": 7981571,
+   "sha256": "cf01bc096ebd6f8d3be485068b0142a41c77b5d0820596d2b7c7e54ff8c42182",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_21_GML.zip",
+   "bytes": 5410706,
+   "sha256": "d330fe4f700aca4e884c96b662f729af13d822108c7958b1a4a5285e81b39f0a",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_22_GML.zip",
+   "bytes": 6808523,
+   "sha256": "b002c5ae645330ac999361ed30bf090f407c58d5c51acd0f7a7ce7006057c87e",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_23_GML.zip",
+   "bytes": 12416046,
+   "sha256": "d57fc6f20946f7f36f5569ece7d588b0c3e80cf012ad690f63e735ca23ce56a4",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_24_GML.zip",
+   "bytes": 4377324,
+   "sha256": "108d6a7c34cbc0739503a174c56c6fa6192059e8c116126e1c6c2cb65b6ce899",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_25_GML.zip",
+   "bytes": 2695292,
+   "sha256": "51b68ac9e936c70a66a8cb7be15a5140f846577cd4ee2e3bc54334976220fe33",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_26_GML.zip",
+   "bytes": 6182022,
+   "sha256": "dfee312e770f384de5896f34c25f774556464bb9626af364c0401bf6c1164496",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_27_GML.zip",
+   "bytes": 11474366,
+   "sha256": "103c77b359950e76285aec31278d978e56fa889b4120a32c447eee00dc21ba08",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_28_GML.zip",
+   "bytes": 9985745,
+   "sha256": "44db5f4754c8e8cecff38a0e0610d140148540c9fb9e2b23d12e17a49b4b10da",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_29_GML.zip",
+   "bytes": 3897655,
+   "sha256": "beb4b46e45e750af30054ea28020e5de47ce150d64b3caa76fa7e4d2aa5656b6",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_30_GML.zip",
+   "bytes": 2398609,
+   "sha256": "6a75e5191bc275571bf2d80be0d8dfda7ca0512f57d3f90961d16584200ed947",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_31_GML.zip",
+   "bytes": 567240,
+   "sha256": "4c13b62652975f156ae4eaef06d213896dd73413201a29267b746221b351791a",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_32_GML.zip",
+   "bytes": 2040620,
+   "sha256": "7a6fd5b4af5c351de185417dbe4bbed75c37bc77ddfab2808276ba8c123998fd",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_33_GML.zip",
+   "bytes": 5122776,
+   "sha256": "9412dc76567a10c869f13d5a64d87a0ce3b9166a08d954e8495efd12841a6895",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_34_GML.zip",
+   "bytes": 11563383,
+   "sha256": "2d1134e9d2784b6b0efedc56bb62f0c101d2e71474f833830d08b404d1629ac5",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_35_GML.zip",
+   "bytes": 5910958,
+   "sha256": "1c4153fbbe446de8def8af88b5655023a3e229ef147e11fb83af37b965e8e0f1",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_36_GML.zip",
+   "bytes": 1031932,
+   "sha256": "f11ee0c78600ef6ca1b39ca927066ec0493d1a4a2185eeec66457b1128794189",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_37_GML.zip",
+   "bytes": 1821506,
+   "sha256": "f5179788911a458c61f38de9f8a25e23726b6ce943b2c13425f068779a507671",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_38_GML.zip",
+   "bytes": 2312814,
+   "sha256": "bbda14f244f33f2031564703809991070ec6c55ba8f4a8993eafc51626884cd7",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_39_GML.zip",
+   "bytes": 2329008,
+   "sha256": "eb0e1b90a41388a71a4f73bd92e5976dd2081263a6154d7977399571dc58eb67",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_40_GML.zip",
+   "bytes": 10656796,
+   "sha256": "40b76a586dbfc3fd0b04d7a132d7fdbe8257bf61ecb418495648bd83fa0d392c",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_41_GML.zip",
+   "bytes": 2018260,
+   "sha256": "43e5f8887e4850a261ca106d97eea5d250889b25f802bf09521f89a11d506868",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_42_GML.zip",
+   "bytes": 5729731,
+   "sha256": "5b051192748f366ece902a0c7e3d22db64c6fb3fbfc581592bbce32feac50c27",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_43_GML.zip",
+   "bytes": 3628485,
+   "sha256": "df8095390a645704e75252900ba6a6972242d04c5cd65cdd8b945b4ecf3b00f4",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_44_GML.zip",
+   "bytes": 4886330,
+   "sha256": "de9ad9a3717958ca82b6d9e444c30f180a0c46ff40dadfab840e44ac504c987c",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_45_GML.zip",
+   "bytes": 2918466,
+   "sha256": "671dc88b2bf1be01a2f22f46d6f62f1a43ea01d88cfb63384a917543b2f5ba0c",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_46_GML.zip",
+   "bytes": 4679778,
+   "sha256": "0889b0b34192e4641eb9e5c8ada425bbc30822dbe734b01067e47f4dc005c326",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
+  },
+  {
+   "file": "data/raw/zoning/A29-19_47_GML.zip",
+   "bytes": 2847827,
+   "sha256": "6d14bfab29f3e7e3c7a74719dca886a281195b3609d8607cce9422bb652d94f5",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-A29-2019.html",
+   "script": "build-zoning"
   }
  ]
 }

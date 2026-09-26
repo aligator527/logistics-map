@@ -32,7 +32,8 @@
     "network": "node scripts/build-network.mjs",
     "e2e": "playwright test",
     "raw:verify": "node scripts/raw-manifest.mjs",
-    "raw:update": "node scripts/raw-manifest.mjs --update"
+    "raw:update": "node scripts/raw-manifest.mjs --update",
+    "zoning": "node scripts/build-zoning.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
