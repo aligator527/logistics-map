@@ -56,7 +56,7 @@ for (const [name, have, url] of [
   ['地価公示 L01', 2026, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/L01/L01-${String(n).slice(2)}/L01-${String(n).slice(2)}_GML.zip`],
   ['地価調査 L02', 2026, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/L02/L02-${String(n).slice(2)}/L02-${String(n).slice(2)}_GML.zip`],
   ['高速道路 N06', 2025, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/N06/N06-${String(n).slice(2)}/N06-${String(n).slice(2)}_GML.zip`],
-  ['行政区域 N03', 2025, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-${n}/N03-${n}0101_GML.zip`],
+  ['行政区域 N03', 2026, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-${n}/N03-${n}0101_GML.zip`],
 ]) {
   let newest = null, unknown = false;
   for (let n = have + 1; n <= y + 1; n++) {

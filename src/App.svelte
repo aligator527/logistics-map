@@ -832,9 +832,14 @@
         <dt>{tt('news')}</dt>
         <dd>{#each news.sources as s, i (s.key)}{i ? ', ' : ''}<a href={s.url}>{s[L]}</a>{/each}. {L === 'ja' ? '国土交通省の見出しは国土交通省ウェブサイトへのリンクです。' : 'MLIT headlines link to the MLIT website.'}</dd>
       {/if}
+      {#if hubs}
+        <dt>{tt('layerHubs')}</dt>
+        <dd>{#each Object.values(hubs.sources) as s, i (s.url)}{i ? '; ' : ''}<a href={s.url}>{s[L]}</a>{/each}</dd>
+      {/if}
       <dt>{tt('boundaries')}</dt>
       <dd>{tt('boundarySource')}</dd>
     </dl>
+    {#if hubs?.noncommercial}<p class="next">{tt('noncommercialNote')}</p>{/if}
     <details id="method" class="method">
       <summary>{tt('method')}</summary>
       <p>{tt('methodBody')}</p>

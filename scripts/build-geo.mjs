@@ -16,7 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const src = resolve(root, process.argv[2] ?? 'data/geo/N03-20250101.shp');
+const src = resolve(root, process.argv[2] ?? 'data/geo/N03-20260101.shp');
 const tmp = resolve(root, 'data/geo/tmp');
 const out = resolve(root, 'public/geo/japan.topo.json');
 mkdirSync(tmp, { recursive: true });
@@ -144,7 +144,7 @@ const layout = {
   okinawa: { c: okiCenter, k: 1.7, d: [okiDx, okiDy], daito: [-250_000, 0], sakishima: [170_000, 60_000] },
   ogasawara: { c: ogaCenter, k: 3, d: [ogaDx, ogaDy] },
 };
-topo.meta = { proj: PROJ, bounds: bbox(gj.features), insets, layout, source: 'MLIT 国土数値情報 N03 (2025-01-01)' };
+topo.meta = { proj: PROJ, bounds: bbox(gj.features), insets, layout, source: 'MLIT 国土数値情報 N03 (2026-01-01)' };
 delete topo.crs;
 writeFileSync(out, JSON.stringify(topo));
 // prefecture-only topology for the first paint (the municipalities are loaded afterwards)

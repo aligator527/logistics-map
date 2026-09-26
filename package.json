@@ -25,7 +25,7 @@
     "etl:muni": "node scripts/etl-muni.mjs",
     "test": "node --test 'tests/*.test.mjs'",
     "check-sources": "node scripts/check-sources.mjs",
-    "etl:multimodal": "node scripts/etl-multimodal.mjs"
+    "etl:multimodal": "node scripts/etl-multimodal.mjs --noncommercial"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

@@ -125,6 +125,10 @@ const strings = {
     ja: '① 各指標を、都道府県（47）または市区町村（1,898）の中での順位に換算します（0〜100点、同値は平均順位）。値そのものではなく順位を使うので、東京のような突出した値に引きずられません。② 「少ないほど良い」指標（地価、求人倍率、ICまでの距離、災害リスク）は向きを反転します。③ 重み（0〜5）で加重平均したものがスコアです。データのない指標はその地域の分母から外します。④ 市区町村スコアの距離・圏域人口は人口重心（2020年国勢調査1kmメッシュ）から測った直線距離です。「都道府県の値」の指標は県内で同じ値なので、県どうしの差だけを表します。⑤ 指標ごとにデータ時点が異なります。地価以外の賃料、個別の敷地条件、道路の混雑、自治体の支援策は含みません。',
     en: '1. Each criterion becomes a rank among the 47 prefectures or 1,898 municipalities (0–100, ties share the mean rank). Ranks rather than raw values keep outliers such as Tokyo from squashing everyone else. 2. For “less is better” criteria (land price, job ratios, distance to an IC, hazards) the direction is flipped. 3. The score is the weighted mean with weights 0–5; a criterion without data drops out of that area’s denominator. 4. Municipal distances and catchment populations are straight-line, from the population-weighted centre (2020 census 1 km grid). Criteria marked “prefecture value” are the same across a prefecture and only separate prefectures. 5. Criteria come from different years; rents, site specifics, road congestion and local incentives are not included.',
   },
+  noncommercialNote: {
+    ja: 'このサイトは非商用です。港湾（国土数値情報 C02）と貨物駅（同 P31）は非商用ライセンスのデータを含みます。',
+    en: 'This site is non-commercial. Ports (MLIT C02) and rail freight stations (MLIT P31) use data licensed for non-commercial use only.',
+  },
   // ---- municipal score
   scoreLevel: { ja: '単位', en: 'Areas' },
   byPref: { ja: '都道府県', en: 'Prefectures' },
@@ -284,7 +288,7 @@ const strings = {
     en: 'For a few quarters the published national total does not match the sum of prefectures; the sum is used instead.',
   },
   boundaries: { ja: '境界', en: 'Boundaries' },
-  boundarySource: { ja: '国土数値情報（行政区域データ N03, 2025年1月1日）', en: 'MLIT National Land Numerical Information, administrative areas (N03, 1 Jan 2025)' },
+  boundarySource: { ja: '国土数値情報（行政区域データ N03, 2026年1月1日）', en: 'MLIT National Land Numerical Information, administrative areas (N03, 1 Jan 2026)' },
   theme: { ja: 'テーマ', en: 'Theme' },
   themeLight: { ja: 'ライト', en: 'Light' },
   themeDark: { ja: 'ダーク', en: 'Dark' },

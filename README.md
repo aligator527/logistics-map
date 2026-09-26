@@ -10,8 +10,8 @@
 **Инфраструктура и удобство:**
 - **港・空港** — аэропорты (国土数値情報 C28 + 空港管理状況調書 2025, грузы и доля международных), размер знака ∝ √груза;
   у каждого DPL — ближайший грузовой аэропорт. Порты (C02 + 港湾統計 2025, тонны и TEU) и грузовые ж/д станции (P31)
-  есть только в **некоммерческих** источниках: `npm run etl:multimodal -- --noncommercial` включает их — только для
-  некоммерческого деплоя.
+  есть только в **некоммерческих** источниках. Сайт сейчас некоммерческий, поэтому `npm run etl:multimodal`
+  собирает их (флаг `--noncommercial`); для коммерческого деплоя уберите флаг в package.json.
 - **Поиск** по префектурам, муниципалитетам (ja/en, без макронов) и объектам DPL.
 - **立地メモ** — сводка по выбранной префектуре/муниципалитету из всех тем (печать / PDF).
 - **CI и тесты данных** (`npm test`): опубликованные JSON сверяются с контрольными значениями из источников.
@@ -69,7 +69,7 @@ npm run build        # -> dist/
 | слой | источник | скрипт | результат |
 |---|---|---|---|
 | Склады | МЛИТ 倉庫統計季報, .xls по кварталам ([страница](https://www.mlit.go.jp/seisakutokatsu/freight/seisakutokatsu_freight_mn2_000007_2.html)) | `npm run etl:warehouse` | `public/data/warehouse.json` |
-| Границы | 国土数値情報 N03 (2025-01-01), та же сборка, что в zairyu-map | `npm run geo` | `public/geo/japan.topo.json` |
+| Границы | 国土数値情報 N03 (2026-01-01), та же сборка, что в zairyu-map (там 2025) | `npm run geo` | `public/geo/japan.topo.json` |
 | Названия (EN) | Wikidata, `data/labels/wikidata_lg_codes.csv` | `npm run labels` | `public/geo/muni-en.json` |
 | Дороги, IC | 国土数値情報 N06 高速道路時系列 (FY2025) | `npm run roads` | `public/geo/roads.json` |
 | DPL | Daiwa House, 物件一覧 (XML со страницы списка) | `npm run etl:dpl` | `public/data/dpl.json` |
@@ -88,7 +88,7 @@ npm run build        # -> dist/
 | Муниципальные показатели, DPL-окружение | сетка + L01/L02 2026 + 都市計画現況調査 R7 + 国勢調査2020 第12表 + 経済センサス2021 第9-1B表 + N06 + J-SHIS | `npm run etl:muni` | `public/data/muni.json` |
 
 `npm run data` пересобирает всё. Крупные исходники (`data/raw`, `data/geo`) не коммитятся:
-- `data/geo/N03-20250101.shp` — из `N03-20250101_GML.zip` (国土数値情報), или скопировать из zairyu-map;
+- `data/geo/N03-20260101.shp` — из `N03-20260101_GML.zip` (国土数値情報, 800 МБ);
 - `data/geo/N06-25/` — распаковать `N06-25_GML.zip` с https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html;
 - `data/raw/*.xls` ETL скачивает сам (с паузой между запросами, повторно не качает).
 
