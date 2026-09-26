@@ -158,3 +158,20 @@ test('news: headlines and links only', { skip: !existsSync(new URL('../public/da
     assert.match(it.date, /^\d{4}-\d{2}-\d{2}$/);
   }
 });
+
+test('related news: facility names, stages, ranking', async () => {
+  const { facilityOf, stageOf, relatedOf, timelineOf } = await import('../src/lib/related.ts');
+  assert.equal(facilityOf('マルチテナント型物流施設「DPL札幌南V」着工')?.name, 'DPL札幌南V');
+  assert.equal(facilityOf('東急不動産の物流施設「LOGI’Q」シリーズ「LOGI’Q市原」竣工')?.name, "LOGI'Q市原", 'series name skipped');
+  assert.equal(facilityOf('【イベントレポート】中部地区初開催 「DPL小牧施設見学会&COCOLAN鉢植え体験会」')?.name, 'DPL小牧');
+  assert.equal(facilityOf('中小物流事業者の労働生産性向上事業費補助金の公募'), null);
+  assert.equal(stageOf('大型物流施設「ロジスクエア京田辺B」竣工'), 'done');
+  assert.equal(stageOf('「プロロジスパーク北上金ケ崎」にイオングローバルSCMが入居'), 'open');
+  const it = (t, date, extra = {}) => ({ t, link: t, date, src: 'cre', srcName: 'CRE', developer: true, topics: [], prefs: [26], munis: ['26211'], ...extra });
+  const a = it('大型物流施設「ロジスクエア京田辺B」竣工', '2026-08-31');
+  const all = [a, it('【ロジスクエア京田辺B】内覧会開催のお知らせ', '2026-09-07'),
+    it('大型物流施設「ロジスクエア朝霞B」を着工', '2026-08-06', { prefs: [11], munis: ['11227'] }),
+    it('オンラインセミナー開催', '2026-09-07', { prefs: [], munis: [] })];
+  assert.deepEqual(relatedOf(a, all).map((r) => r.reason), ['facility', 'series', 'company']);
+  assert.deepEqual(timelineOf(a, all).map((x) => x.date), ['2026-08-31', '2026-09-07']);
+});

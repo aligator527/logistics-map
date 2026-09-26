@@ -33,6 +33,7 @@
   import NewsFeed, { type News, type NewsItem } from './components/NewsFeed.svelte';
   import NewsStrip from './components/NewsStrip.svelte';
   import type { NewsGroup } from './lib/newsmap';
+  import { relatedOf, timelineOf, type NewsLite, type Related } from './lib/related';
   import SiteCard, { type Catchment } from './components/SiteCard.svelte';
   import PlaceSearch, { type Place } from './components/PlaceSearch.svelte';
   import Dossier, { type DossierSection } from './components/Dossier.svelte';
@@ -306,6 +307,36 @@
     tip: { title: g.label, sub: `${g.items.length} ${tt('newsOnMap')}`, note: tt('newsClick'),
            rows: g.items.slice(0, 3).map((it) => [it.date.slice(5), it.t.length > 34 ? it.t.slice(0, 33) + '…' : it.t] as [string, string]) } })));
   const nationalNews = $derived(newsGroups.find((g) => g.key === 'jp') ?? null);
+  // related news over the whole archive (not only the last 90 days on the map); cached per link
+  const newsLite = $derived.by((): NewsLite[] => {
+    if (!news) return [];
+    const dev = new Set(news.sources.filter((s) => (s as { group?: string }).group === 'developer').map((s) => s.key));
+    return news.items.map((it) => ({ t: it.t, link: it.link, date: it.date, src: it.src, srcName: srcName(it.src), developer: dev.has(it.src),
+                                     topics: it.topics, prefs: it.prefs, munis: it.munis }));
+  });
+  const liteByLink = $derived(new Map(newsLite.map((x) => [x.link, x])));
+  const relCache = $derived.by(() => { void newsLite; return new Map<string, Related[]>(); });
+  const tlCache = $derived.by(() => { void newsLite; return new Map<string, NewsLite[]>(); });
+  function relatedFor(link: string): Related[] {
+    const it = liteByLink.get(link);
+    if (!it) return [];
+    if (!relCache.has(link)) relCache.set(link, relatedOf(it, newsLite, 5));
+    return relCache.get(link)!;
+  }
+  function timelineFor(link: string): NewsLite[] {
+    const it = liteByLink.get(link);
+    if (!it) return [];
+    if (!tlCache.has(link)) tlCache.set(link, timelineOf(it, newsLite));
+    return tlCache.get(link)!;
+  }
+  function locateNews(link: string): [number, number] | null {
+    const it = liteByLink.get(link);
+    if (!it || !geo) return null;
+    if (it.munis.length && muni) { const c = (muni as unknown as { xy?: ([number, number] | null)[] }).xy?.[muni.codes.indexOf(it.munis[0])]; if (c) return geo.P(c); }
+    return it.prefs.length ? geo.anchors[it.prefs[0] - 1] : null;
+  }
+  /** narrow maps: the strip card with its related news open */
+  let stripOpen = $state<string | null>(null);
   function onnews(key: string) {
     if (newsCards) newsPins = newsPins.includes(key) ? newsPins.filter((k) => k !== key) : [...newsPins, key].slice(-4);
     else newsFocus = key;
@@ -841,6 +872,8 @@
           news={newsGroups} {newsCards} {newsPins} {newsFocus} newsAuto={mapW >= 900 ? 3 : 2}
           {onnews} onnewsclose={(k) => (newsPins = newsPins.filter((x) => x !== k))} {onnewsplace}
           onnewshover={(k) => (newsFocus = k)}
+          onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
+          {relatedFor} {timelineFor} {locateNews}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -849,7 +882,8 @@
         {/if}
         </div>
         {#if !newsCards && newsGroups.length}
-          <NewsStrip groups={newsGroups} lang={L} focus={newsFocus} onfocus={(k) => (newsFocus = k)} onplace={onnewsplace} />
+          <NewsStrip groups={newsGroups} lang={L} focus={newsFocus} onfocus={(k) => (newsFocus = k)} onplace={onnewsplace}
+                     open={stripOpen} ontoggle={(k) => (stripOpen = stripOpen === k ? null : k)} {relatedFor} {timelineFor} />
         {/if}
       {:else}
         {#if nowWarn && nt && muni}

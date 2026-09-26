@@ -4,13 +4,19 @@
   import type { NewsGroup } from '../lib/newsmap';
   import { t, type Lang } from '../lib/i18n';
   import NewsCallout from './NewsCallout.svelte';
+  import type { NewsLite, Related } from '../lib/related';
 
-  let { groups, lang, focus, onfocus, onplace }: {
+  let { groups, lang, focus, onfocus, onplace, open = null, ontoggle, relatedFor, timelineFor }: {
     groups: NewsGroup[];
     lang: Lang;
     focus: string | null;
     onfocus: (key: string) => void;
     onplace: (code: string) => void;
+    /** card with its related news open (it grows downwards) */
+    open?: string | null;
+    ontoggle?: (key: string) => void;
+    relatedFor?: (link: string) => Related[];
+    timelineFor?: (link: string) => NewsLite[];
   } = $props();
 
   let strip: HTMLDivElement | undefined = $state();
@@ -44,8 +50,9 @@
 <section class="strip-wrap" aria-label={t(lang, 'news')}>
   <div class="strip" bind:this={strip} {onscroll} role="list">
     {#each groups as g (g.key)}
-      <div class="slot" data-key={g.key} role="listitem">
-        <NewsCallout group={g} {lang} active={focus === g.key} onplace={g.code ? onplace : undefined} />
+      <div class="slot" class:open={open === g.key} data-key={g.key} role="listitem">
+        <NewsCallout group={g} {lang} active={focus === g.key} onplace={g.code ? onplace : undefined}
+                     expanded={open === g.key} ontoggle={ontoggle ? () => { onfocus(g.key); ontoggle!(g.key); } : undefined} {relatedFor} {timelineFor} />
       </div>
     {/each}
   </div>
@@ -58,6 +65,8 @@
     display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain;
     padding: 4px 2px 8px; scrollbar-width: thin;
   }
-  .slot { flex: 0 0 min(86%, 340px); scroll-snap-align: center; height: 150px; }
+  .strip { align-items: flex-start; }
+  .slot { flex: 0 0 min(86%, 340px); scroll-snap-align: center; height: 158px; }
+  .slot.open { height: auto; max-height: 520px; }
   .hint { margin: 0; font-size: 11.5px; color: var(--muted); }
 </style>

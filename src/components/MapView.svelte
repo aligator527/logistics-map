@@ -10,6 +10,7 @@
   import Tooltip, { type Tip } from './Tooltip.svelte';
   import NewsCallout from './NewsCallout.svelte';
   import { buildSat, placeCards, type Mask, type NewsGroup } from '../lib/newsmap';
+  import { placeKey, type NewsLite, type Related } from '../lib/related';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
@@ -28,6 +29,7 @@
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
+        onnewspin, relatedFor, timelineFor, locateNews,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -74,6 +76,12 @@
     onnewsclose?: (key: string) => void;
     onnewsplace?: (code: string) => void;
     onnewshover?: (key: string | null) => void;
+    /** pin a callout (opening its related news pins it) */
+    onnewspin?: (key: string) => void;
+    relatedFor?: (link: string) => Related[];
+    timelineFor?: (link: string) => NewsLite[];
+    /** map position (viewBox) of a news item's place */
+    locateNews?: (link: string) => [number, number] | null;
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -348,8 +356,46 @@
   });
   let dismissed = $state<string[]>([]);
   const CARD = { w: 310, h: 158 };
+  /** item shown on each card (pager position) */
+  let ks = $state<Record<string, number>>({});
+  const current = (g: NewsGroup) => g.items[Math.min(ks[g.key] ?? 0, g.items.length - 1)];
+  /** a card with its related news open: shown alone and larger */
+  let expanded = $state<string | null>(null);
+  let hoverCard = $state<string | null>(null);
+  let relHover = $state<string | null>(null);
+  /** measured height of the open card's content (the first layout uses an estimate) */
+  let openH = $state(0);
+  $effect(() => { if (expanded && !news.some((g) => g.key === expanded)) expanded = null; });
+  function toggleExpand(key: string) {
+    expanded = expanded === key ? null : key;
+    openH = 0;
+    if (expanded) { onnewspin?.(key); hoverCard = null; }
+  }
+  $effect(() => {
+    if (!expanded) return;
+    const onkey = (e: KeyboardEvent) => { if (e.key === 'Escape') { expanded = null; openH = 0; } };
+    addEventListener('keydown', onkey);
+    return () => removeEventListener('keydown', onkey);
+  });
+  /** related news of the open card, or of the card under the pointer (their places are ringed) */
+  const relatedNow = $derived.by(() => {
+    const key = expanded ?? hoverCard;
+    const g = key ? news.find((x) => x.key === key) : null;
+    return g && relatedFor ? relatedFor(current(g).link) : [];
+  });
+  const relatedPlaces = $derived(new Set(relatedNow.map((r) => placeKey(r.it))));
   const callouts = $derived.by(() => {
     if (!newsCards || !mask || !news.length) return [];
+    if (expanded) {
+      const g = news.find((x) => x.key === expanded);
+      if (!g) return [];
+      const tl = timelineFor ? timelineFor(current(g).link).length : 0;
+      const est = CARD.h + (g.items.length > 1 ? 26 : 0) + 44 + (tl ? 80 : 0) + Math.max(1, relatedNow.length) * 46;
+      const h = Math.min(boxH - 16, openH ? openH + 2 : est);
+      const p = g.xy ? toScreen(g.xy) : null;
+      const placed = placeCards([{ key: g.key, p, h }], mask, boxW, boxH, { w: 380, h }, [[boxW - 56, boxH - 150, boxW, boxH]], p ? [p] : []);
+      return placed.map((c) => ({ ...c, g, pin: true }));
+    }
     const inView = (g: NewsGroup) => {
       if (!g.xy) return true;
       const [x, y] = toScreen(g.xy);
@@ -377,6 +423,22 @@
     // a group with several items has a pager row
     const placed = placeCards(order.map((g) => ({ key: g.key, p: g.xy ? toScreen(g.xy) : null, h: g.items.length > 1 ? CARD.h + 26 : CARD.h })), mask, boxW, boxH, CARD, clear, pts);
     return placed.map((p) => ({ ...p, g: byKey.get(p.key)!, pin: newsPins.includes(p.key) }));
+  });
+  /** open card: thin lines from the card to the places of its related news */
+  const relLines = $derived.by(() => {
+    const c = expanded ? callouts[0] : null;
+    if (!c || !locateNews) return [];
+    const out: { link: string; d: string; x: number; y: number }[] = [];
+    for (const r of relatedNow) {
+      const xy = locateNews(r.it.link);
+      if (!xy) continue;
+      const [x, y] = toScreen(xy);
+      if (x < 0 || y < 0 || x > boxW || y > boxH) continue;
+      // from the nearest point of the card's outline
+      const ax = Math.max(c.x, Math.min(x, c.x + c.w)), ay = Math.max(c.y, Math.min(y, c.y + c.h));
+      out.push({ link: r.it.link, d: `M${ax.toFixed(1)},${ay.toFixed(1)}L${x.toFixed(1)},${y.toFixed(1)}`, x, y });
+    }
+    return out;
   });
   /** narrow maps: the focused point is linked to the card list below the map */
   const focusLink = $derived.by(() => {
@@ -522,7 +584,8 @@
           <circle class="org-c" r={h.r * 0.38} />
         {:else}
           <!-- news: a speech bubble with the number of items; a ring when the place is in focus -->
-          {#if newsFocus === h.key || newsPins.includes(h.key)}<circle class="nw-ring" r={h.r + 6} />{/if}
+          {#if newsFocus === h.key || newsPins.includes(h.key)}<circle class="nw-ring" r={h.r + 6} cy={-h.r - 5} />
+          {:else if relatedPlaces.has(h.key)}<circle class="nw-ring rel" r={h.r + 6} cy={-h.r - 5} />{/if}
           <path class="nw" d="M{-h.r - 4},{-h.r}h{2 * h.r + 8}a4 4 0 0 1 4 4v{2 * h.r - 8}a4 4 0 0 1-4 4h{-(h.r + 1)}l-3 5l-3-5h{-(h.r - 2)}a4 4 0 0 1-4-4v{-(2 * h.r - 8)}a4 4 0 0 1 4-4z"
                 transform="translate(0,{-h.r - 5})" />
           {#if h.fresh}<circle class="nw-new" cx={h.r + 5} cy={-2 * h.r - 4} r="3.5" />{/if}
@@ -561,6 +624,10 @@
             <circle class="leader-dot" cx={c.px} cy={c.py} r="3.5" />
           {/if}
         {/each}
+        {#each relLines as l (l.link)}
+          <path class="rel-line" class:hot={relHover === l.link} d={l.d} />
+          <circle class="rel-dot" class:hot={relHover === l.link} cx={l.x} cy={l.y} r={relHover === l.link ? 6 : 4.5} />
+        {/each}
         {#if focusLink}
           <path class="leader-halo" d="M{focusLink.x},{focusLink.y}V{boxH}" />
           <path class="leader hot" d="M{focusLink.x},{focusLink.y}V{boxH}" />
@@ -568,10 +635,14 @@
         {/if}
       </svg>
       {#each callouts as c (c.key)}
-        <div class="callout" style:left="{c.x}px" style:top="{c.y}px" style:width="{c.w}px" style:height="{c.h}px">
-          <NewsCallout group={c.g} {lang} active={newsFocus === c.key || c.pin}
-                       onplace={onnewsplace} onhover={(on) => onnewshover?.(on ? c.key : null)}
-                       onclose={() => { if (c.pin) onnewsclose?.(c.key); else dismissed = [...dismissed, c.key]; }} />
+        <div class="callout" class:open={expanded === c.key} style:left="{c.x}px" style:top="{c.y}px" style:width="{c.w}px" style:height="{c.h}px">
+          <NewsCallout group={c.g} {lang} active={newsFocus === c.key || c.pin} bind:k={() => ks[c.key] ?? 0, (v) => (ks[c.key] = v)}
+                       dim={!!hoverCard && hoverCard !== c.key}
+                       expanded={expanded === c.key} ontoggle={relatedFor ? () => toggleExpand(c.key) : undefined}
+                       {relatedFor} {timelineFor} bind:relHover maxH={boxH - 16}
+                       bind:natural={() => (expanded === c.key ? openH : 0), (v) => { if (expanded === c.key && v) openH = v; }}
+                       onplace={onnewsplace} onhover={(on) => { hoverCard = on ? c.key : null; onnewshover?.(on ? c.key : null); }}
+                       onclose={() => { if (expanded === c.key) { expanded = null; return; } if (c.pin) onnewsclose?.(c.key); else dismissed = [...dismissed, c.key]; }} />
         </div>
       {/each}
     </div>
@@ -691,6 +762,7 @@
   .nw-t { font-size: 12px; font-weight: 700; fill: var(--bg); stroke: none; pointer-events: none; }
   .nw-new { fill: var(--clay); stroke: var(--surface); stroke-width: 1.5; }
   .nw-ring { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 3 2; }
+  .nw-ring.rel { stroke: var(--clay); stroke-dasharray: none; }
   .overlay .poi.news text.nw-t, .overlay .poi.quake text.qk-t { paint-order: normal; stroke: none; }
   .overlay .poi.news text.nw-t { fill: var(--bg); }
   .ring { fill: var(--mark); fill-opacity: 0.05; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
@@ -725,7 +797,12 @@
   @keyframes draw { to { stroke-dashoffset: 0; } }
   .leader-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
   .focus-ring { fill: none; stroke: var(--ink); stroke-width: 2; }
+  .rel-line { fill: none; stroke: var(--ink-2); stroke-width: 1.1; stroke-dasharray: 4 3; opacity: 0.75; }
+  .rel-line.hot { stroke: var(--ink); stroke-width: 2; stroke-dasharray: none; opacity: 1; }
+  .rel-dot { fill: var(--surface); stroke: var(--ink-2); stroke-width: 1.6; }
+  .rel-dot.hot { stroke: var(--ink); stroke-width: 2.4; }
   .callout { position: absolute; pointer-events: auto; }
+  .callout.open :global(.nc) { overflow-x: hidden; }
   .zoom { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
   .zbtn {
     width: 40px; height: 40px; display: grid; place-items: center;
