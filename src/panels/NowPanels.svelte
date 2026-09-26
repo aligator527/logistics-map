@@ -3,6 +3,7 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { live, WARN, INT_COLOR } from '../lib/live.svelte';
+  import { WARN_COLORS } from '../themes/now.svelte';
   import { project as projectLL } from '../lib/project';
   import { pad2 } from '../themes/types';
   import BarList from '../components/BarList.svelte';
@@ -44,12 +45,25 @@
     </section>
   {/if}
   <section class="panel">
+    <p class="eyebrow">{tt('riversTitle')}</p>
+    {#if live.rivers.length}
+      <ul class="plain">
+        {#each live.rivers as r (r.river + r.name)}
+          <li><span class="lv-chip" class:inv={r.level >= 3} style:background={WARN_COLORS[app.dark ? 'dark' : 'light'][r.level - 1]}>L{r.level}</span>
+            <strong>{r.river}</strong> — {r.name} · {new Date(r.at).toLocaleString(L === 'ja' ? 'ja-JP' : 'en-GB', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            {#if r.munis.length}<span class="small">（{r.munis.slice(0, 4).map((c) => muniLabel(c)).join('、')}{r.munis.length > 4 ? ` ほか${r.munis.length - 4}` : ''}）</span>{/if}</li>
+        {/each}
+      </ul>
+    {:else}<p class="src">{tt('riversNone')}</p>{/if}
+    <p class="src note">{tt('riversNote')}</p>
+  </section>
+  <section class="panel">
     <p class="eyebrow">{tt('typhoon')}</p>
     {#if live.typhoons.length}
       <ul class="plain">
         {#each live.typhoons as t (t.id)}
           <li><strong>{tt('typhoon')} {Number(t.number.slice(2)) || ''}{L === 'ja' ? '号' : ''} {t.name[L === 'ja' ? 'jp' : 'en']}</strong> — {t.location}, {t.pressure} hPa,
-            {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {t.course} {t.speed} km/h{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
+            {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {t.course}{t.speed ? ` ${t.speed} km/h` : ''}{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
             {#if t.pos && geo && projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside'}<span class="small">（{tt('offMap')}）</span>{/if}</li>
         {/each}
       </ul>

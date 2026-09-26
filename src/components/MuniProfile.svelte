@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TermText from './TermText.svelte';
   import type { LocalMetric } from '../themes/local.svelte';
   import { t, type Lang } from '../lib/i18n';
 
@@ -23,7 +24,7 @@
           {@const pos = r.rank && r.n ? 1 - (r.rank - 1) / Math.max(1, r.n - 1) : null}
           <li>
             <button type="button" class="row" aria-pressed={r.m.key === current} onclick={() => onmetric(r.m.key)}>
-              <span class="nm">{r.m[lang]}</span>
+              <span class="nm"><TermText text={r.m[lang]} {lang} focusable={false} /></span>
               <span class="v tnum">{isFinite(r.v) ? r.m.fmt(r.v) : '–'}</span>
               {#if pos !== null && r.m.better}
                 <span class="bar" aria-hidden="true"><span style:width="{pos * 100}%"></span></span>

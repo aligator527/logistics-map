@@ -8,6 +8,8 @@
   import LabourPanels from './panels/LabourPanels.svelte';
   import ShortlistPanel from './panels/ShortlistPanel.svelte';
   import SourcesFooter from './panels/SourcesFooter.svelte';
+  import GlossaryPanel from './panels/GlossaryPanel.svelte';
+  import TermText from './components/TermText.svelte';
   import { loadCensusIndex, loadDpl, loadJobs, loadRoads, loadSsw, loadWarehouse, METRICS, fmtDate, fmtValue, fmtYm, fmtYoy,
            isBuilt, valueOf, yoyOf, type CensusIndex, type Dpl, type Jobs, type Roads, type Ssw, type Warehouse } from './lib/data';
   import { loadGeo, loadMunis, roadPaths, type GeoData, type Shape } from './lib/geo';
@@ -961,11 +963,11 @@
               · {tt('shareOfJapan')} <strong class="tnum">{fmtPct(L, (valueOf(w, app.metric, app.q, p - 1) / valueOf(w, app.metric, app.q, -1)) * 100)}</strong>
             {/if}
           </p>
-          {#if app.layer === 'warehouse'}<p class="help">{tt(`mh_${app.metric}`)}</p>
+          {#if app.layer === 'warehouse'}<p class="help"><TermText text={tt(`mh_${app.metric}`)} lang={L} /></p>
           {:else if app.layer === 'flows'}<p class="help">{census.source.note[L]}</p>
           {:else if app.layer === 'score'}<p class="help">{tt(muniLevel ? 'muniScoreHint' : 'scoreHint')}</p>
           {:else if app.layer === 'now'}<p class="help">{app.nmet === 'warn' ? tt('warnL3Count') : tt('dieselHint')}</p>
-          {:else if app.layer === 'local'}<p class="help">{lt?.metric.hint[L] ?? ''}</p>
+          {:else if app.layer === 'local'}<p class="help"><TermText text={lt?.metric.hint[L] ?? ''} lang={L} /></p>
           {:else}<p class="help">{app.lmetric === 'jobs' ? jobs.source.note[L] : ssw.source.note[L]}</p>{/if}
           {/if}
           {#if p}<p class="memo">
@@ -1040,6 +1042,7 @@
             <BarList bars={topBars(view)} />
           </section>
         {/if}
+        <GlossaryPanel />
         <ShortlistPanel />
         {#if news}
           <section class="panel">

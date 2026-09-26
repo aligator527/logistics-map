@@ -1,4 +1,5 @@
 <script lang="ts">
+  import TermText from './TermText.svelte';
   import type { Classes } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
 
@@ -29,7 +30,7 @@
 </script>
 
 <div class="legend">
-  <p class="title">{title}</p>
+  <p class="title"><TermText text={title} {lang} /></p>
   {#if categories}
     <ul class="cats">
       {#each categories as c, i (c.label)}
@@ -62,7 +63,7 @@
       {/each}
     </ol>
   {/if}
-  <p class="hint">{hint}</p>
+  <p class="hint"><TermText text={hint} {lang} /></p>
   <ul class="keys">
     {#if flows === 'focus'}
       <li><svg width="26" height="10" aria-hidden="true"><path d="M1 5h18" class="k-flow out" /><path d="M25 5l-7 -4v8z" class="k-head out" /></svg>{t(lang, 'flowOut')}</li>
