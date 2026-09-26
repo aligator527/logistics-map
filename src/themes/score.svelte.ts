@@ -37,6 +37,8 @@ export class ScoreTheme implements ThemeView {
 
   readonly flows = [];
   readonly trend = null;
+  /** median industrial land price per prefecture (from public/data/muni.json, loaded later) */
+  landRaw = $state.raw<number[] | null>(null);
   private get L() { return this.ctx.L; }
 
   // ------------------------------------------------------------ criteria (latest data of each source)
@@ -82,6 +84,10 @@ export class ScoreTheme implements ThemeView {
         raw: range(0).map((i) => this.ssw.s1.total?.[sp]?.[i] ?? NaN), fmt: people,
         hint: { ja: '特定技能1号の在留者数（全分野）', en: 'Specified Skilled Workers (i), all fields' },
         source: { ja: `特定技能在留外国人数（${sy.ja}）`, en: `Specified Skilled Workers (${sy.en})` } },
+      ...(this.landRaw ? [{ key: 'land', ja: '工業地の地価', en: 'Industrial land price', group: 'cost' as const, dir: -1 as const,
+        raw: this.landRaw, fmt: (v: number) => `${fmtCompact(L, v)}${L === 'ja' ? '円/㎡' : ' ¥/m²'}`,
+        hint: { ja: '工業地（地価公示・地価調査2026）の中央値。低いほど有利', en: 'Median industrial land price (2026). Lower is better' },
+        source: { ja: '国土数値情報 地価公示・都道府県地価調査（2026年）', en: 'MLIT official land prices (2026)' } }] : []),
       ...this.extra.map((x) => ({ ...x, fmt: (v: number) => `${fmtNum(L, v, x.digits)}${x.unit[L]}` })),
     ];
     return list;

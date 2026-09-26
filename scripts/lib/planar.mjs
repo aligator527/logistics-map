@@ -41,6 +41,24 @@ export const prefs = feature(topo, topo.objects.pref).features.map((f) => {
   return { code: Number(f.id), polys: ps, bbox: [x0, y0, x1, y1], area: areaByPref[Number(f.id) - 1] };
 }).sort((a, b) => a.code - b.code);
 
+/** municipality features (planar, laid out like the map) with bbox, built on first use */
+let muniFeatures = null;
+/** 5-digit municipality code containing a planar point, or null */
+export function muniAt(p) {
+  muniFeatures ??= feature(topo, topo.objects.muni).features.filter((f) => f.geometry).map((f) => {
+    const ps = polys(f.geometry);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const q of ps) for (const [x, y] of q[0]) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    return { code: String(f.id), polys: ps, bbox: [x0, y0, x1, y1] };
+  });
+  for (const f of muniFeatures) {
+    const [x0, y0, x1, y1] = f.bbox;
+    if (p[0] < x0 || p[0] > x1 || p[1] < y0 || p[1] > y1) continue;
+    if (f.polys.some((poly) => inPoly(p, poly))) return f.code;
+  }
+  return null;
+}
+
 /** prefecture code 1..47 containing a planar point, or 0 */
 export function prefAt(p) {
   for (const f of prefs) {

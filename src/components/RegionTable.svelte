@@ -11,8 +11,10 @@
 <script lang="ts">
   import { prefName, t, type Lang } from '../lib/i18n';
 
-  let { names, columns, primary, lang, focus, a = 0, b = 0, compare = false, onpick }: {
+  let { names, columns, primary, lang, focus, a = 0, b = 0, compare = false, onpick, areas = null }: {
     names: string[];          // Japanese prefecture names, index 0..46
+    /** rows other than the 47 prefectures (municipal score): id is passed to Column.get and onpick */
+    areas?: { id: number; label: string }[] | null;
     columns: Column[];
     /** key of the column shown on the map (bold, default sort) */
     primary: string;
@@ -31,7 +33,7 @@
 
   const rows = $derived.by(() => {
     const col = columns.find((c) => c.key === active);
-    const codes = Array.from({ length: 47 }, (_, i) => i + 1);
+    const codes = areas ? areas.map((x) => x.id) : Array.from({ length: 47 }, (_, i) => i + 1);
     if (active === 'name' || !col) return desc ? codes : codes.reverse();
     const v = new Map(codes.map((c) => [c, col.get(c)]));
     return codes.sort((x, y) => {
@@ -45,6 +47,8 @@
     if (active === k) desc = !desc;
     else { sortKey = k; desc = k !== 'name'; }
   }
+  const labelMap = $derived(areas ? new Map(areas.map((x) => [x.id, x.label])) : null);
+  const labelOf = (code: number) => labelMap?.get(code) ?? prefName(lang, code, names[code - 1]);
   const aria = (k: string) => (active === k ? (desc ? 'descending' : 'ascending') : 'none');
 </script>
 
@@ -69,7 +73,7 @@
       {#each rows as code (code)}
         <tr class:sel={!compare && code === focus}>
           <th scope="row">
-            <button type="button" class="linkish" onclick={() => onpick(code)}>{prefName(lang, code, names[code - 1])}</button>
+            <button type="button" class="linkish" onclick={() => onpick(code)}>{labelOf(code)}</button>
             {#if compare && code === a}<span class="ab">A</span>{/if}
             {#if compare && code === b}<span class="ab b">B</span>{/if}
           </th>

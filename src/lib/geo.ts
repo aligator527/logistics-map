@@ -36,12 +36,16 @@ export interface GeoData {
   anchors: [number, number][];
   /** prefectures sharing a border: "11-13" (codes as numbers, smaller first) */
   adjacent: Set<string>;
+  /** SVG units per metre on the mainland (× inset scale in Okinawa / Ogasawara) */
+  unitsPerMetre: number;
+  insetScale: { okinawa: number; ogasawara: number };
   source: string;
 }
 
 type Meta = {
   bounds: { x0: number; y0: number; x1: number; y1: number };
   insets: Record<string, { x0: number; y0: number; x1: number; y1: number }>;
+  layout?: { okinawa: { k: number }; ogasawara: { k: number } };
   source: string;
 };
 
@@ -119,6 +123,8 @@ export async function loadGeo(): Promise<GeoData> {
     prefFrame,
     muniBorders,
     P,
+    unitsPerMetre: k,
+    insetScale: { okinawa: topo.meta.layout?.okinawa.k ?? 1, ogasawara: topo.meta.layout?.ogasawara.k ?? 1 },
     // fall back to polygon centroids if anchors.json is missing
     adjacent: (() => {
       const set = new Set<string>();

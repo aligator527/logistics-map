@@ -12,6 +12,7 @@
   const GROUPS: { key: Criterion['group']; label: Key }[] = [
     { key: 'market', label: 'groupMarket' },
     { key: 'access', label: 'groupAccess' },
+    { key: 'cost', label: 'groupCost' },
     { key: 'labour', label: 'groupLabour' },
     { key: 'risk', label: 'groupRisk' },
   ];

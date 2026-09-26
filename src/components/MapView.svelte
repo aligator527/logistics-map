@@ -14,7 +14,7 @@
   export interface Flow { key: string; o: [number, number]; d: [number, number]; w: number; kind: 'out' | 'in' | 'all'; tip: Tip }
 
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
-        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true,
+        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [],
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -35,6 +35,12 @@
     mutedMarkers?: boolean;
     /** frame the focused prefecture (off for flows: the partners must stay in view) */
     zoomFocus?: boolean;
+    /** 'muni': every municipality is filled from `values` (keys = 5-digit codes) */
+    level?: 'pref' | 'muni';
+    /** selected municipality (muni level) */
+    selMuni?: string | null;
+    /** radius rings around a point (viewBox units), e.g. a DPL site's 10 / 30 / 60 km */
+    rings?: { xy: [number, number]; r: number; label: string }[];
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -56,7 +62,10 @@
 
   const prefByCode = $derived(new Map(geo.prefs.map((s) => [s.code, s])));
   const focusShape = $derived(focus ? prefByCode.get(focus) ?? null : null);
-  const focusMunis = $derived(focus && !compare && zoomFocus ? geo.munis.filter((m) => m.code.startsWith(focus)) : []);
+  const focusMunis = $derived(level === 'pref' && focus && !compare && zoomFocus ? geo.munis.filter((m) => m.code.startsWith(focus)) : []);
+  const muniByCode = $derived(new Map(geo.munis.map((s) => [s.code, s])));
+  const areaShapes = $derived(level === 'muni' ? geo.munis : geo.prefs);
+  const shapeOf = (code: string) => (code.length === 5 ? muniByCode.get(code) : prefByCode.get(code)) ?? null;
   const pad2 = (n: number) => String(n).padStart(2, '0');
 
   function fill(code: string): string {
@@ -255,8 +264,9 @@
   const hoverShape = $derived.by(() => {
     if (!hover) return null;
     if (hover.muni) return focusMunis.find((m) => m.code === hover!.muni) ?? null;
-    return hover.code ? prefByCode.get(hover.code) ?? null : null;
+    return hover.code ? shapeOf(hover.code) : null;
   });
+  const selMuniShape = $derived(level === 'muni' && selMuni ? muniByCode.get(selMuni) ?? null : null);
 </script>
 
 <div class="map" bind:this={wrap}>
@@ -288,13 +298,13 @@
         <rect class="inset" x={f.x} y={f.y} width={f.w} height={f.h} rx="4" />
       {/each}
 
-      <g class="areas">
-        {#each geo.prefs as s (s.code)}
+      <g class="areas" class:muni={level === 'muni'}>
+        {#each areaShapes as s (s.code)}
           <path d={s.d} data-code={s.code} fill={fill(s.code)} class:dim={dimmed(s.code)}
-                class:faded={!!focus && !compare && s.code !== focus} />
+                class:faded={level === 'pref' && !!focus && !compare && s.code !== focus} />
         {/each}
       </g>
-      <path class="pref-borders" d={geo.prefBorders} />
+      <path class="pref-borders" class:strong={level === 'muni'} d={geo.prefBorders} />
 
       {#if focusMunis.length}
         <g class="munis">
@@ -314,11 +324,17 @@
         </g>
       {/if}
 
+      {#each rings as g (g.label)}
+        <circle class="ring" cx={g.xy[0]} cy={g.xy[1]} r={g.r} />
+      {/each}
       {#if hoverShape}
         <path class="hover" d={hoverShape.d} />
       {/if}
       {#if focusShape && !compare}
-        <path class="focus" d={focusShape.d} />
+        <path class="focus" class:thin={level === 'muni'} d={focusShape.d} />
+      {/if}
+      {#if selMuniShape}
+        <path class="focus sel-muni" d={selMuniShape.d} />
       {/if}
       {#if compare}
         {#if b && prefByCode.get(pad2(b))}<path class="sel-b" d={prefByCode.get(pad2(b))!.d} />{/if}
@@ -355,6 +371,10 @@
         {:else}<rect class="jm" x="-3" y="-3" width="6" height="6" rx="1" />{/if}
         {#if labelled.has(`j${j.id}`)}<text x="7" dy="0.35em">{j.n}</text>{/if}
       </g>
+    {/each}
+    {#each rings as g (g.label)}
+      {@const [x, y] = transform.apply([g.xy[0], g.xy[1] - g.r])}
+      <g transform="translate({x},{y}) scale({px})"><text class="ring-label" y="-4" text-anchor="middle">{g.label}</text></g>
     {/each}
     {#each markers as m (m.i)}
       {@const [x, y] = transform.apply(m.xy)}
@@ -420,6 +440,10 @@
     cursor: pointer;
   }
   .areas path.dim { opacity: 0.18; }
+  .areas.muni path { stroke: var(--bg); stroke-width: 0.3; stroke-opacity: 0.7; vector-effect: non-scaling-stroke; }
+  .pref-borders.strong { stroke: var(--ink-2); stroke-opacity: 0.7; stroke-width: 0.9; }
+  .focus.thin { stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .sel-muni { stroke: var(--accent); stroke-width: 2.5; }
   .areas path.faded { opacity: 0.55; }
   .pref-borders {
     fill: none; stroke: var(--bg); stroke-width: 1; stroke-linejoin: round;
@@ -463,6 +487,8 @@
   .site.muted { opacity: 0.35; }
   .site.sel .dot, .site.sel .ring-out { stroke: var(--accent); stroke-width: 3; }
   .site:hover .dot, .site:hover .ring-out { stroke-width: 2.4; }
+  .ring { fill: var(--mark); fill-opacity: 0.05; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .ring-label { font-size: 11px; font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
   .flow { cursor: pointer; }
   .flow path { fill: none; stroke-linecap: round; }
   .flow .halo { stroke: var(--road-halo); stroke-opacity: 0.75; }

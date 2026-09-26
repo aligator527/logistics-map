@@ -5,11 +5,12 @@
   import { loadGeo, roadPaths, type GeoData, type Shape } from './lib/geo';
   import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme } from './lib/state.svelte';
   import { prefName, t, type Key } from './lib/i18n';
-  import { fmtPct, fmtSqm } from './lib/scale';
+  import { fmtCompact, fmtNum, fmtPct, fmtSqm } from './lib/scale';
   import { WarehouseTheme } from './themes/warehouse.svelte';
   import { FlowsTheme, FLOW_METRICS } from './themes/flows.svelte';
   import { LabourTheme } from './themes/labour.svelte';
   import { PRESETS, ScoreTheme, type ExtraCriteria, type PrefStats } from './themes/score.svelte';
+  import { MUNI_PRESETS, MuniScoreTheme } from './themes/muniscore.svelte';
   import { pad2, type Ctx, type ThemeView } from './themes/types';
   import MapView, { type Marker } from './components/MapView.svelte';
   import Legend from './components/Legend.svelte';
@@ -22,8 +23,18 @@
   import WeightPanel from './components/WeightPanel.svelte';
   import ScoreBreakdown from './components/ScoreBreakdown.svelte';
   import NewsFeed, { type News } from './components/NewsFeed.svelte';
+  import SiteCard, { type Catchment } from './components/SiteCard.svelte';
   import Segmented from './components/Segmented.svelte';
   import type { Tip } from './components/Tooltip.svelte';
+
+  interface MuniData {
+    codes: string[];
+    m: Record<string, (number | null)[]> & { icName: string[]; landEst: number[] };
+    prefLand: (number | null)[];
+    sites: Record<string, Catchment>;
+    siteMedian: Record<string, number | null>;
+    sources: Record<string, { ja: string; en: string; url: string }>;
+  }
 
   let w = $state.raw<Warehouse | null>(null);
   let geo = $state.raw<GeoData | null>(null);
@@ -33,6 +44,8 @@
   let ssw = $state.raw<Ssw | null>(null);
   let jobs = $state.raw<Jobs | null>(null);
   let news = $state.raw<News | null>(null);
+  /** municipal indicators + DPL catchments (public/data/muni.json) */
+  let muni = $state.raw<MuniData | null>(null);
   let risk = $state.raw<{ sites: Record<string, { quake: number | null; flood: number; surge: number }>; depthLegend: { rank: number; ja: string; en: string }[] } | null>(null);
   let error = $state<string | null>(null);
   let highlight = $state<number | null>(null);
@@ -65,7 +78,12 @@
   let fl = $state.raw<FlowsTheme | null>(null);
   let lb = $state.raw<LabourTheme | null>(null);
   let sc = $state.raw<ScoreTheme | null>(null);
-  const view = $derived<ThemeView | null>(app.layer === 'flows' ? fl : app.layer === 'labour' ? lb : app.layer === 'score' ? sc : wh);
+  let msc = $state.raw<MuniScoreTheme | null>(null);
+  const muniLevel = $derived(app.layer === 'score' && app.slevel === 'muni' && !!msc);
+  const view = $derived<ThemeView | null>(app.layer === 'flows' ? fl : app.layer === 'labour' ? lb
+    : app.layer === 'score' ? (muniLevel ? msc : sc) : wh);
+  /** the active score theme (prefecture or municipal) */
+  const scv = $derived(muniLevel ? msc! : sc);
 
   const lists = $derived<HashLists | null>(w && census && ssw && jobs && sc ? {
     quarters: w.quarters.map((x) => x.id),
@@ -74,7 +92,7 @@
     sswPeriods: ssw.periods.map((p) => p.id),
     sswFields: ssw.fields.map((f) => f.key),
     jobPeriods: jobs.periods.map((p) => p.id),
-    criteria: sc.keys,
+    criteria: [...new Set([...sc.keys, ...(msc?.keys ?? [])])],
   } : null);
 
   // ------------------------------------------------------------ boot
@@ -91,6 +109,16 @@
       app.fromHash(location.hash, lists!);
       // roads are secondary: the map works without them
       loadRoads().then((r) => (roads = r)).catch((e) => console.warn('roads', e));
+      fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+        if (!d) return;
+        muni = d;
+        sc!.landRaw = d.prefLand.map((v: number | null) => v ?? NaN);
+        const t = new MuniScoreTheme(d, j, extra, ctx);
+        t.setNamer(muniLabel);
+        msc = t;
+        // the hash may carry municipal weights that were not known at boot
+        app.fromHash(location.hash, lists!);
+      }).catch((e) => console.warn('muni', e));
       fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (news = n)).catch(() => {});
     } catch (e) {
       error = String(e);
@@ -138,9 +166,24 @@
       .sort((x, y) => Number(x.built) - Number(y.built) || (x.i === app.site ? 1 : 0) - (y.i === app.site ? 1 : 0));
   });
   const roadLayer = $derived(geo && roads ? roadPaths(geo, roads) : null);
+  /** 10 / 30 / 60 km around the selected DPL site */
+  const rings = $derived.by(() => {
+    if (!geo || app.site < 0 || !sites[app.site] || !app.showDpl) return [];
+    const s = sites[app.site];
+    const k = geo.unitsPerMetre * (s.pref === 47 ? geo.insetScale.okinawa : 1);
+    return [10, 30, 60].map((r) => ({ xy: geo!.P(s.p), r: r * 1000 * k, label: `${r} km` }));
+  });
   const dplSource = $derived(!dpl ? '' : L === 'ja' ? `${dpl.source.ja}（${fmtDate(L, dpl.source.updated)}更新）`
     : `${dpl.source.en} (updated ${fmtDate(L, dpl.source.updated)})`);
 
+  const muniShape = $derived(geo ? new Map(geo.munis.map((s) => [s.code, s])) : new Map<string, Shape>());
+  /** 「川口市（埼玉県）」 / "Kawaguchi City, Saitama" */
+  function muniLabel(code: string) {
+    const s = muniShape.get(code);
+    const c = Number(code.slice(0, 2));
+    if (!s) return code;
+    return L === 'ja' ? `${s.name}（${names[c - 1] ?? ''}）` : `${s.nameEn || s.name}, ${pname(c)}`;
+  }
   function muniTip(s: Shape): Tip {
     const c = Number(s.code.slice(0, 2));
     const n = sites.filter((x) => x.muni === s.code).length;
@@ -158,6 +201,11 @@
     if (s.plot) rows.push([tt('plot'), fmtSqm(L, s.plot)]);
     rows.push([s.land ? tt('opens') : tt('completed'), fmtYm(L, s.date)]);
     rows.push([tt('address'), `${names[s.pref - 1] ?? ''}${s.address}`]);
+    const ct = muni?.sites[s.name];
+    if (ct) {
+      if (ct.pop30 !== null) rows.push([tt('pop30'), `${fmtCompact(L, ct.pop30)}${L === 'ja' ? '人' : ''}`]);
+      if (ct.ic !== null) rows.push([tt('nearestIc'), `${ct.icName ?? ''} ${fmtNum(L, ct.ic, 1)} km`]);
+    }
     const hz = risk?.sites[s.name];
     const depth = (r: number) => (r ? risk!.depthLegend.find((d) => d.rank === r)?.[L] ?? '–' : tt('hzNone'));
     if (hz) {
@@ -177,6 +225,7 @@
 
   function onpick(code: string) {
     app.site = -1;
+    if (code.length === 5) { app.muni = app.muni === code ? '' : code; app.pref = Number(code.slice(0, 2)); return; }
     app.pick(Number(code));
   }
   function onsite(i: number) {
@@ -186,6 +235,7 @@
   function clearFocus() {
     app.pref = 0;
     app.site = -1;
+    app.muni = '';
   }
 
   // ------------------------------------------------------------ side panel helpers
@@ -307,10 +357,18 @@
         </div>
       {/if}
     {:else if app.layer === 'score'}
+      {#if msc}
+        <div class="ctl">
+          <span class="lab">{tt('scoreLevel')}</span>
+          <Segmented label={tt('scoreLevel')} value={app.slevel}
+                     options={[{ value: 'pref', label: tt('byPref') }, { value: 'muni', label: tt('byMuni') }] as { value: 'pref' | 'muni'; label: string }[]}
+                     onchange={(v) => { app.slevel = v; app.preset = 'balanced'; app.weights = {}; app.muni = ''; if (v === 'muni') app.stopCompare(); }} />
+        </div>
+      {/if}
       <div class="ctl">
         <span class="lab">{tt('preset')}</span>
         <Segmented label={tt('preset')} value={app.preset}
-                   options={[...PRESETS.map((p) => ({ value: p.key, label: p[L] })), ...(app.preset ? [] : [{ value: '', label: tt('custom') }])]}
+                   options={[...(muniLevel ? MUNI_PRESETS : PRESETS).map((p) => ({ value: p.key, label: p[L] })), ...(app.preset ? [] : [{ value: '', label: tt('custom') }])]}
                    onchange={(v) => { app.preset = v; app.weights = {}; }} />
       </div>
     {:else}
@@ -346,7 +404,7 @@
         <button type="button" class="btn chip" aria-pressed={app.showRoads} onclick={() => (app.showRoads = !app.showRoads)}>
           <svg width="16" height="10" aria-hidden="true"><path d="M1 5h14" stroke="currentColor" stroke-width="2" /></svg>{tt('layerRoads')}
         </button>
-        <button type="button" class="btn chip" aria-pressed={app.compare}
+        <button type="button" class="btn chip" aria-pressed={app.compare} disabled={muniLevel}
                 onclick={() => (app.compare ? app.stopCompare() : app.startCompare())}>
           <span class="ab" aria-hidden="true">A</span><span class="ab b" aria-hidden="true">B</span>{tt('compare')}
         </button>
@@ -370,17 +428,25 @@
         <MapView
           bind:this={mapView}
           {geo} values={view.values} classes={view.classes} lang={L} {highlight}
+          level={muniLevel ? 'muni' : 'pref'} selMuni={muniLevel ? app.muni || null : null}
           focus={app.pref ? pad2(app.pref) : null}
           compare={app.compare} a={app.a} b={app.b}
           {markers} site={app.site}
           roads={roadLayer} showRoads={app.showRoads}
-          flows={view.flows} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && app.layer !== 'score'}
+          flows={view.flows} {rings} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
           prefTip={view.prefTip} {muniTip} {siteTip}
           {onpick} onclear={clearFocus} {onsite}
         />
       {:else}
-        <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={app.pref}
-                     compare={app.compare} a={app.a} b={app.b} onpick={(c) => onpick(String(c))} />
+        {#if muniLevel && msc}
+          <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={msc.indexOf(app.muni)}
+                       areas={msc.codes.map((c, i) => ({ id: i, code: c })).filter((x) => !app.pref || Number(x.code.slice(0, 2)) === app.pref)
+                                .map((x) => ({ id: x.id, label: muniLabel(x.code) }))}
+                       onpick={(i) => onpick(msc!.codes[i])} />
+        {:else}
+          <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={app.pref}
+                       compare={app.compare} a={app.a} b={app.b} onpick={(c) => onpick(String(c))} />
+        {/if}
       {/if}
 
       <div class="below">
@@ -408,11 +474,25 @@
         {/if}
       {:else}
         {@const p = app.pref}
-        {@const r = p ? rank(view, p) : 0}
+        {@const r = p && !muniLevel ? rank(view, p) : 0}
         {@const tr = view.trend}
         <section class="panel readout">
+          {#if muniLevel && msc && app.muni}
+            {@const mr = msc.ranks.get(app.muni)}
+            <p class="eyebrow">{muniLabel(app.muni)} · {view.periodLabel}</p>
+            <p class="kpi tnum">{view.fmt(msc.muniValue(app.muni))}</p>
+            <p class="kpi-sub">{view.legend.title}{#if mr} · {tt('rank')} <strong class="tnum">{mr}</strong> / {msc.ranks.size}{/if}</p>
+          {:else}
           <p class="eyebrow">{p ? pname(p) : tt('japan')} · {view.periodLabel}</p>
-          {#if app.layer === 'score' && !p}
+          {#if muniLevel && msc}
+            {#if p}
+              <p class="kpi tnum">{view.fmt(view.value(p))}</p>
+              <p class="kpi-sub">{tt('medianOfMunis')}</p>
+            {:else}
+              {@const bi = msc.result.total.reduce((b, v, i, a) => (isFinite(v) && (b < 0 || v > a[b]) ? i : b), -1)}
+              <p class="kpi tnum">{bi >= 0 ? `${muniLabel(msc.codes[bi])} ${view.fmt(msc.result.total[bi])}` : '–'}</p>
+            {/if}
+          {:else if app.layer === 'score' && !p}
             {@const best = topBars(view)[0]}
             <p class="kpi tnum">{best ? `${best.label} ${best.value}` : '–'}</p>
           {:else}
@@ -428,8 +508,9 @@
           </p>
           {#if app.layer === 'warehouse'}<p class="help">{tt(`mh_${app.metric}`)}</p>
           {:else if app.layer === 'flows'}<p class="help">{census.source.note[L]}</p>
-          {:else if app.layer === 'score'}<p class="help">{tt('scoreHint')}</p>
+          {:else if app.layer === 'score'}<p class="help">{tt(muniLevel ? 'muniScoreHint' : 'scoreHint')}</p>
           {:else}<p class="help">{app.lmetric === 'jobs' ? jobs.source.note[L] : ssw.source.note[L]}</p>{/if}
+          {/if}
         </section>
 
         {#if app.layer === 'warehouse' && p}
@@ -466,13 +547,26 @@
               <p class="eyebrow">{tt('weights')}</p>
               {#if app.preset !== 'balanced'}<button type="button" class="linkish" onclick={() => { app.preset = 'balanced'; app.weights = {}; }}>{tt('resetWeights')}</button>{/if}
             </div>
-            <WeightPanel criteria={sc.criteria} weights={sc.weights} lang={L} onweight={(k, v) => sc!.setWeight(k, v)} />
-            <p class="src note">{tt('scoreCaveat')}</p>
+            <WeightPanel criteria={scv!.criteria} weights={scv!.weights} lang={L} onweight={(k, v) => scv!.setWeight(k, v)} />
+            <p class="src note">{tt('scoreCaveat')}{#if muniLevel} {tt('inheritedNote')}{/if}</p>
           </section>
-          {#if p}
+          {#if muniLevel && msc && app.muni && msc.indexOf(app.muni) >= 0}
+            <section class="panel">
+              <p class="eyebrow">{tt('breakdown')} · {muniLabel(app.muni)}</p>
+              <ScoreBreakdown criteria={msc.criteria} parts={msc.result.parts} weights={msc.weights} code={msc.indexOf(app.muni) + 1} lang={L} />
+            </section>
+          {:else if !muniLevel && p}
             <section class="panel">
               <p class="eyebrow">{tt('breakdown')} · {pname(p)}</p>
               <ScoreBreakdown criteria={sc.criteria} parts={sc.result.parts} weights={sc.weights} code={p} lang={L} />
+            </section>
+          {/if}
+          {#if muniLevel && msc}
+            {@const inPref = msc.codes.map((c, i) => ({ c, i, v: msc!.result.total[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
+              .sort((a, b) => b.v - a.v).slice(0, 10)}
+            <section class="panel">
+              <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''}</p>
+              <BarList bars={inPref.map((x) => ({ key: x.c, label: muniLabel(x.c), value: view.fmt(x.v), pct: x.v, onclick: () => onpick(x.c) }))} />
             </section>
           {/if}
         {/if}
@@ -523,13 +617,18 @@
           {/if}
         {/if}
 
+        {#if app.site >= 0 && sites[app.site] && muni?.sites[sites[app.site].name]}
+          <section class="panel">
+            <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L} />
+          </section>
+        {/if}
         {#if p && (app.layer === 'warehouse' || app.showDpl)}
           <section class="panel">
             <p class="eyebrow">{tt('dplIn')} · {pname(p)}</p>
             <SiteList sites={sitesIn(p)} lang={L} selected={app.site} {onsite} />
             <p class="src">{dplSource}</p>
           </section>
-        {:else if !p && app.layer !== 'flows'}
+        {:else if !p && app.layer !== 'flows' && !muniLevel}
           <section class="panel">
             <p class="eyebrow">{app.layer === 'score' ? tt('ranking') : tt('top')}</p>
             <BarList bars={topBars(view)} />
@@ -626,6 +725,7 @@
   .toggles { display: flex; gap: 6px; flex-wrap: wrap; }
   .chip { min-height: 36px; font-size: 13px; }
   .chip[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
+  .chip:disabled { opacity: 0.4; cursor: not-allowed; }
   .chip[aria-pressed='true'] .ab { background: var(--bg); }
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
 

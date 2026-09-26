@@ -68,6 +68,10 @@ class AppState {
   weights = $state<Record<string, number>>({});
   /** preset the weights came from ('' = edited by hand) */
   preset = $state('balanced');
+  /** score by prefecture or by municipality */
+  slevel = $state<'pref' | 'muni'>('pref');
+  /** selected municipality (5-digit code, municipal score) — '' = none */
+  muni = $state('');
 
   showDpl = $state(true);
   showRoads = $state(true);
@@ -125,6 +129,8 @@ class AppState {
       if (this.lmetric === 'jobs' && this.occ !== 'driver') p.set('jo', this.occ);
     }
     if (this.layer === 'score') {
+      if (this.slevel === 'muni') p.set('sl', 'muni');
+      if (this.slevel === 'muni' && this.muni) p.set('mu', this.muni);
       if (this.preset && this.preset !== 'balanced') p.set('pr', this.preset);
       if (!this.preset) p.set('sw', lists.criteria.map((k) => `${k}-${this.weights[k] ?? 1}`).join('.'));
     }
@@ -156,6 +162,8 @@ class AppState {
       }
       this.preset = '';
     } else this.preset = p.get('pr') ?? 'balanced';
+    this.slevel = p.get('sl') === 'muni' ? 'muni' : 'pref';
+    this.muni = /^\d{5}$/.test(p.get('mu') ?? '') ? p.get('mu')! : '';
     const fy = Number(p.get('fy'));
     this.flowYear = lists.flowYears.includes(fy) ? fy : lists.flowYears.at(-1)!;
     this.basis = p.get('fb') === 'day3' ? 'day3' : 'annual';

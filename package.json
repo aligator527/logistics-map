@@ -13,14 +13,16 @@
     "geo": "node scripts/build-geo.mjs",
     "roads": "node scripts/build-roads.mjs",
     "labels": "node scripts/build-labels.mjs",
-    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run news",
+    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run etl:mesh && npm run etl:muni && npm run news",
     "etl:census": "node scripts/etl-census.mjs",
     "etl:ssw": "node scripts/etl-ssw.mjs",
     "etl:jobs": "node scripts/etl-jobs.mjs",
     "anchors": "node scripts/build-anchors.mjs",
     "etl:suigai": "node scripts/etl-suigai.mjs",
     "etl:risk": "node scripts/etl-risk.mjs",
-    "news": "node scripts/fetch-news.mjs"
+    "news": "node scripts/fetch-news.mjs",
+    "etl:mesh": "node scripts/etl-mesh.mjs",
+    "etl:muni": "node scripts/etl-muni.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

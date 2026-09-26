@@ -80,6 +80,7 @@ const strings = {
   },
   groupMarket: { ja: '市場', en: 'Market' },
   groupAccess: { ja: 'アクセス', en: 'Access' },
+  groupCost: { ja: 'コスト', en: 'Cost' },
   groupLabour: { ja: '労働力', en: 'Labour' },
   groupRisk: { ja: '災害リスク', en: 'Hazards' },
   // ---- news
@@ -103,6 +104,39 @@ const strings = {
   hzNote: {
     ja: '災害リスクは地点の250mメッシュ・ハザードマップの値。出典：J-SHIS（防災科研）、ハザードマップポータルサイト',
     en: 'Hazards at the site: 250 m mesh / hazard-map values. Sources: J-SHIS (NIED), Hazard Map Portal',
+  },
+  // ---- municipal score
+  scoreLevel: { ja: '単位', en: 'Areas' },
+  byPref: { ja: '都道府県', en: 'Prefectures' },
+  byMuni: { ja: '市区町村', en: 'Municipalities' },
+  muniScoreHint: {
+    ja: '各指標を1,898市区町村の中の順位（0〜100点）に換算し重みで平均。人口重心で計測',
+    en: 'Each criterion becomes a 0–100 rank among 1,898 municipalities, measured at the population centre; weighted mean',
+  },
+  inheritedNote: {
+    ja: '「都道府県の値」の指標は同じ県内の市区町村で同じ値です（県どうしの比較にのみ効きます）。',
+    en: 'Criteria marked “prefecture value” are the same for every municipality of a prefecture (they only separate prefectures).',
+  },
+  landEst15: { ja: '地価：市区町村内に工業地の地点がないため15km圏の中央値', en: 'Land price: no industrial point here, median within 15 km' },
+  landEstPref: { ja: '地価：近くに工業地の地点がないため都道府県の中央値', en: 'Land price: no industrial point nearby, prefecture median' },
+  medianOfMunis: { ja: '市区町村スコアの中央値', en: 'median municipal score' },
+  topMunis: { ja: '上位の市区町村', en: 'Top municipalities' },
+  landPref: { ja: '工業地の地価', en: 'Industrial land price' },
+  landPrefHint: { ja: '工業地（地価公示・地価調査2026）の中央値。低いほど有利', en: 'Median industrial land price (2026). Lower is better' },
+  // ---- DPL catchment
+  siteConditions: { ja: '立地の条件', en: 'Location profile' },
+  thisSite: { ja: 'この物件', en: 'This site' },
+  dplMedian: { ja: 'DPL中央値', en: 'DPL median' },
+  pop10: { ja: '10km圏人口', en: 'Population within 10 km' },
+  pop30: { ja: '30km圏人口', en: 'Population within 30 km' },
+  pop60: { ja: '60km圏人口', en: 'Population within 60 km' },
+  nearestIc: { ja: '最寄りIC', en: 'Nearest interchange' },
+  pool30: { ja: '30km圏の輸送・運搬の就業者', en: 'Transport & handling workers within 30 km' },
+  cluster20: { ja: '20km圏の物流業従業者', en: 'Logistics employees within 20 km' },
+  land10: { ja: '10km圏の工業地地価（中央値）', en: 'Industrial land price within 10 km (median)' },
+  siteConditionsNote: {
+    ja: '点の位置：DPL全物件の中央値に対する比（対数目盛、±10倍まで）。青＝立地上有利、茶＝不利。距離は直線距離。人口は2020年国勢調査（1kmメッシュ）、就業者は同常住地、物流業は2021年経済センサス、地価は2026年地価公示・地価調査。',
+    en: 'Dot: ratio to the median of all DPL sites (log scale, up to ×10). Blue = favourable, brown = unfavourable. Straight-line distances. Population: 2020 census 1 km grid; workers: 2020 census by residence; logistics: 2021 Economic Census; land: 2026 official land prices.',
   },
   // ---- labour
   labourMetric: { ja: '指標', en: 'Indicator' },
