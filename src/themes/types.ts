@@ -36,6 +36,8 @@ export interface ThemeView {
   table: { columns: Column[]; primary: string };
   compareRows: CompareRow[];
   source: { text: string; url: string };
+  /** categorical legend instead of classes (warning levels, trip types) */
+  categories?: { color: string; label: string }[] | null;
   /** label of the period on the map, e.g. 2025年4〜6月 */
   periodLabel: string;
   /** null: no time series (site score) */

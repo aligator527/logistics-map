@@ -16,7 +16,8 @@
 //     or the Izu islands do not).
 // Each origin or destination (municipality centre, port, airport, freight station, DPL site) gets
 // its access legs here; the browser runs Dijkstra over the graph (src/lib/travel.ts).
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GridIndex, km } from './lib/geo-ll.mjs';
@@ -242,6 +243,28 @@ writeJson(resolve(root, 'public/geo/network.json'), {
   edges,
   munis: { ll: munis.map((m) => m.ll), comp: muniComp, acc: munis.map((m) => m.acc) },
   pois,
+  /** entries for origins picked anywhere on the map: [node, lon, lat, land component] */
+  entries: entries.map((e) => [e.j, r4(e.lon), r4(e.lat), e.comp]),
   generated: new Date().toISOString().slice(0, 10),
 });
 console.log(`wrote public/geo/network.json`);
+
+// ------------------------------------------------------------------ 4. 1 km population grid for reach maps
+// public/geo/grid.bin.gz: four Uint16 arrays of n cells — (lat − 20)·1000, (lon − 120)·1000, 2020
+// population (capped at 65535), land component — about 1.4 MB before compression.
+{
+  const raw = read('data/raw/mesh/pop2020.json');
+  const cells = raw.map(([lat, lon, pop], i) => ({ lat, lon, pop, i })).filter((c) => c.pop > 0);
+  const n = cells.length;
+  const buf = new Uint16Array(4 * n);
+  cells.forEach((c, k) => {
+    const m = mesh[c.i].m;
+    buf[k] = Math.round((c.lat - 20) * 1000);
+    buf[n + k] = Math.round((c.lon - 120) * 1000);
+    buf[2 * n + k] = Math.min(65535, Math.round(c.pop));
+    buf[3 * n + k] = m.length ? muniComp[m[0]] : compAt(c);
+  });
+  // stored gzipped (GitHub Pages does not compress binary files); the browser inflates it
+  writeFileSync(resolve(root, 'public/geo/grid.bin.gz'), gzipSync(Buffer.from(buf.buffer), { level: 9 }));
+  console.log(`wrote public/geo/grid.bin.gz: ${n} cells`);
+}

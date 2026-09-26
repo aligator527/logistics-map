@@ -106,3 +106,12 @@ test('English UI has no untranslated keys', async ({ page }) => {
   // a missing i18n key renders as its identifier (lowerCamelCase) or undefined
   expect(text).not.toMatch(/\bundefined\b|\b[a-z]+[A-Z][a-zA-Z]+\b(?![.:/])/);
 });
+
+test('network reach on the 1 km grid, 2024 trip types', async ({ page }) => {
+  const errors = await open(page, 't=local&lk=shift&io=net:dpl&ig=1');
+  const panel = page.locator('aside .panel', { hasText: '2024年ルールでの運行' });
+  await expect(panel).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('aside')).toContainText('到達圏の人口（1km）', { timeout: 30_000 });
+  await expect(page.locator('canvas.raster')).toBeVisible();
+  expect(errors).toEqual([]);
+});

@@ -88,6 +88,9 @@ export class Router {
     return dist;
   }
 
+  /** node -> minutes from the nearest origin */
+  nodeTimes(origins: Place[]) { return this.spread(origins); }
+
   /** minutes from the nearest of `origins` to a place */
   private reach(dist: Float64Array, origins: Place[], p: Place) {
     let best = Infinity;
@@ -125,4 +128,129 @@ export function hubGroups(items: HubItem[]) {
     air: items.filter((h) => h.kind === 'air' && (h.t ?? 0) >= 10_000).map((h) => `air:${h.name}`),
     rail: items.filter((h) => h.kind === 'rail').map((h) => `rail:${h.name}`),
   };
+}
+
+// ------------------------------------------------------------ origins anywhere, 1 km grid
+export interface Entry { node: number; ll: [number, number]; comp: number }
+export interface Grid {
+  n: number;
+  lat: Float32Array;
+  lon: Float32Array;
+  pop: Uint16Array;
+  comp: Uint16Array;
+}
+/** public/geo/grid.bin.gz → cells (see scripts/build-network.mjs) */
+export async function loadGrid(url: string): Promise<Grid> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`grid ${res.status}`);
+  let buf = await res.arrayBuffer();
+  // some servers (the Vite dev server) already send it with Content-Encoding: gzip
+  const b = new Uint8Array(buf, 0, 2);
+  if (b[0] === 0x1f && b[1] === 0x8b) buf = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  const u = new Uint16Array(buf), n = u.length / 4;
+  return {
+    n,
+    lat: Float32Array.from(u.subarray(0, n), (v) => 20 + v / 1000),
+    lon: Float32Array.from(u.subarray(n, 2 * n), (v) => 120 + v / 1000),
+    pop: u.slice(2 * n, 3 * n),
+    comp: u.slice(3 * n, 4 * n),
+  };
+}
+
+/** entries bucketed on a 0.25° grid for radius queries */
+class EntryIndex {
+  private cells = new Map<string, Entry[]>();
+  constructor(entries: Entry[]) {
+    for (const e of entries) {
+      const k = `${Math.floor(e.ll[1] * 4)}|${Math.floor(e.ll[0] * 4)}`;
+      (this.cells.get(k) ?? this.cells.set(k, []).get(k)!).push(e);
+    }
+  }
+  near(lon: number, lat: number, km: number) {
+    const dy = Math.ceil((km / 111) * 4), dx = Math.ceil((km / (111 * Math.cos(lat * rad))) * 4);
+    const cy = Math.floor(lat * 4), cx = Math.floor(lon * 4), out: Entry[] = [];
+    for (let y = cy - dy; y <= cy + dy; y++) for (let x = cx - dx; x <= cx + dx; x++) {
+      const c = this.cells.get(`${y}|${x}`);
+      if (c) out.push(...c);
+    }
+    return out;
+  }
+}
+/** fast distance (equirectangular), plenty within 100 km */
+const kmFast = (lon1: number, lat1: number, lon2: number, lat2: number) => {
+  const x = (lon2 - lon1) * Math.cos(((lat1 + lat2) / 2) * rad), y = lat2 - lat1;
+  return Math.sqrt(x * x + y * y) * 111.195;
+};
+
+export class Reach {
+  readonly router: Router;
+  private idx: EntryIndex;
+  readonly entries: Entry[];
+  constructor(router: Router) {
+    this.router = router;
+    const raw = (router.net as Network & { entries?: [number, number, number, number][] }).entries ?? [];
+    this.entries = raw.map(([node, lon, lat, comp]) => ({ node, ll: [lon, lat], comp }));
+    this.idx = new EntryIndex(this.entries);
+  }
+  /** a place anywhere: access legs to the entries on the same land within the access radius
+   *  (no open-water check here, unlike the precomputed places) */
+  place(lon: number, lat: number, comp: number): Place {
+    const p = this.router.net.params;
+    const acc = this.idx.near(lon, lat, p.accessKm)
+      .map((e) => ({ e, d: kmFast(lon, lat, e.ll[0], e.ll[1]) }))
+      .filter((x) => x.e.comp === comp && x.d <= p.accessKm).sort((a, b) => a.d - b.d).slice(0, 6)
+      .flatMap((x) => [x.e.node, Math.max(1, Math.round(this.router.local(x.d, [lon, lat]) * 10))]);
+    return { ll: [lon, lat], comp, acc };
+  }
+  /** per cell, its access legs to the nearest entries on the same land (origin-independent):
+   *  computed once per grid, in slices so the page stays responsive */
+  private cellAcc: { node: Int32Array; min: Float32Array } | null = null;
+  static readonly K = 6;
+  async prepare(g: Grid) {
+    if (this.cellAcc) return;
+    const K = Reach.K, p = this.router.net.params;
+    const node = new Int32Array(g.n * K).fill(-1), min = new Float32Array(g.n * K).fill(Infinity);
+    for (let start = 0; start < g.n; start += 15000) {
+      for (let i = start; i < Math.min(g.n, start + 15000); i++) {
+        const lon = g.lon[i], lat = g.lat[i], comp = g.comp[i];
+        const speed = lat > 41.4 && lon > 139.3 ? p.localHk : p.local;
+        const near = this.idx.near(lon, lat, p.accessKm).filter((e) => e.comp === comp)
+          .map((e) => ({ e, d: kmFast(lon, lat, e.ll[0], e.ll[1]) })).filter((x) => x.d <= p.accessKm)
+          .sort((a, b) => a.d - b.d).slice(0, K);
+        near.forEach((x, k) => { node[i * K + k] = x.e.node; min[i * K + k] = (x.d * p.detour / speed) * 60; });
+      }
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    this.cellAcc = { node, min };
+  }
+  get ready() { return !!this.cellAcc; }
+  /** minutes from the nearest origin to every grid cell (Infinity: not by road); needs prepare() */
+  toGrid(origins: Place[], g: Grid): Float32Array {
+    const dist = this.router.nodeTimes(origins);
+    const p = this.router.net.params, K = Reach.K, { node, min } = this.cellAcc!;
+    const out = new Float32Array(g.n);
+    for (let i = 0; i < g.n; i++) {
+      let best = Infinity;
+      for (let k = i * K; k < i * K + K; k++) {
+        const nd = node[k];
+        if (nd < 0) break;
+        const tt = dist[nd] + min[k];
+        if (tt < best) best = tt;
+      }
+      out[i] = best;
+    }
+    // ordinary roads only, near an origin
+    for (const o of origins) {
+      const dLat = p.directKm / 111;
+      for (let i = 0; i < g.n; i++) {
+        if (Math.abs(g.lat[i] - o.ll[1]) > dLat || g.comp[i] !== o.comp) continue;
+        const d = kmFast(g.lon[i], g.lat[i], o.ll[0], o.ll[1]);
+        if (d <= p.directKm) {
+          const speed = g.lat[i] > 41.4 && g.lon[i] > 139.3 ? p.localHk : p.local;
+          out[i] = Math.min(out[i], (d * p.detour / speed) * 60);
+        }
+      }
+    }
+    return out;
+  }
 }

@@ -126,3 +126,11 @@
     .foot dl { grid-template-columns: 1fr; }
     .foot dt { margin-top: 8px; }
   }
+
+.reach-ctl { display: grid; gap: 8px; margin-bottom: 8px; }
+.reach-ctl .seg { max-width: 100%; flex-wrap: wrap; }
+.reach-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.trips { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 13px; }
+.trips li { display: flex; align-items: center; gap: 8px; }
+.trips .sw { width: 14px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); }
+.trips strong { margin-left: auto; }

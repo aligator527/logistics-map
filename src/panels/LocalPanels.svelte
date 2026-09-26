@@ -6,6 +6,8 @@
   import BarList from '../components/BarList.svelte';
   import MuniProfile from '../components/MuniProfile.svelte';
   import ComparePanel from '../components/ComparePanel.svelte';
+  import Segmented from '../components/Segmented.svelte';
+  import { shortlist } from '../lib/shortlist.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -14,11 +16,29 @@
 </script>
 
 {#if localLevel && lt}
-  {#if app.lmet === 'iso' || app.iso}
+  {#if app.lmet === 'iso' || app.lmet === 'shift' || app.iso}
+    {@const kind = app.iso.startsWith('net:') ? app.iso : 'one'}
     <section class="panel">
       <div class="head-row">
         <p class="eyebrow">{tt('isoTitle')}{lt.originKey ? ` · ${originName(lt.originKey)}` : ''}</p>
         {#if app.iso}<button type="button" class="linkish" onclick={() => (app.iso = '')}>{tt('isoClear')}</button>{/if}
+      </div>
+      <div class="reach-ctl">
+        <Segmented label={tt('originKind')} value={kind}
+                   options={[{ value: 'one', label: tt('originOne') }, { value: 'net:dpl', label: tt('originDpl') },
+                             { value: 'net:short', label: `${tt('originShort')}（${shortlist.items.filter((x) => x.kind !== 'pref').length}）` }]}
+                   onchange={(v) => (app.iso = v === 'one' ? '' : v)} />
+        <Segmented label={tt('isoShow')} value={app.lmet === 'shift' ? 'shift' : 'iso'}
+                   options={[{ value: 'iso', label: tt('layerTime') }, { value: 'shift', label: tt('trip2024') }]}
+                   onchange={(v) => (app.lmet = v)} />
+        <div class="reach-btns">
+          <button type="button" class="btn chip" aria-pressed={s.pickArmed} onclick={() => (s.pickArmed = !s.pickArmed)}>
+            <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 13.5S1 8.6 1 5.4a5 5 0 0 1 10 0C11 8.6 6 13.5 6 13.5z" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="6" cy="5.4" r="1.7" fill="currentColor" /></svg>
+            {tt('pickOnMap')}</button>
+          <button type="button" class="btn chip" aria-pressed={app.igrid} onclick={() => (app.igrid = !app.igrid)}>{tt('gridView')}</button>
+        </div>
+        {#if s.pickArmed}<p class="src" role="status">{s.gridLoading ? tt('gridLoading') : tt('pickOnMapHint')}</p>
+        {:else if app.igrid && s.gridLoading}<p class="src" role="status">{tt('gridLoading')}</p>{/if}
       </div>
       {#if !lt.router}
         <p class="src" role="status">{tt('loadingNetwork')}</p>
@@ -27,23 +47,42 @@
       {:else}
         {@const ip = lt.isoPop ?? []}
         {@const top = Math.max(...ip.map((x) => x.pop), 1)}
-        <p class="sub-eyebrow">{tt('isoPop')}</p>
-        <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)}${L === 'ja' ? '' : ''} ${tt('isoWithin')}`,
+        <p class="sub-eyebrow">{tt('isoPop')}{lt.gridTimes ? '（1km）' : ''}</p>
+        <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)} ${tt('isoWithin')}`,
                                                      value: `${fmtCompact(L, x.pop)}${L === 'ja' ? '人' : ''}`, pct: (x.pop / top) * 100 }))} />
-        {@const st = lt.router.toPlaces([lt.originPlace(lt.originKey)!], sites.map((s) => lt!.router!.poi(`site:${s.name}`) ?? { ll: [0, 0] as [number, number], comp: -9, acc: [] }))}
-        <p class="sub-eyebrow">{tt('isoDpl')}</p>
-        <ul class="lvls">
-          {#each [30, 60, 120] as lim (lim)}<li>{fmtMinutes(L, lim)} <strong class="tnum">{st.filter((x) => x <= lim).length}</strong></li>{/each}
-        </ul>
-        <p class="sub-eyebrow">{tt('isoHubs')}</p>
-        <ul class="plain">
-          {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
-            {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
-            <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
-          {/each}
-        </ul>
+        {#if lt.tripPop}
+          {@const tp = lt.tripPop}
+          {@const tot = tp[0] + tp[1] + tp[2] || 1}
+          <p class="sub-eyebrow">{tt('tripTitle')}</p>
+          <ul class="trips">
+            {#each tp as v, i (i)}
+              <li><span class="sw" style:background={lt.tripColors[i]}></span>{tt(i === 0 ? 'trip1' : i === 1 ? 'trip2' : 'trip3')}
+                <strong class="tnum">{fmtCompact(L, v)}{L === 'ja' ? '人' : ''}</strong> <span class="small">{Math.round((v / tot) * 100)}%</span></li>
+            {/each}
+          </ul>
+        {/if}
+        {#if lt.isNetwork}
+          {#if lt.gaps.length}
+            <p class="sub-eyebrow">{tt('gapsTitle')}</p>
+            <BarList ranked={false} bars={lt.gaps.map((x) => ({ key: x.c, label: muniLabel(x.c), value: isFinite(x.t) ? fmtMinutes(L, x.t) : tt('noRoad'),
+                                                              pct: (x.pop / (lt!.gaps[0]?.pop || 1)) * 100, onclick: () => onpick(x.c) }))} />
+          {/if}
+        {:else}
+          {@const st = lt.router.toPlaces(lt.originPlaces(lt.originKey), sites.map((x) => lt!.router!.poi(`site:${x.name}`) ?? { ll: [0, 0] as [number, number], comp: -9, acc: [] }))}
+          <p class="sub-eyebrow">{tt('isoDpl')}</p>
+          <ul class="lvls">
+            {#each [30, 60, 120] as lim (lim)}<li>{fmtMinutes(L, lim)} <strong class="tnum">{st.filter((x) => x <= lim).length}</strong></li>{/each}
+          </ul>
+          <p class="sub-eyebrow">{tt('isoHubs')}</p>
+          <ul class="plain">
+            {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
+              {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
+              <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
-      <p class="src note">{tt('isoNote')} <a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
+      <p class="src note">{tt('isoNote')} {#if app.lmet === 'shift'}{tt('tripNote')} {/if}<a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
     </section>
   {/if}
   {#if app.muni && lt.indexOf(app.muni) >= 0}

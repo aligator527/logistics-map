@@ -61,6 +61,10 @@ class Store {
   lt = $state.raw<LocalTheme | null>(null);
   nt = $state.raw<NowTheme | null>(null);
 
+  /** reach map: the next map click picks the origin; the 1 km grid is being loaded */
+  pickArmed = $state(false);
+  gridLoading = $state(false);
+
   // ------------------------------------------------------------ which view is on
   readonly nowWarn = $derived.by(() => app.layer === 'now' && !!this.nt && this.nt.isWarn);
   readonly muniLevel = $derived.by(() => app.layer === 'score' && app.slevel === 'muni' && !!this.msc);
@@ -89,7 +93,8 @@ class Store {
   };
   srcName = (k: string) => this.news?.sources.find((s) => s.key === k)?.[app.lang] ?? k;
   /** a reach-map origin: 'muni:<code>' or 'site:<DPL name>' */
-  originName = (k: string) => (k.startsWith('muni:') ? this.muniLabel(k.slice(5)) : k.slice(5));
+  originName = (k: string) => (k.startsWith('muni:') ? this.muniLabel(k.slice(5)) : k.startsWith('pt:') ? this.tt('pointOrigin')
+    : k === 'net:dpl' ? this.tt('originDpl') : k === 'net:short' ? this.tt('originShort') : k.slice(5));
 
   // ------------------------------------------------------------ picking
   onpick = (code: string) => {

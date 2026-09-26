@@ -4,7 +4,9 @@
 import { app } from '../lib/state.svelte';
 import type { Label } from '../lib/data';
 import { SEQ, fmtCompact, fmtMinutes, fmtNum, makeClasses, type Classes } from '../lib/scale';
-import { hubGroups, type HubItem, type Place, type Router } from '../lib/travel';
+import { hubGroups, Reach, type Grid, type HubItem, type Place, type Router } from '../lib/travel';
+import { store } from '../lib/store.svelte';
+import { shortlist } from '../lib/shortlist.svelte';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { CompareRow } from '../components/ComparePanel.svelte';
 import type { MuniData } from './muniscore.svelte';
@@ -22,6 +24,8 @@ export interface LocalMetric extends Label {
   better?: 1 | -1;
   /** travel time in minutes: fixed classes (30 min steps) */
   time?: boolean;
+  /** categories 1..3 (trip type) */
+  category?: boolean;
   hint: Label;
   source: string;
 }
@@ -34,8 +38,11 @@ export class LocalTheme implements ThemeView {
 
   // ------------------------------------------------------------ travel times (road network loads lazily)
   router = $state.raw<Router | null>(null);
+  reach = $state.raw<Reach | null>(null);
   private groups = $state.raw<ReturnType<typeof hubGroups> | null>(null);
-  setTravel(r: Router, hubs: HubItem[]) { this.groups = hubGroups(hubs); this.router = r; }
+  setTravel(r: Router, hubs: HubItem[]) { this.groups = hubGroups(hubs); this.router = r; this.reach = new Reach(r); }
+  /** the 1 km grid, once loaded and prepared (App loads it when the grid view is asked for) */
+  grid = $state.raw<Grid | null>(null);
   private places = (keys: string[]) => keys.map((k) => this.router!.poi(k)).filter((p): p is Place => !!p);
   /** minutes from every municipality to the nearest hub of each group */
   readonly hubTimes = $derived.by(() => {
@@ -45,15 +52,34 @@ export class LocalTheme implements ThemeView {
   });
   /** origin of the reach map: app.iso, else the selected municipality */
   readonly originKey = $derived.by(() => app.iso || (app.muni ? `muni:${app.muni}` : ''));
-  originPlace(key: string): Place | null {
+  /** one place, or several for a network origin (every DPL site / the shortlist) */
+  originPlaces(key: string): Place[] {
     const r = this.router;
-    if (!r || !key) return null;
-    if (key.startsWith('muni:')) { const i = this.indexOf(key.slice(5)); return i >= 0 ? r.muni(i) : null; }
-    return r.poi(key);
+    if (!r || !key) return [];
+    const one = (k: string): Place | null => {
+      if (k.startsWith('muni:')) { const i = this.indexOf(k.slice(5)); return i >= 0 ? r.muni(i) : null; }
+      if (k.startsWith('pt:') && this.reach) { const [lon, lat, comp] = k.slice(3).split(',').map(Number); return this.reach.place(lon, lat, comp); }
+      return r.poi(k);
+    };
+    if (key === 'net:dpl') return store.sites.map((s) => r.poi(`site:${s.name}`)).filter((p): p is Place => !!p);
+    if (key === 'net:short') {
+      return shortlist.items.map((it) => (it.kind === 'muni' ? one(`muni:${it.code}`) : it.kind === 'site' ? one(`site:${store.sites[Number(it.code)]?.name}`) : null))
+        .filter((p): p is Place => !!p);
+    }
+    const p = one(key);
+    return p ? [p] : [];
   }
+  originPlace(key: string): Place | null { return this.originPlaces(key)[0] ?? null; }
+  readonly isNetwork = $derived.by(() => this.originKey.startsWith('net:'));
   readonly isoTimes = $derived.by(() => {
-    const o = this.originPlace(this.originKey);
-    return o ? this.router!.toMunis([o]) : null;
+    const o = this.originPlaces(this.originKey);
+    return o.length ? this.router!.toMunis(o) : null;
+  });
+  /** minutes per 1 km cell (grid view) */
+  readonly gridTimes = $derived.by(() => {
+    if (!app.igrid || !this.grid || !this.reach?.ready) return null;
+    const o = this.originPlaces(this.originKey);
+    return o.length ? this.reach.toGrid(o, this.grid) : null;
   });
   /** hubs (ports / airports / rail stations) nearest the origin by time */
   hubsFrom(key: string, group: 'port' | 'air' | 'rail', n = 2) {
@@ -63,11 +89,42 @@ export class LocalTheme implements ThemeView {
     const times = this.router!.toPlaces([o], this.places(keys));
     return keys.map((k, j) => ({ name: k.slice(k.indexOf(':') + 1), t: times[j] })).filter((x) => isFinite(x.t)).sort((a, b) => a.t - b.t).slice(0, n);
   }
-  /** people within 30 / 60 / 90 / 120 / 180 min of the origin (by municipality population centre) */
+  /** people within 30 / 60 / 90 / 120 / 180 min of the origin (1 km grid when loaded, else by
+   *  municipality population centre) */
   readonly isoPop = $derived.by(() => {
+    const lims = [30, 60, 90, 120, 180];
+    const g = this.gridTimes, grid = this.grid;
+    if (g && grid) return lims.map((lim) => { let s = 0; for (let i = 0; i < grid.n; i++) if (g[i] <= lim) s += grid.pop[i]; return { lim, pop: s }; });
     const t = this.isoTimes, pop = this.d.m.pop;
     if (!t) return null;
-    return [30, 60, 90, 120, 180].map((lim) => ({ lim, pop: t.reduce((s, x, i) => s + (x <= lim ? pop[i] ?? 0 : 0), 0) }));
+    return lims.map((lim) => ({ lim, pop: t.reduce((s, x, i) => s + (x <= lim ? pop[i] ?? 0 : 0), 0) }));
+  });
+  /** 2024 driving-time rules (改善基準告示, from April 2024): a day is at most 13 h on duty and
+   *  9 h at the wheel, with 30 min rest per 4 h of driving. Loading and unloading ≈ 1 h each end.
+   *  1 = there and back in one shift (日帰り往復), 2 = one way in a shift, 3 = two days or a relay. */
+  static tripClass(min: number) {
+    if (!isFinite(min)) return NaN;
+    const rest = (drive: number) => Math.floor(drive / 240) * 30;
+    const round = 2 * min;
+    if (round <= 540 && round + rest(round) + 120 <= 780) return 1;
+    if (min <= 540 && min + rest(min) + 60 <= 780) return 2;
+    return 3;
+  }
+  readonly tripPop = $derived.by(() => {
+    const out = [0, 0, 0];
+    const g = this.gridTimes, grid = this.grid;
+    if (g && grid) { for (let i = 0; i < grid.n; i++) { const c = LocalTheme.tripClass(g[i]); if (c) out[c - 1] += grid.pop[i]; } return out; }
+    const t = this.isoTimes;
+    if (!t) return null;
+    t.forEach((x, i) => { const c = LocalTheme.tripClass(x); if (c) out[c - 1] += this.d.m.pop[i] ?? 0; });
+    return out;
+  });
+  /** network origin: the most populous municipalities left beyond 2 hours */
+  readonly gaps = $derived.by(() => {
+    const t = this.isoTimes;
+    if (!t || !this.isNetwork) return [];
+    return this.d.codes.map((c, i) => ({ c, t: t[i], pop: this.d.m.pop[i] ?? 0 })).filter((x) => x.t > 120)
+      .sort((a, b) => b.pop - a.pop).slice(0, 8);
   });
 
   readonly flows = [];
@@ -106,6 +163,10 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '人口重心から最寄りのIC・スマートICまで', en: 'From the population centre to the nearest IC' }, source: src('ic') },
       { key: 'iso', ja: '到達時間（起点から）', en: 'Travel time from the origin', group: 'access', get: arr(this.isoTimes), fmt: mins, better: -1, time: true,
         hint: { ja: '選んだ市区町村・DPL物件からトラックで何分か（推計）', en: 'Minutes by truck from the chosen municipality or DPL site (estimate)' }, source: net },
+      { key: 'shift', ja: '運行区分（2024年ルール）', en: 'Trip type (2024 driving rules)', group: 'access', get: (i: number) => LocalTheme.tripClass(arr(this.isoTimes)(i)),
+        fmt: (x: number) => this.ctx.tt(x === 1 ? 'trip1' : x === 2 ? 'trip2' : 'trip3'), better: -1, category: true,
+        hint: { ja: '起点から日帰り往復／片道1日／2日以上・中継輸送（拘束13時間・運転9時間・4時間ごとに30分休憩、荷役を含む推計）',
+                en: 'From the origin: there and back in a shift / one way per shift / two days or a relay (13 h on duty, 9 h driving, 30 min rest per 4 h, handling included; estimate)' }, source: net },
       { key: 'tPort', ja: '主要コンテナ港までの時間', en: 'Time to a main container port', group: 'access', get: arr(this.hubTimes?.port), fmt: mins, better: -1, time: true,
         hint: { ja: '年10万TEU以上の港まで（推計）', en: 'To a port handling ≥ 100k TEU a year (estimate)' }, source: net },
       { key: 'tAir', ja: '主要貨物空港までの時間', en: 'Time to a main cargo airport', group: 'access', get: arr(this.hubTimes?.air), fmt: mins, better: -1, time: true,
@@ -159,7 +220,12 @@ export class LocalTheme implements ThemeView {
   };
   readonly muniValue = (code: string) => this.raw[this.indexOf(code)] ?? NaN;
   readonly values = $derived.by(() => new Map(this.d.codes.map((c, i) => [c, this.raw[i]])));
+  /** trip types: dark = easy (there and back in a shift) */
+  readonly tripColors = $derived.by(() => { const r = SEQ[this.ctx.dark ? 'dark' : 'light']; return [r[6], r[3], r[0]]; });
+  readonly categories = $derived.by(() => (this.metric.category
+    ? [1, 2, 3].map((c) => ({ color: this.tripColors[c - 1], label: this.metric.fmt(c) })) : null));
   readonly classes = $derived.by((): Classes => {
+    if (this.metric.category) return { breaks: [2, 3], colors: this.tripColors, diverging: false };
     if (!this.metric.time) return makeClasses(this.raw, !!this.metric.diverging, this.ctx.dark);
     // near = strong: the reachable area stands out
     return { breaks: [30, 60, 90, 120, 180, 240], colors: [...SEQ[this.ctx.dark ? 'dark' : 'light']].reverse(), diverging: false };
@@ -179,7 +245,7 @@ export class LocalTheme implements ThemeView {
       if (m.time) return fmtMinutes(this.L, v);
       return /%$/.test(m.fmt(1)) ? `${fmtNum(this.L, v, 0)}%` : fmtCompact(this.L, v);
     },
-    hint: this.metric.key === 'iso' && !this.isoTimes ? this.ctx.tt('isoPick') : this.metric.hint[this.L],
+    hint: (this.metric.key === 'iso' || this.metric.key === 'shift') && !this.isoTimes ? this.ctx.tt('isoPick') : this.metric.hint[this.L],
     flows: null,
   }));
   readonly source = $derived.by(() => ({ text: this.metric.source || (this.L === 'ja' ? '読み込み中…' : 'loading…'), url: '#sources' }));

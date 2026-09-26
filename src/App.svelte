@@ -22,7 +22,7 @@
   import { LocalTheme } from './themes/local.svelte';
   import { NowTheme, type Diesel } from './themes/now.svelte';
   import { live, WARN, INT_COLOR } from './lib/live.svelte';
-  import { Router, type Network } from './lib/travel';
+  import { Router, loadGrid, type Network } from './lib/travel';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -170,6 +170,47 @@
     }).catch((e) => console.warn('network', e)).finally(() => (netLoading = false));
   });
   $effect(() => { if (msc && lt?.hubTimes) msc.portTimes = lt.hubTimes.port; });
+  // 1 km grid (~360 KB): loaded and prepared when the grid view or a map-picked origin needs it
+  $effect(() => {
+    const l = lt;
+    if (!l?.reach || l.grid || s.gridLoading || !(app.igrid || s.pickArmed || app.iso.startsWith('pt:'))) return;
+    s.gridLoading = true;
+    loadGrid(`${import.meta.env.BASE_URL}geo/grid.bin.gz`).then(async (g) => { await l.reach!.prepare(g); l.grid = g; })
+      .catch((e) => console.warn('grid', e)).finally(() => (s.gridLoading = false));
+  });
+  /** grid cell centres in map units */
+  const gridXY = $derived.by(() => {
+    const g = lt?.grid;
+    if (!g || !geo) return null;
+    const xy = new Float32Array(2 * g.n);
+    for (let i = 0; i < g.n; i++) { const [x, y] = geo.P(projectLL(g.lon[i], g.lat[i], geo.layout).p); xy[2 * i] = x; xy[2 * i + 1] = y; }
+    return xy;
+  });
+  const raster = $derived.by(() => {
+    const l = lt, g = l?.gridTimes, xy = gridXY;
+    if (!localLevel || !l || !g || !xy || !app.igrid || !(app.lmet === 'iso' || app.lmet === 'shift')) return null;
+    const trip = app.lmet === 'shift', cls = l.classes, colors = l.tripColors;
+    const color = (i: number) => {
+      const v = g[i];
+      if (!isFinite(v)) return null;
+      if (trip) return colors[LocalTheme.tripClass(v) - 1];
+      let k = 0;
+      while (k < cls.breaks.length && v >= cls.breaks[k]) k++;
+      return cls.colors[k];
+    };
+    return { xy, color, size: 1000 * geo!.unitsPerMetre, version: [g, app.lmet, app.dark] };
+  });
+  /** a click on the map while picking: the nearest populated 1 km cell becomes the origin */
+  function onpoint([x, y]: [number, number]) {
+    const g = lt?.grid, xy = gridXY;
+    if (!g || !xy) return;
+    let best = -1, bd = Infinity;
+    for (let i = 0; i < g.n; i++) { const d = (xy[2 * i] - x) ** 2 + (xy[2 * i + 1] - y) ** 2; if (d < bd) { bd = d; best = i; } }
+    if (best < 0 || Math.sqrt(bd) > 10_000 * geo!.unitsPerMetre) return; // the sea, or ~10 km from anyone: keep picking
+    s.pickArmed = false;
+    app.iso = `pt:${g.lon[best].toFixed(3)},${g.lat[best].toFixed(3)},${g.comp[best]}`;
+    if (app.lmet !== 'iso' && app.lmet !== 'shift') app.lmet = 'iso';
+  }
   // census tables (~70 KB each) are loaded when the flow theme (or the score, which uses them) is opened
   $effect(() => { if ((app.layer === 'flows' || app.layer === 'score') && fl) fl.load(); });
 
@@ -317,11 +358,17 @@
   const originPois = $derived.by((): Poi[] => {
     if (!geo || !localLevel || !lt?.isoTimes || !muni) return [];
     const k = lt.originKey;
-    let xy: [number, number] | null = null;
-    if (k.startsWith('muni:')) { const c = (muni as unknown as { xy: ([number, number] | null)[] }).xy[muni.codes.indexOf(k.slice(5))]; if (c) xy = geo.P(c); }
-    else { const s = sites.find((x) => x.name === k.slice(5)); if (s) xy = geo.P(s.p); }
-    if (!xy) return [];
-    return [{ key: 'origin', kind: 'origin', xy, r: 7, label: originName(k), major: true, tip: { title: originName(k), sub: tt('isoOrigin') } }];
+    const muniXY = (code: string) => { const c = (muni as unknown as { xy: ([number, number] | null)[] }).xy[muni.codes.indexOf(code)]; return c ? geo!.P(c) : null; };
+    const siteXY = (name: string) => { const x = sites.find((y) => y.name === name); return x ? geo!.P(x.p) : null; };
+    const mk = (key: string, xy: [number, number] | null, label: string, major = true): Poi[] =>
+      xy ? [{ key, kind: 'origin', xy, r: major ? 7 : 5, label, major, tip: { title: label, sub: tt('isoOrigin') } }] : [];
+    if (k.startsWith('muni:')) return mk('origin', muniXY(k.slice(5)), originName(k));
+    if (k.startsWith('site:')) return mk('origin', siteXY(k.slice(5)), originName(k));
+    if (k.startsWith('pt:')) { const [lon, lat] = k.slice(3).split(',').map(Number); return mk('origin', geo.P(projectLL(lon, lat, geo.layout).p), originName(k)); }
+    // every DPL site is already on the map; the shortlist gets small origin marks
+    if (k === 'net:short') return shortlist.items.flatMap((it, i) => it.kind === 'muni' ? mk(`o${i}`, muniXY(it.code), muniLabel(it.code), false)
+      : it.kind === 'site' ? mk(`o${i}`, sites[Number(it.code)] ? geo!.P(sites[Number(it.code)].p) : null, sites[Number(it.code)]?.name ?? '', false) : []);
+    return [];
   });
   const hubPois = $derived.by((): Poi[] => {
     if (!geo || !hubs || !app.showHubs) return [];
@@ -763,6 +810,7 @@
           onnewshover={(k) => (newsFocus = k)}
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
           {relatedFor} {timelineFor} {locateNews}
+          {raster} pickPoint={s.pickArmed && !!lt?.grid} {onpoint}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -796,7 +844,7 @@
                 flows={app.view === 'map' ? view.legend.flows : null}
                 showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare}
                 hubs={app.showHubs && hubs ? [...new Set(hubs.items.map((h) => h.kind))] : []}
-                categories={app.layer === 'now' && nt ? nt.categories : null} bind:highlight />
+                categories={view.categories ?? null} bind:highlight />
         {#if app.layer === 'flows' && view.flows.length}
           <p class="src">{!app.pref && !app.compare ? `${tt(app.near ? 'arcsNationalNear' : 'arcsNational')}${L === 'ja' ? '。' : '. '}` : ''}{tt('flowArcNote')}</p>
         {/if}

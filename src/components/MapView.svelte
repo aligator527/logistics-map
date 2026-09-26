@@ -29,7 +29,7 @@
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
-        onnewspin, relatedFor, timelineFor, locateNews,
+        onnewspin, relatedFor, timelineFor, locateNews, raster = null, pickPoint = false, onpoint,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -82,6 +82,12 @@
     timelineFor?: (link: string) => NewsLite[];
     /** map position (viewBox) of a news item's place */
     locateNews?: (link: string) => [number, number] | null;
+    /** 1 km cells drawn on a canvas: centres in viewBox units (x0, y0, x1, y1 …), a colour per cell
+     *  (null = not drawn) and the cell size in viewBox units */
+    raster?: { xy: Float32Array; color: (i: number) => string | null; size: number; version: unknown } | null;
+    /** the next click on the map picks a point (viewBox units) instead of an area */
+    pickPoint?: boolean;
+    onpoint?: (xy: [number, number]) => void;
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -110,6 +116,7 @@
   const pad2 = (n: number) => String(n).padStart(2, '0');
 
   function fill(code: string): string {
+    if (raster) return 'var(--land)';
     const v = values.get(code);
     if (v === undefined || !isFinite(v)) return 'url(#pat-nodata)';
     if (!classes.diverging && v <= 0) return 'var(--land)';
@@ -271,6 +278,11 @@
   function onclick(e: MouseEvent) {
     if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return; // ended a drag
     const touch = (e as PointerEvent).pointerType === 'touch';
+    if (pickPoint && onpoint && wrap) {
+      const { x, y } = local(e);
+      onpoint(transform.invert([(x - fit.ox) / fit.s, (y - fit.oy) / fit.s]) as [number, number]);
+      return;
+    }
     const tg = target(e);
     if (!tg) { pinned = null; if (!compare) onclear(); return; }
     if (tg.site !== null) { onsite(tg.site); pinned = touch ? siteTip(tg.site) : null; return; }
@@ -317,6 +329,36 @@
     return hover.code ? shapeOf(hover.code) : null;
   });
   const selMuniShape = $derived(selMuni ? muniByCode.get(selMuni) ?? null : null);
+
+  // ------------------------------------------------------------ 1 km raster (reach maps)
+  let rasterCanvas: HTMLCanvasElement | undefined = $state();
+  let rasterFrame = 0;
+  $effect(() => {
+    const r = raster, cv = rasterCanvas, tr = transform, f = fit, W = boxW, H = boxH;
+    if (!r || !cv) return;
+    void r.version;
+    cancelAnimationFrame(rasterFrame);
+    rasterFrame = requestAnimationFrame(() => {
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      const ctx = cv.getContext('2d');
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const k = tr.k * f.s, size = Math.max(1.1, r.size * k) + 0.4, half = size / 2;
+      const ox = f.ox + tr.x * f.s, oy = f.oy + tr.y * f.s;
+      let last = '';
+      for (let i = 0, n = r.xy.length / 2; i < n; i++) {
+        const x = ox + r.xy[2 * i] * k, y = oy + r.xy[2 * i + 1] * k;
+        if (x < -size || y < -size || x > W + size || y > H + size) continue;
+        const c = r.color(i);
+        if (!c) continue;
+        if (c !== last) { ctx.fillStyle = c; last = c; }
+        ctx.fillRect(x - half, y - half, size, size);
+      }
+    });
+    return () => cancelAnimationFrame(rasterFrame);
+  });
 
   // ------------------------------------------------------------ news callouts
   /** viewBox -> pixels in the map box (the SVG is letterboxed when its height is capped) */
@@ -452,7 +494,7 @@
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 </script>
 
-<div class="map" bind:this={wrap}>
+<div class="map" class:picking={pickPoint} bind:this={wrap}>
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg
     bind:this={svg}
@@ -533,6 +575,10 @@
       {/if}
     </g>
   </svg>
+
+  {#if raster}
+    <canvas class="raster" bind:this={rasterCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+  {/if}
 
   <!-- Point layers live outside the zoom group so they keep their size on screen.
        Keyboard access to DPL sites is through the site list in the side panel. -->
@@ -788,6 +834,8 @@
   .joint text { font-weight: 500; font-size: 10.5px; fill: var(--ink-2); }
 
   .callouts { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; }
+  .raster { position: absolute; left: 0; top: 0; pointer-events: none; opacity: 0.92; }
+  .map.picking svg { cursor: crosshair; }
   .leaders { position: absolute; inset: 0; overflow: visible; }
   .leader, .leader-halo { fill: none; stroke-linejoin: round; stroke-linecap: round; }
   .leader-halo { stroke: var(--surface); stroke-width: 4; stroke-opacity: 0.85; }
