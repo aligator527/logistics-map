@@ -80,6 +80,8 @@ class AppState {
   nlog = $state(true);
   /** news markers on the map */
   showNews = $state(false);
+  /** news callout opened with its related news (group key) */
+  newsOpen = $state<string | null>(null);
   /** municipal comparison: two 5-digit codes ('' = empty slot) */
   ma = $state('');
   mb = $state('');
@@ -155,6 +157,7 @@ class AppState {
       if (!this.nlog) p.set('na', '1');
     }
     if (this.showNews) p.set('nw', '1');
+    if (this.showNews && this.newsOpen) p.set('nx', this.newsOpen);
     if (this.layer === 'local') {
       if (this.lmet !== 'pop2050') p.set('lk', this.lmet);
       if (this.muni) p.set('mu', this.muni);
@@ -191,6 +194,7 @@ class AppState {
     this.nmet = p.get('nm') === 'diesel' ? 'diesel' : 'warn';
     this.nlog = p.get('na') !== '1';
     this.showNews = p.get('nw') === '1';
+    this.newsOpen = /^(m\d{5}|p\d{2}|jp)$/.test(p.get('nx') ?? '') ? p.get('nx') : null;
     const lk = p.get('lk') ?? 'pop2050';
     this.lmet = lists.localMetrics.length && !lists.localMetrics.includes(lk) ? 'pop2050' : lk;
     const [ma, mb] = (p.get('mc') ?? '').split('-');

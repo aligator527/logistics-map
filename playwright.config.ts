@@ -18,6 +18,8 @@ export default defineConfig({
     locale: 'ja-JP',
     timezoneId: 'Asia/Tokyo',
     trace: 'retain-on-failure',
+    // blocked routes must apply to every request (a service worker would fetch on its own)
+    serviceWorkers: live ? 'allow' : 'block',
     screenshot: 'only-on-failure',
   },
   projects: [

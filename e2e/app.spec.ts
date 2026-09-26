@@ -128,3 +128,11 @@ test('shortlist comparison table and rank stability', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(table).toHaveCount(0);
 });
+
+test('shared shortlist link offers the list', async ({ page }) => {
+  await open(page, 't=local&sl=m23206~p13');
+  const banner = page.locator('.shared');
+  await expect(banner).toContainText('共有された候補リスト（2）');
+  await banner.getByRole('button', { name: '追加する' }).click();
+  await expect(page.locator('aside ul.short li')).toHaveCount(2);
+});

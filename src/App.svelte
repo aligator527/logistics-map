@@ -640,6 +640,13 @@
   ].map((f) => ({ key: f.key, label: f[L], disabled: !(f.key in ssw!.s1) })) : []);
 
   let mapView: MapView | undefined = $state();
+  /** offline: the service worker serves the data seen last */
+  let online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
+  onMount(() => {
+    const on = () => (online = true), off = () => (online = false);
+    addEventListener('online', on); addEventListener('offline', off);
+    return () => { removeEventListener('online', on); removeEventListener('offline', off); };
+  });
 </script>
 
 <a class="skip" href="#main">{tt('skip')}</a>
@@ -661,6 +668,9 @@
   </div>
 </header>
 
+{#if !online}
+  <p class="offline" role="status">{tt('offline')}</p>
+{/if}
 {#if error}
   <div class="state" role="alert">
     <p>{tt('loadError')}</p>
@@ -857,7 +867,7 @@
           {onnews} onnewsclose={(k) => (newsPins = newsPins.filter((x) => x !== k))} {onnewsplace}
           onnewshover={(k) => (newsFocus = k)}
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
-          {relatedFor} {timelineFor} {locateNews}
+          {relatedFor} {timelineFor} {locateNews} bind:newsOpen={app.newsOpen}
           {raster} pickPoint={s.pickArmed && !!lt?.grid} {onpoint} {zoning}
         />
         {#if nationalNews && newsCards}

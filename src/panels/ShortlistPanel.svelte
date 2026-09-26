@@ -3,7 +3,7 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { live, WARN } from '../lib/live.svelte';
-  import { shortlist, type ShortItem } from '../lib/shortlist.svelte';
+  import { shortlist, shared, shareLink, resolveShared, type ShortItem } from '../lib/shortlist.svelte';
   import { downloadCsv } from '../lib/csv';
   import { fmtNum, fmtCompact } from '../lib/scale';
   import { WARN_COLORS } from '../themes/now.svelte';
@@ -51,6 +51,42 @@
     });
     downloadCsv(`shortlist-${new Date().toISOString().slice(0, 10)}.csv`, [head, ...rows]);
   }
+
+  // ------------------------------------------------------------ notifications (while the page is open)
+  const canNotify = typeof Notification !== 'undefined';
+  let notify = $state(canNotify && Notification.permission === 'granted' && (() => { try { return localStorage.getItem('notify') === '1'; } catch { return false; } })());
+  async function toggleNotify() {
+    if (!canNotify) return;
+    if (notify) { notify = false; try { localStorage.setItem('notify', '0'); } catch { /* ignore */ } return; }
+    const p = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+    notify = p === 'granted';
+    try { localStorage.setItem('notify', notify ? '1' : '0'); } catch { /* ignore */ }
+  }
+  /** last level seen per place: notify when it rises to a warning (L3) or above */
+  const seen = new Map<string, number>();
+  $effect(() => {
+    if (!live.warnTime) return;
+    for (const it of shortlist.items) {
+      const a = shortAlert(it), key = it.kind + it.code, before = seen.get(key);
+      seen.set(key, a.level);
+      if (!notify || before === undefined || a.level <= before || a.level < 3) continue;
+      const title = `${shortLabel(it)}：${nt?.levelName(a.level) ?? `L${a.level}`}`;
+      const opts = { body: a.text, icon: './icon-192.png', tag: `lm-${key}` };
+      const plain = () => { new Notification(title, opts); };
+      // through the service worker when there is one (required on Android), else directly
+      navigator.serviceWorker?.getRegistration().then((r) => { if (r) r.showNotification(title, opts); else plain(); }).catch(plain);
+    }
+  });
+
+  // ------------------------------------------------------------ sharing
+  let copied = $state(false);
+  async function copyLink() {
+    const url = shareLink(shortlist.items, (i) => sites[i]?.name);
+    try { await navigator.clipboard.writeText(url); copied = true; setTimeout(() => (copied = false), 2500); }
+    catch { prompt(tt('shareCopyPrompt'), url); }
+  }
+  const incoming = $derived(sites.length ? resolveShared(shared.tokens, (n) => sites.findIndex((x) => x.name === n)) : []);
+  function takeShared(replace: boolean) { shortlist.addAll(incoming, replace); shared.tokens = []; }
 
   // ------------------------------------------------------------ side-by-side comparison (printable)
   let compareOpen = $state(false);
@@ -111,11 +147,23 @@
     {#if shortlist.items.length}
       <span class="acts">
         <button type="button" class="linkish" onclick={() => (compareOpen = true)}>{tt('compareShort')}</button>
+        <button type="button" class="linkish" onclick={copyLink}>{copied ? tt('shareCopied') : tt('shareLink')}</button>
+        {#if canNotify}<button type="button" class="linkish" aria-pressed={notify} onclick={toggleNotify} title={tt('notifyHint')}>{notify ? tt('notifyOn') : tt('notifyOff')}</button>{/if}
         <button type="button" class="linkish" onclick={exportShortlist}>{tt('exportCsv')}</button>
         <button type="button" class="linkish" onclick={() => shortlist.clear()}>{tt('clearAll')}</button>
       </span>
     {/if}
   </div>
+  {#if incoming.length}
+    <div class="shared" role="status">
+      <p>{tt('sharedList')}（{incoming.length}）: {incoming.slice(0, 4).map((x) => shortLabel(x)).join('、')}{incoming.length > 4 ? '…' : ''}</p>
+      <p class="acts">
+        <button type="button" class="btn" onclick={() => takeShared(false)}>{tt('sharedAdd')}</button>
+        {#if shortlist.items.length}<button type="button" class="btn" onclick={() => takeShared(true)}>{tt('sharedReplace')}</button>{/if}
+        <button type="button" class="btn ghost" onclick={() => (shared.tokens = [])}>{tt('close')}</button>
+      </p>
+    </div>
+  {/if}
   {#if shortlist.items.length}
     {@const alerts = shortlist.items.map((it) => shortAlert(it)).filter((a) => a.level >= 2)}
     {#if live.warnTime}
@@ -144,3 +192,9 @@
   <Dossier title={tt('compareShortTitle')} subtitle={tt('compareShortSub')} sections={[]} table={compareTable}
            sources={compareSources} lang={L} onclose={() => (compareOpen = false)} />
 {/if}
+
+<style>
+  .shared { border: 1px solid var(--line-strong); border-left: 3px solid var(--blue); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
+  .shared p { margin: 0; }
+  .shared .acts { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+</style>

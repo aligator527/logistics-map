@@ -1,0 +1,17 @@
+{
+  "name": "総合物流マップ · Japan Logistics Map",
+  "short_name": "物流マップ",
+  "description": "物流の立地スクリーニング：営業倉庫、貨物流動、労働力、市区町村の指標、到達圏、災害リスク、気象警報。",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f4f2",
+  "theme_color": "#0168b0",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

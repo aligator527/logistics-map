@@ -31,7 +31,7 @@
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
-        onnewspin, relatedFor, timelineFor, locateNews, raster = null, pickPoint = false, onpoint, zoning = null,
+        onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -80,6 +80,8 @@
     onnewshover?: (key: string | null) => void;
     /** pin a callout (opening its related news pins it) */
     onnewspin?: (key: string) => void;
+    /** the callout with its related news open (bindable: kept in the URL) */
+    newsOpen?: string | null;
     relatedFor?: (link: string) => Related[];
     timelineFor?: (link: string) => NewsLite[];
     /** map position (viewBox) of a news item's place */
@@ -406,34 +408,33 @@
   let ks = $state<Record<string, number>>({});
   const current = (g: NewsGroup) => g.items[Math.min(ks[g.key] ?? 0, g.items.length - 1)];
   /** a card with its related news open: shown alone and larger */
-  let expanded = $state<string | null>(null);
   let hoverCard = $state<string | null>(null);
   let relHover = $state<string | null>(null);
   /** measured height of the open card's content (the first layout uses an estimate) */
   let openH = $state(0);
-  $effect(() => { if (expanded && !news.some((g) => g.key === expanded)) expanded = null; });
+  $effect(() => { if (newsOpen && news.length && !news.some((g) => g.key === newsOpen)) newsOpen = null; });
   function toggleExpand(key: string) {
-    expanded = expanded === key ? null : key;
+    newsOpen = newsOpen === key ? null : key;
     openH = 0;
-    if (expanded) { onnewspin?.(key); hoverCard = null; }
+    if (newsOpen) { onnewspin?.(key); hoverCard = null; }
   }
   $effect(() => {
-    if (!expanded) return;
-    const onkey = (e: KeyboardEvent) => { if (e.key === 'Escape') { expanded = null; openH = 0; } };
+    if (!newsOpen) return;
+    const onkey = (e: KeyboardEvent) => { if (e.key === 'Escape') { newsOpen = null; openH = 0; } };
     addEventListener('keydown', onkey);
     return () => removeEventListener('keydown', onkey);
   });
   /** related news of the open card, or of the card under the pointer (their places are ringed) */
   const relatedNow = $derived.by(() => {
-    const key = expanded ?? hoverCard;
+    const key = newsOpen ?? hoverCard;
     const g = key ? news.find((x) => x.key === key) : null;
     return g && relatedFor ? relatedFor(current(g).link) : [];
   });
   const relatedPlaces = $derived(new Set(relatedNow.map((r) => placeKey(r.it))));
   const callouts = $derived.by(() => {
     if (!newsCards || !mask || !news.length) return [];
-    if (expanded) {
-      const g = news.find((x) => x.key === expanded);
+    if (newsOpen) {
+      const g = news.find((x) => x.key === newsOpen);
       if (!g) return [];
       const tl = timelineFor ? timelineFor(current(g).link).length : 0;
       const est = CARD.h + (g.items.length > 1 ? 26 : 0) + 44 + (tl ? 80 : 0) + Math.max(1, relatedNow.length) * 46;
@@ -472,7 +473,7 @@
   });
   /** open card: thin lines from the card to the places of its related news */
   const relLines = $derived.by(() => {
-    const c = expanded ? callouts[0] : null;
+    const c = newsOpen ? callouts[0] : null;
     if (!c || !locateNews) return [];
     const out: { link: string; d: string; x: number; y: number }[] = [];
     for (const r of relatedNow) {
@@ -702,14 +703,14 @@
         {/if}
       </svg>
       {#each callouts as c (c.key)}
-        <div class="callout" class:open={expanded === c.key} style:left="{c.x}px" style:top="{c.y}px" style:width="{c.w}px" style:height="{c.h}px">
+        <div class="callout" class:open={newsOpen === c.key} style:left="{c.x}px" style:top="{c.y}px" style:width="{c.w}px" style:height="{c.h}px">
           <NewsCallout group={c.g} {lang} active={newsFocus === c.key || c.pin} bind:k={() => ks[c.key] ?? 0, (v) => (ks[c.key] = v)}
                        dim={!!hoverCard && hoverCard !== c.key}
-                       expanded={expanded === c.key} ontoggle={relatedFor ? () => toggleExpand(c.key) : undefined}
+                       expanded={newsOpen === c.key} ontoggle={relatedFor ? () => toggleExpand(c.key) : undefined}
                        {relatedFor} {timelineFor} bind:relHover maxH={boxH - 16}
-                       bind:natural={() => (expanded === c.key ? openH : 0), (v) => { if (expanded === c.key && v) openH = v; }}
+                       bind:natural={() => (newsOpen === c.key ? openH : 0), (v) => { if (newsOpen === c.key && v) openH = v; }}
                        onplace={onnewsplace} onhover={(on) => { hoverCard = on ? c.key : null; onnewshover?.(on ? c.key : null); }}
-                       onclose={() => { if (expanded === c.key) { expanded = null; return; } if (c.pin) onnewsclose?.(c.key); else dismissed = [...dismissed, c.key]; }} />
+                       onclose={() => { if (newsOpen === c.key) { newsOpen = null; return; } if (c.pin) onnewsclose?.(c.key); else dismissed = [...dismissed, c.key]; }} />
         </div>
       {/each}
     </div>
