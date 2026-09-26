@@ -154,3 +154,17 @@ test('keyboard: prefectures, then municipalities inside one', async ({ page }, i
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/mu=11\d{3}/);
 });
+
+test('site memo from a point on the map (GSI offline)', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'map click');
+  const errors = await open(page, 'r=11');
+  await page.getByRole('button', { name: '地点を調べる' }).click();
+  const box = (await page.locator('div.map').first().boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  const panel = page.locator('.panel.point');
+  await expect(panel).toContainText('標高');
+  await panel.getByRole('button', { name: '地点カルテを作成' }).click();
+  await expect(page.locator('.dossier-root')).toContainText('地点カルテ');
+  await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});

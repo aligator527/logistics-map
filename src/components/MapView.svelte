@@ -184,6 +184,10 @@
     else go(zoomIdentity, 400);
   });
 
+  /** centre the map on a point (viewBox units) at zoom k */
+  export function zoomToPoint(xy: [number, number], k = 12) {
+    go(zoomIdentity.translate(geo.width / 2 - k * xy[0], geo.height / 2 - k * xy[1]).scale(k));
+  }
   export function zoomBy(f: number) { select(svg).transition().duration(reduce() ? 0 : 250).call(zb.scaleBy as never, f); }
   export function reset() { onclear(); go(zoomIdentity, 350); }
 

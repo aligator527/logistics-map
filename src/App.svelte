@@ -183,7 +183,7 @@
   let netLoading = $state(false);
   $effect(() => {
     if (!lt || !hubs || lt.router || netLoading) return;
-    if (!(app.layer === 'local' || muniLevel || app.site >= 0 || shortlist.items.length)) return;
+    if (!(app.layer === 'local' || muniLevel || app.site >= 0 || shortlist.items.length || s.inspect)) return;
     netLoading = true;
     Promise.all([fetch(`${import.meta.env.BASE_URL}geo/network.json`).then((r) => (r.ok ? r.json() : null)), import('./lib/travel')]).then(([n, { Router }]: [Network | null, typeof import('./lib/travel')]) => {
       if (n && lt && hubs) lt.setTravel(new Router(n), hubs.items);
@@ -434,11 +434,10 @@
     return out;
   });
   // ------------------------------------------------------------ other developers' facilities (from the news)
-  interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; ll?: [number, number]; addr?: string; events: { stage: string; date: string; link: string; t: string }[] }
-  let facilities = $state.raw<Facility[] | null>(null);
+  const facilities = $derived(s.facilities);
   $effect(() => {
-    if (!app.showFac || facilities) return;
-    fetch(`${import.meta.env.BASE_URL}data/facilities.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (facilities = d?.items ?? [])).catch(() => (facilities = []));
+    if (!(app.showFac || s.inspect) || s.facilities) return;
+    fetch(`${import.meta.env.BASE_URL}data/facilities.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (s.facilities = d?.items ?? [])).catch(() => (s.facilities = []));
   });
   const facPois = $derived.by((): Poi[] => {
     if (!geo || !muni || !facilities || !app.showFac) return [];
@@ -557,6 +556,14 @@
     return [...prefs, ...ms, ...ss];
   });
   function onplace(p: Place) {
+    if (p.kind === 'addr') {
+      // an address: inspect the point and zoom to it
+      const [lon, lat] = p.key.split(',').map(Number);
+      s.inspectLoading = true; s.inspect = null;
+      pointInfo(lon, lat).then((i) => (s.inspect = i)).finally(() => (s.inspectLoading = false));
+      if (geo?.layout) mapView?.zoomToPoint(geo.P(projectLL(lon, lat, geo.layout).p), 14);
+      return;
+    }
     if (p.kind === 'pref') { app.stopCompare(); app.muni = ''; app.site = -1; app.pref = Number(p.key); return; }
     if (p.kind === 'site') { app.stopCompare(); const i = Number(p.key); app.site = i; app.pref = sites[i].pref; return; }
     // municipality: its prefecture; in the municipal score also the municipality itself

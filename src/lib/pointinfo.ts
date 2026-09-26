@@ -34,10 +34,12 @@ const CLASSES: Cls[] = [
   { ja: '河川敷・浜', en: 'River bed / beach', risk: 'high', codes: ['10802', '10803', '10807', '10808'] },
   { ja: '水部', en: 'Water', risk: 'high', codes: ['10805', '10806', '10901', '10903', '5010201'] },
   { ja: '旧水部', en: 'Former water body', risk: 'high', codes: ['10904', '5010301'] },
-  { ja: '切土地', en: 'Cut ground', risk: 'low', codes: ['11008', '4010101'], artificial: true },
+  // artificial ground: only classes confirmed at known places get a name (埋立地 at お台場・此花区,
+  // 盛土地 in 葛飾区; 人工平坦地 in 多摩ニュータウン and a flattened industrial site in 北本市). The other
+  // codes share colours across classes in GSI's style, so they are not named here.
   { ja: '盛土地・埋立地', en: 'Fill / reclaimed ground', risk: 'high', codes: ['11004', '11005', '11006', '11007', '11014', '4010201'], artificial: true },
-  { ja: '干拓地', en: 'Reclaimed polder', risk: 'high', codes: ['11001', '11003', '11009', '11011', '4010301'], artificial: true },
-  { ja: '人工改変地', en: 'Other artificial ground', risk: 'mid', codes: ['11002', '11010'], artificial: true },
+  { ja: '人工平坦地', en: 'Artificially levelled ground', risk: 'mid', codes: ['11001'], artificial: true },
+  { ja: '人工改変地（詳細は地理院地図で）', en: 'Other artificial ground (see GSI Maps)', risk: 'mid', codes: ['11002', '11003', '11008', '11009', '11010', '11011', '4010101', '4010301'], artificial: true },
 ];
 const BY_CODE = new Map(CLASSES.flatMap((c) => c.codes.map((k) => [k, c] as const)));
 const classOf = (code: string | null): Landform | null => {
@@ -103,4 +105,78 @@ export function pointInfo(lon: number, lat: number): Promise<PointInfo> {
 export function groundRisk(i: PointInfo): Risk | null {
   const r = [i.natural?.risk, i.artificial?.risk].filter(Boolean) as Risk[];
   return r.includes('high') ? 'high' : r.includes('mid') ? 'mid' : r.length ? 'low' : null;
+}
+
+// ------------------------------------------------------------ address, hazards at the point
+/** GSI reverse geocoder: municipality code and the 大字・町丁目 name */
+export async function addressAt(lon: number, lat: number): Promise<{ muni: string; town: string } | null> {
+  try {
+    const j = await (await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`)).json();
+    const m = String(j?.results?.muniCd ?? '').padStart(5, '0');
+    return /^\d{5}$/.test(m) && m !== '00000' ? { muni: m, town: j.results.lv01Nm === '－' ? '' : j.results.lv01Nm ?? '' } : null;
+  } catch { return null; }
+}
+/** GSI address search: up to n matches */
+export async function searchAddress(q: string, n = 6): Promise<{ title: string; lon: number; lat: number }[]> {
+  try {
+    const r = await (await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(q)}`)).json();
+    return (r ?? []).slice(0, n).map((f: { properties: { title: string }; geometry: { coordinates: [number, number] } }) =>
+      ({ title: f.properties.title, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }));
+  } catch { return []; }
+}
+
+// ハザードマップポータル open-data tiles, read at the point (5×5 pixels at zoom 16, deepest class)
+const DEPTH: [number, number, number, number][] = [[247, 245, 169, 1], [255, 216, 192, 2], [255, 183, 183, 3], [255, 145, 145, 4], [242, 133, 201, 5], [220, 122, 220, 6]];
+export const DEPTH_LABEL: Record<number, { ja: string; en: string }> = {
+  1: { ja: '0.5m未満', en: '< 0.5 m' }, 2: { ja: '0.5〜3m', en: '0.5–3 m' }, 3: { ja: '3〜5m', en: '3–5 m' },
+  4: { ja: '5〜10m', en: '5–10 m' }, 5: { ja: '10〜20m', en: '10–20 m' }, 6: { ja: '20m以上', en: '≥ 20 m' },
+};
+const pixelCache = new Map<string, Promise<ImageData | null>>();
+function tilePixels(layer: string, x: number, y: number): Promise<ImageData | null> {
+  const key = `${layer}/${x}/${y}`;
+  if (!pixelCache.has(key)) {
+    pixelCache.set(key, new Promise((res) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return res(null);
+        ctx.drawImage(img, 0, 0);
+        res(ctx.getImageData(0, 0, 256, 256));
+      };
+      img.onerror = () => res(null); // 404: no zone on this tile
+      img.src = `https://disaportaldata.gsi.go.jp/raster/${layer}/16/${x}/${y}.png`;
+    }));
+  }
+  return pixelCache.get(key)!;
+}
+async function sample(layer: string, lon: number, lat: number, depth: boolean): Promise<number> {
+  const n = 2 ** 16, fx = ((lon + 180) / 360) * n;
+  const s = Math.sin((lat * Math.PI) / 180), fy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
+  const tx = Math.floor(fx), ty = Math.floor(fy), px = Math.floor((fx - tx) * 256), py = Math.floor((fy - ty) * 256);
+  const img = await tilePixels(layer, tx, ty);
+  if (!img) return 0;
+  let best = 0;
+  for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const x = px + dx, y = py + dy;
+    if (x < 0 || y < 0 || x > 255 || y > 255) continue;
+    const o = (y * 256 + x) * 4;
+    if (img.data[o + 3] < 128) continue;
+    if (!depth) return 1;
+    let k = 0, bd = Infinity;
+    for (const [R, G, B, r] of DEPTH) { const d = (R - img.data[o]) ** 2 + (G - img.data[o + 1]) ** 2 + (B - img.data[o + 2]) ** 2; if (d < bd) { bd = d; k = r; } }
+    best = Math.max(best, k);
+  }
+  return best;
+}
+export interface Hazards { flood: number; surge: number; tsunami: boolean; sabo: boolean }
+/** flood / storm-surge depth class (0 = outside), tsunami and landslide-warning zones at the point */
+export async function hazardsAt(lon: number, lat: number): Promise<Hazards> {
+  const [flood, surge, tsunami, s1, s2, s3] = await Promise.all([
+    sample('01_flood_l2_shinsuishin_data', lon, lat, true), sample('03_hightide_l2_shinsuishin_data', lon, lat, true),
+    sample('04_tsunami_newlegend_data', lon, lat, false),
+    sample('05_dosekiryukeikaikuiki', lon, lat, false), sample('05_kyukeishakeikaikuiki', lon, lat, false), sample('05_jisuberikeikaikuiki', lon, lat, false),
+  ]);
+  return { flood, surge, tsunami: tsunami > 0, sabo: s1 + s2 + s3 > 0 };
 }

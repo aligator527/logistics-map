@@ -1,9 +1,11 @@
 <script lang="ts" module>
-  export interface Place { key: string; name: string; alt: string; parent: string; kind: 'pref' | 'muni' | 'site' }
+  /** addr: an address found by the GSI geocoder, key 'lon,lat' */
+  export interface Place { key: string; name: string; alt: string; parent: string; kind: 'pref' | 'muni' | 'site' | 'addr' }
 </script>
 
 <script lang="ts">
   import { t, type Lang } from '../lib/i18n';
+  import { searchAddress } from '../lib/pointinfo';
 
   let { places, lang, onpick }: { places: Place[]; lang: Lang; onpick: (p: Place) => void } = $props();
 
@@ -14,9 +16,22 @@
   /** full-width → half-width, lower case, no spaces, no macrons ("Chūō" finds "chuo") */
   const norm = (s: string) => s.normalize('NFKC').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, '');
   const index = $derived(places.map((p) => ({ p, a: norm(p.name), b: norm(p.alt) })));
-  const kindLabel = (k: Place['kind']) => t(lang, k === 'pref' ? 'byPref' : k === 'muni' ? 'byMuni' : 'dplIn');
+  const kindLabel = (k: Place['kind']) => t(lang, k === 'pref' ? 'byPref' : k === 'muni' ? 'byMuni' : k === 'addr' ? 'addrResults' : 'dplIn');
 
-  const results = $derived.by(() => {
+  // addresses (GSI geocoder) when the query looks like one or little else matches
+  let addrs = $state<Place[]>([]);
+  let timer = 0;
+  $effect(() => {
+    const s = q.trim();
+    clearTimeout(timer);
+    if (s.length < 3 || (local.length >= 5 && !/[0-9０-９]|丁目|番地|町|村|字/.test(s))) { addrs = []; return; }
+    timer = window.setTimeout(async () => {
+      const r = await searchAddress(s, 5);
+      if (q.trim() === s) addrs = r.map((a) => ({ key: `${a.lon},${a.lat}`, name: a.title, alt: '', parent: '', kind: 'addr' as const }));
+    }, 400);
+  });
+
+  const local = $derived.by(() => {
     const s = norm(q.trim());
     if (!s) return [];
     const starts: Place[] = [], contains: Place[] = [];
@@ -27,6 +42,7 @@
     }
     return [...starts, ...contains].slice(0, 12);
   });
+  const results = $derived([...local.slice(0, addrs.length ? 8 : 12), ...addrs]);
 
   function pick(p: Place) {
     onpick(p);

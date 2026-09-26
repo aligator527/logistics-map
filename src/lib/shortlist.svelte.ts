@@ -1,13 +1,14 @@
 // Candidate shortlist (prefectures, municipalities, DPL sites), kept in this browser only.
 
-export type ShortKind = 'pref' | 'muni' | 'site';
+/** point = a place picked on the map, code 'lon,lat' */
+export type ShortKind = 'pref' | 'muni' | 'site' | 'point';
 export interface ShortItem { kind: ShortKind; code: string }
 
 const KEY = 'shortlist';
 function read(): ShortItem[] {
   try {
     const v = JSON.parse(localStorage.getItem(KEY) ?? '[]');
-    return Array.isArray(v) ? v.filter((x) => x && ['pref', 'muni', 'site'].includes(x.kind) && typeof x.code === 'string') : [];
+    return Array.isArray(v) ? v.filter((x) => x && ['pref', 'muni', 'site', 'point'].includes(x.kind) && typeof x.code === 'string') : [];
   } catch {
     return [];
   }
@@ -42,7 +43,7 @@ function readShared(): SharedToken[] {
     const v = new URLSearchParams(location.hash.replace(/^#/, '')).get('sl');
     if (!v) return [];
     return v.split('~').slice(0, 30).map((t): SharedToken | null =>
-      /^m\d{5}$/.test(t) ? { kind: 'muni', code: t.slice(1) } : /^p\d{1,2}$/.test(t) ? { kind: 'pref', code: String(Number(t.slice(1))) }
+      /^q-?\d+\.\d+,-?\d+\.\d+$/.test(t) ? { kind: 'point', code: t.slice(1) } : /^m\d{5}$/.test(t) ? { kind: 'muni', code: t.slice(1) } : /^p\d{1,2}$/.test(t) ? { kind: 'pref', code: String(Number(t.slice(1))) }
         : t.startsWith('s:') && t.length < 80 ? { kind: 'site', name: t.slice(2) } : null).filter((x): x is SharedToken => !!x);
   } catch { return []; }
 }
@@ -50,7 +51,7 @@ function readShared(): SharedToken[] {
 export const shared = $state<{ tokens: SharedToken[] }>({ tokens: readShared() });
 
 export function shareLink(items: ShortItem[], siteName: (i: number) => string | undefined) {
-  const tokens = items.map((it) => (it.kind === 'muni' ? `m${it.code}` : it.kind === 'pref' ? `p${it.code}` : `s:${siteName(Number(it.code)) ?? ''}`)).filter((x) => x !== 's:');
+  const tokens = items.map((it) => (it.kind === 'muni' ? `m${it.code}` : it.kind === 'pref' ? `p${it.code}` : it.kind === 'point' ? `q${it.code}` : `s:${siteName(Number(it.code)) ?? ''}`)).filter((x) => x !== 's:');
   const p = new URLSearchParams(location.hash.replace(/^#/, ''));
   p.set('sl', tokens.join('~'));
   return `${location.origin}${location.pathname}#${p.toString()}`;

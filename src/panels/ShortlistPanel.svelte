@@ -8,23 +8,34 @@
   import { fmtNum, fmtCompact } from '../lib/scale';
   import { WARN_COLORS } from '../lib/warncolors';
   import type { DossierTable } from '../components/Dossier.svelte';
-  import { pointInfo, groundRisk, type PointInfo } from '../lib/pointinfo';
+  import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
   const lt = $derived(s.lt), msc = $derived(s.msc), sc = $derived(s.sc), nt = $derived(s.nt), muni = $derived(s.muni), hubs = $derived(s.hubs), sites = $derived(s.sites);
   const { pname, muniLabel } = s;
   // ------------------------------------------------------------ shortlist & CSV
+  /** a point picked on the map: its municipality once known (reverse geocoded), else its coordinates */
+  let pointMuni = $state.raw(new Map<string, string>());
+  $effect(() => {
+    for (const it of shortlist.items) {
+      if (it.kind !== 'point' || pointMuni.has(it.code)) continue;
+      const [lon, lat] = it.code.split(',').map(Number);
+      addressAt(lon, lat).then((a) => (pointMuni = new Map(pointMuni).set(it.code, a?.muni ?? ''))).catch(() => {});
+    }
+  });
   function shortLabel(it: ShortItem) {
+    if (it.kind === 'point') { const m = pointMuni.get(it.code); const [lon, lat] = it.code.split(','); return `${tt('pointKind')} ${m ? muniLabel(m) : ''} (${Number(lat).toFixed(3)}, ${Number(lon).toFixed(3)})`; }
     if (it.kind === 'pref') return pname(Number(it.code));
     if (it.kind === 'muni') return muniLabel(it.code);
     return sites[Number(it.code)]?.name ?? it.code;
   }
-  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : 'dplIn');
+  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : it.kind === 'point' ? 'pointKind' : 'dplIn');
   /** live warning level at a shortlisted place (prefecture: its highest municipal level) */
   function shortAlert(it: ShortItem): { level: number; text: string } {
     if (!muni || !live.warnTime) return { level: 0, text: '' };
-    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : muni.codes.filter((c) => Number(c.slice(0, 2)) === Number(it.code));
+    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : it.kind === 'point' ? [pointMuni.get(it.code) ?? '']
+      : muni.codes.filter((c) => Number(c.slice(0, 2)) === Number(it.code));
     let level = 0, best = '';
     for (const c of codes) { const l = live.level(c, true); if (l > level) { level = l; best = c; } }
     const text = best ? (live.warnings.get(best) ?? []).filter((k) => (WARN[k]?.level ?? 0) >= 2).map((k) => WARN[k]?.[L] ?? k).join('・') : '';
@@ -34,6 +45,12 @@
     app.stopCompare();
     if (it.kind === 'pref') { app.muni = ''; app.site = -1; app.pref = Number(it.code); }
     else if (it.kind === 'muni') { app.site = -1; app.pref = Number(it.code.slice(0, 2)); app.muni = it.code; }
+    else if (it.kind === 'point') {
+      const [lon, lat] = it.code.split(',').map(Number);
+      s.inspectLoading = true;
+      pointInfo(lon, lat).then((x) => (s.inspect = x)).finally(() => (s.inspectLoading = false));
+      const m = pointMuni.get(it.code); if (m) { app.site = -1; app.pref = Number(m.slice(0, 2)); }
+    }
     else { const i = Number(it.code); if (sites[i]) { app.site = i; app.pref = sites[i].pref; } }
   }
   function exportShortlist() {
@@ -42,7 +59,7 @@
       ...(msc ? [tt('layerScore') + '（' + tt('byMuni') + '）'] : []), ...lm.map((m) => m[L]), tt('pop30'), tt('nearestIc'), tt('nearestAir')];
     const rows = shortlist.items.map((it) => {
       const pc = it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0;
-      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : '';
+      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : it.kind === 'point' ? pointMuni.get(it.code) ?? '' : '';
       const mi = mc && lt ? lt.indexOf(mc) : -1;
       const ct = it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined;
       const hb = it.kind === 'site' ? hubs?.sites[sites[Number(it.code)]?.name ?? '']?.air : undefined;
@@ -96,6 +113,11 @@
   $effect(() => {
     if (!compareOpen) return;
     for (const it of shortlist.items) {
+      if (it.kind === 'point') {
+        const k = `pt:${it.code}`, [lon, lat] = it.code.split(',').map(Number);
+        if (!siteInfos.has(k)) pointInfo(lon, lat).then((i) => (siteInfos = new Map(siteInfos).set(k, i))).catch(() => {});
+        continue;
+      }
       const st = it.kind === 'site' ? sites[Number(it.code)] : null;
       if (!st || siteInfos.has(st.name)) continue;
       pointInfo(st.lon, st.lat).then((i) => (siteInfos = new Map(siteInfos).set(st.name, i))).catch(() => {});
@@ -113,8 +135,8 @@
   const compareTable = $derived.by((): DossierTable | null => {
     if (!compareOpen || !lt) return null;
     const items = shortlist.items;
-    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : '');
-    const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0);
+    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : it.kind === 'point' ? pointMuni.get(it.code) ?? '' : '');
+    const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'site' ? sites[Number(it.code)]?.pref ?? 0 : Number((muniOf(it) || '0').slice(0, 2)));
     /** a local metric for an item: its municipality, or the median over a prefecture's municipalities */
     const metricOf = (it: ShortItem, get: (i: number) => number) => {
       if (it.kind === 'pref') return median(lt!.codes.map((c, i) => (Number(c.slice(0, 2)) === Number(it.code) ? get(i) : NaN)));
@@ -135,7 +157,7 @@
       const ms = lt.metrics.filter((m) => m.group === g && m.key !== 'iso' && m.key !== 'shift');
       groups.push({ title: tt(`lg_${g}` as Key), rows: ms.map((m) => row(m[L], items.map((it) => metricOf(it, m.get)), m.fmt, m.better)) });
     }
-    if (items.some((it) => it.kind === 'site')) {
+    if (items.some((it) => it.kind === 'site' || it.kind === 'point')) {
       const ct = (it: ShortItem) => (it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined);
       const hubsOf = (it: ShortItem) => (it.kind === 'site' ? Object.fromEntries(s.hubRows(sites[Number(it.code)]?.name ?? '')) : {});
       const hk = [...new Set(items.flatMap((it) => Object.keys(hubsOf(it))))];
@@ -144,12 +166,12 @@
         row(tt('nearestIc'), items.map((it) => ct(it)?.ic ?? NaN), (v) => `${fmtNum(L, v, 1)} km`, -1),
         ...hk.map((k) => ({ label: k, cells: items.map((it) => hubsOf(it)[k] ?? '–') })),
         ...(() => {
-          const info = (it: ShortItem) => (it.kind === 'site' ? siteInfos.get(sites[Number(it.code)]?.name ?? '') : undefined);
+          const info = (it: ShortItem) => (it.kind === 'site' ? siteInfos.get(sites[Number(it.code)]?.name ?? '') : it.kind === 'point' ? siteInfos.get(`pt:${it.code}`) : undefined);
           const rank = { low: 1, mid: 2, high: 3 } as const;
           return [
             row(tt('elevation'), items.map((it) => info(it)?.elev ?? NaN), (v) => `${fmtNum(L, v, 1)} m`, 1),
-            { label: tt('landformNatural'), cells: items.map((it) => (it.kind === 'site' ? info(it)?.natural?.[L] ?? '…' : '–')) },
-            { label: tt('landformArtificial'), cells: items.map((it) => (it.kind === 'site' ? (info(it) ? info(it)!.artificial?.[L] ?? '–' : '…') : '–')) },
+            { label: tt('landformNatural'), cells: items.map((it) => (it.kind === 'site' || it.kind === 'point' ? info(it)?.natural?.[L] ?? '…' : '–')) },
+            { label: tt('landformArtificial'), cells: items.map((it) => (it.kind === 'site' || it.kind === 'point' ? (info(it) ? info(it)!.artificial?.[L] ?? '–' : '…') : '–')) },
             { ...row(tt('groundRisk'), items.map((it) => { const i = info(it); const r = i ? groundRisk(i) : null; return r ? rank[r] : NaN; }),
                 (v) => tt(v === 1 ? 'risk_low' : v === 2 ? 'risk_mid' : 'risk_high'), -1) },
           ];

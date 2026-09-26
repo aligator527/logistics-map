@@ -34,6 +34,8 @@ export interface Hubs {
   sites: Record<string, { air: { n: string; km: number } | null; port?: { n: string; km: number } }>;
   sources: Record<string, { ja: string; en: string; url: string }>;
 }
+/** other developers' facilities named in the news (public/data/facilities.json) */
+export interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; ll?: [number, number]; addr?: string; events: { stage: string; date: string; link: string; t: string }[] }
 export interface Risk {
   sites: Record<string, { quake: number | null; flood: number; surge: number }>;
   depthLegend: { rank: number; ja: string; en: string }[];
@@ -52,6 +54,7 @@ class Store {
   muni = $state.raw<MuniData | null>(null);
   risk = $state.raw<Risk | null>(null);
   diesel = $state.raw<Diesel | null>(null);
+  facilities = $state.raw<Facility[] | null>(null);
 
   wh = $state.raw<WarehouseTheme | null>(null);
   fl = $state.raw<FlowsTheme | null>(null);
