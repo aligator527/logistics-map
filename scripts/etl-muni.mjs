@@ -9,7 +9,7 @@
 //   land/toshikeikaku_R7.xls   都市計画現況調査 R7 「(ニ)都市別一覧」 (用途地域 ha by municipality)
 //   census2020/000032214569.xlsx  国勢調査2020 従業地・通学地集計 第12表 (occupation × residence)
 //   census2020/000040067885.xlsx  経済センサス‐活動調査2021 第9-1B表 (employees by industry)
-//   geo/N06-24/UTF-8/N06-24_Joint.geojson  expressway interchanges
+//   geo/N06-25/N06-25_GML/UTF-8/N06-25_Joint.geojson  expressway interchanges
 // Every municipality gets a population-weighted centre from the 1 km grid; distances and radius
 // sums are measured from there (a big ward's "interior point" can sit in the mountains).
 import { execFileSync } from 'node:child_process';
@@ -50,13 +50,16 @@ const areaKm2 = new Map(feature(topo, topo.objects.muni).features.map((f) => {
 const mesh = JSON.parse(readFileSync(resolve(RAW, 'mesh/pop2020.json'), 'utf8')).map(([lat, lon, pop, ...codes]) => ({ lat, lon, pop, codes }));
 // Meshes whose code is not a 2025 municipality — 福島県 浜通り pooled as 「07999」 in this dataset,
 // 浜松市's pre-2024 wards — are placed by point-in-polygon on the current boundaries.
-let relocated = 0;
+// Mesh centres on the sea (coast of 浜通り) fall outside every polygon: nearest municipality.
+const innerIdx = new GridIndex([...inner.values()].filter((p) => idxOf.has(p.code)), 0.1);
+let relocated = 0, nearestFallback = 0;
 for (const m of mesh) {
   if (m.codes.length && m.codes.every((c) => idxOf.has(c))) continue;
-  const c = muniAt(project([m.lon, m.lat]));
+  let c = muniAt(project([m.lon, m.lat]));
+  if (!c) { c = innerIdx.nearest(m, 50).p?.code ?? null; if (c) nearestFallback++; }
   if (c) { m.codes = [c]; relocated++; }
 }
-console.log(`grid: ${relocated} meshes placed by point-in-polygon`);
+console.log(`grid: ${relocated} meshes relocated (${nearestFallback} to the nearest municipality)`);
 const meshIdx = new GridIndex(mesh, 0.1);
 const pop = Array(N).fill(0), sx = Array(N).fill(0), sy = Array(N).fill(0);
 for (const m of mesh) {
@@ -72,7 +75,7 @@ const popWithin = (q, r) => meshIdx.within(q, r).reduce((s, p) => s + p.pop, 0);
 console.log(`grid: ${mesh.length} meshes; municipalities without grid population: ${pop.filter((v) => !v).length}`);
 
 // ------------------------------------------------------------------ 2) interchanges
-const joints = JSON.parse(readFileSync(resolve(RAW, '../geo/N06-24/UTF-8/N06-24_Joint.geojson'), 'utf8')).features
+const joints = JSON.parse(readFileSync(resolve(RAW, '../geo/N06-25/N06-25_GML/UTF-8/N06-25_Joint.geojson'), 'utf8')).features
   .filter((f) => f.properties.N06_014 === 9999 && ['1', '2'].includes(f.properties.N06_019))
   .map((f) => ({ lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], n: f.properties.N06_018, smart: f.properties.N06_019 === '2' }));
 const icIdx = new GridIndex(joints, 0.1);
@@ -311,7 +314,7 @@ const out = {
     workers: { ja: '令和2年国勢調査 従業地・通学地集計 第12表（常住地、輸送・機械運転従事者＋運搬・清掃・包装等従事者）', en: '2020 Census, occupation by residence (transport/machine operators + carrying/cleaning/packaging)', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200521' },
     logi: { ja: '令和3年経済センサス‐活動調査 第9-1B表（道路貨物運送業＋倉庫業の従業者）', en: '2021 Economic Census, employees in road freight + warehousing', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553' },
     jshis: { ja: 'J-SHIS 確率論的地震動予測地図（防災科研、2024年版）', en: 'J-SHIS (NIED, 2024)', url: 'https://www.j-shis.bosai.go.jp/' },
-    ic: { ja: '国土数値情報 高速道路時系列データ（N06, 2024年度）', en: 'MLIT N06 expressways (FY2024)', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2024.html' },
+    ic: { ja: '国土数値情報 高速道路時系列データ（N06, 2025年度）', en: 'MLIT N06 expressways (FY2025)', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html' },
   },
 };
 writeFileSync(resolve(root, 'public/data/muni.json'), JSON.stringify(out));

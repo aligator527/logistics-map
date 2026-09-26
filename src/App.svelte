@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { loadCensusIndex, loadDpl, loadJobs, loadRoads, loadSsw, loadWarehouse, METRICS, fmtDate, fmtValue, fmtYm, fmtYoy,
            isBuilt, valueOf, yoyOf, type CensusIndex, type Dpl, type Jobs, type Roads, type Ssw, type Warehouse } from './lib/data';
-  import { loadGeo, roadPaths, type GeoData, type Shape } from './lib/geo';
+  import { loadGeo, loadMunis, roadPaths, type GeoData, type Shape } from './lib/geo';
   import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme } from './lib/state.svelte';
   import { prefName, t, type Key } from './lib/i18n';
   import { fmtCompact, fmtNum, fmtPct, fmtSqm } from './lib/scale';
@@ -107,6 +107,8 @@
       sc = new ScoreTheme(ww, fl, j, s, ps, extra, ctx);
       w = ww; geo = g; dpl = d; census = ci; ssw = s; jobs = j;
       app.fromHash(location.hash, lists!);
+      // municipalities (boundaries, names, municipal score) follow the first paint
+      loadMunis(g).then((full) => (geo = full)).catch((e) => console.warn('munis', e));
       // roads are secondary: the map works without them
       loadRoads().then((r) => (roads = r)).catch((e) => console.warn('roads', e));
       fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then((d) => {

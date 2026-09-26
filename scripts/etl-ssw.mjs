@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
+import { writeJson } from './lib/io.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = resolve(root, 'data/raw/ssw');
@@ -151,5 +152,5 @@ out.source = {
   },
 };
 out.generated = new Date().toISOString().slice(0, 10);
-writeFileSync(OUT, JSON.stringify(out));
+writeJson(OUT, out);
 console.log(`wrote ${OUT}: ${out.periods.length} periods, fields ${Object.keys(out.s1).join(',')}`);

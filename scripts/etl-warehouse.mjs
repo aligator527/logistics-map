@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
+import { writeJson } from './lib/io.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = resolve(root, 'data/raw');
@@ -221,6 +222,6 @@ const out = {
   notes,      // national totals replaced by the prefecture sum
 };
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify(out));
+writeJson(OUT, out);
 const last = quarters.at(-1);
 console.log(`wrote ${OUT}: ${quarters.length} quarters (${quarters[0].id} … ${last.id}, published ${last.published})`);

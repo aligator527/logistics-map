@@ -10,10 +10,11 @@
 //   2023年度〜   : 日本標準職業分類 — 61自動車運転従事者 / 70運搬従事者
 // The classification changed in between (break in the series). Prefectures are by 受理地 (the
 // Hello Work office taking the listing): Tokyo is inflated by head-office listings.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
+import { writeJson } from './lib/io.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = resolve(root, 'data/raw/jobs');
@@ -35,7 +36,9 @@ const OCC = {
 
 async function load(id) {
   const file = resolve(RAW, `${id}.xlsx`);
-  if (!existsSync(file)) {
+  // MHLW replaces these files under the same statInfId every year: refresh a cache older than 30 days
+  const stale = existsSync(file) && Date.now() - statSync(file).mtimeMs > 30 * 864e5;
+  if (!existsSync(file) || stale) {
     const r = await fetch(URL_(id), { headers: { 'User-Agent': 'Mozilla/5.0 (logistics-map ETL)' } });
     if (!r.ok) throw new Error(`GET ${id}: ${r.status}`);
     writeFileSync(file, Buffer.from(await r.arrayBuffer()));
@@ -127,7 +130,7 @@ out.shortfall2024 = {
   ],
 };
 out.generated = new Date().toISOString().slice(0, 10);
-writeFileSync(OUT, JSON.stringify(out));
+writeJson(OUT, out);
 const i = years.length - 1;
 console.log(`wrote ${OUT}: ${years[0]}–${years[i]},`, 'driver JP', out.japan.driver.slice(-4).join('/'),
   '東京', out.ratio.driver[i][12], '埼玉', out.ratio.driver[i][10], '愛知', out.ratio.driver[i][22], '奈良', out.ratio.driver[i][28], '高知', out.ratio.driver[i][38]);

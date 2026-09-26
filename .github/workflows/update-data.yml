@@ -1,0 +1,65 @@
+# Weekly data refresh for the sources that can be fetched unattended:
+#   倉庫統計季報 (MLIT, quarterly), 特定技能 (ISA, half-yearly), 有効求人倍率 (MHLW, yearly).
+# The data tests must pass before anything is committed, so a changed spreadsheet layout stops
+# here instead of reaching the site. The job summary lists the manual sources that have news
+# (scripts/check-sources.mjs). Commits made with GITHUB_TOKEN do not trigger other workflows, so
+# the deploy is called directly.
+name: Update data
+
+on:
+  schedule:
+    - cron: '0 18 * * 1'   # Tuesday 03:00 JST
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # raw downloads are cached between runs; the ETLs only fetch what is new
+      - uses: actions/cache@v5
+        with:
+          path: data/raw
+          key: raw-${{ github.run_id }}
+          restore-keys: raw-
+      - run: npm ci
+      - run: npm run etl:warehouse
+      - run: npm run etl:ssw
+      - run: npm run etl:jobs
+      - run: npm test
+      - id: commit
+        run: |
+          if git diff --quiet -- public/data; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add public/data
+            git commit -m "Update data (warehouse / SSW / job ratios)"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Report manual sources
+        if: always()
+        continue-on-error: true
+        run: node scripts/check-sources.mjs
+
+  deploy:
+    needs: refresh
+    if: needs.refresh.outputs.changed == 'true'
+    uses: ./.github/workflows/deploy-pages.yml

@@ -49,38 +49,90 @@ type Meta = {
   source: string;
 };
 
-export async function loadGeo(): Promise<GeoData> {
-  const base = import.meta.env.BASE_URL;
-  const [r, re, ra] = await Promise.all([fetch(`${base}geo/japan.topo.json`), fetch(`${base}geo/muni-en.json`), fetch(`${base}geo/anchors.json`)]);
-  if (!r.ok) throw new Error(`geo: ${r.status}`);
-  const topo = (await r.json()) as Topology & { meta: Meta };
-  const en: Record<string, string> = re.ok ? await re.json() : {};
-  const anchorsRaw: [number, number][] = ra.ok ? await ra.json() : [];
-  const { bounds, insets } = topo.meta;
+type Topo = Topology & { meta: Meta };
+
+/** projection of the pre-projected TopoJSON coordinates onto the SVG canvas */
+function projector(meta: Meta) {
+  const { bounds } = meta;
   const pad = 8;
   const k = (WIDTH - 2 * pad) / (bounds.x1 - bounds.x0);
   const height = Math.ceil((bounds.y1 - bounds.y0) * k + 2 * pad);
   const proj = geoIdentity().reflectY(true).scale(k).translate([pad - bounds.x0 * k, pad + bounds.y1 * k]);
-  const path = geoPath(proj);
-  const P = (p: [number, number]) => proj(p) as [number, number];
+  return { k, height, path: geoPath(proj), P: (p: [number, number]) => proj(p) as [number, number] };
+}
 
-  const shapes = (obj: GeometryCollection, enName: (code: string) => string): Shape[] =>
-    (feature(topo, obj) as unknown as GeoJSON.FeatureCollection).features.map((f) => {
-      const code = String(f.id);
-      return {
-        code,
-        name: (f.properties as { n: string }).n,
-        nameEn: enName(code),
-        d: path(f) ?? '',
-        bbox: path.bounds(f) as Shape['bbox'],
-        centroid: path.centroid(f) as [number, number],
-      };
-    });
+function shapes(topo: Topo, obj: GeometryCollection, path: ReturnType<typeof geoPath>, enName: (code: string) => string): Shape[] {
+  return (feature(topo, obj) as unknown as GeoJSON.FeatureCollection).features.map((f) => {
+    const code = String(f.id);
+    return {
+      code,
+      name: (f.properties as { n: string }).n,
+      nameEn: enName(code),
+      d: path(f) ?? '',
+      bbox: path.bounds(f) as Shape['bbox'],
+      centroid: path.centroid(f) as [number, number],
+    };
+  });
+}
 
+async function json<T>(name: string, fallback?: T): Promise<T> {
+  const r = await fetch(`${import.meta.env.BASE_URL}geo/${name}`);
+  if (!r.ok) { if (fallback !== undefined) return fallback; throw new Error(`geo ${name}: ${r.status}`); }
+  return r.json() as Promise<T>;
+}
+
+/**
+ * First paint: prefectures only (geo/pref.topo.json, ~120 KB gzip). Municipalities come later
+ * from loadMunis(); until then `munis` is empty and prefFrame is the prefecture bounding box.
+ */
+export async function loadGeo(): Promise<GeoData> {
+  const [topo, anchorsRaw] = await Promise.all([json<Topo>('pref.topo.json'), json<[number, number][]>('anchors.json', [])]);
+  const { insets } = topo.meta;
+  const { k, height, path, P } = projector(topo.meta);
   const prefObj = topo.objects.pref as GeometryCollection;
+  const prefs = shapes(topo, prefObj, path, () => '').sort((a, b) => Number(a.code) - Number(b.code));
+
+  const frame = (key: string) => {
+    const b = insets[key];
+    const m = 12_000;
+    const [x0, y0] = P([b.x0 - m, b.y1 + m]);
+    const [x1, y1] = P([b.x1 + m, b.y0 - m]);
+    return { key, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  };
+
+  return {
+    width: WIDTH,
+    height,
+    prefs,
+    munis: [],
+    prefBorders: path(mesh(topo, prefObj as never, (a, b) => a !== b)) ?? '',
+    insets: Object.keys(insets).map(frame),
+    prefFrame: new Map(prefs.map((p) => [p.code, p.bbox])),
+    muniBorders: () => '',
+    P,
+    unitsPerMetre: k,
+    insetScale: { okinawa: topo.meta.layout?.okinawa.k ?? 1, ogasawara: topo.meta.layout?.ogasawara.k ?? 1 },
+    adjacent: (() => {
+      const set = new Set<string>();
+      const gs = prefObj.geometries;
+      neighbors(gs as never).forEach((ns, i) => ns.forEach((j) => {
+        const a = Number(gs[i].id), b = Number(gs[j].id);
+        set.add(`${Math.min(a, b)}-${Math.max(a, b)}`);
+      }));
+      return set;
+    })(),
+    // fall back to polygon centroids if anchors.json is missing
+    anchors: anchorsRaw.length === 47 ? anchorsRaw.map(P) : prefs.map((p) => p.centroid),
+    source: topo.meta.source,
+  };
+}
+
+/** Adds the municipalities (geo/japan.topo.json, ~310 KB gzip) to a loaded GeoData. */
+export async function loadMunis(geo: GeoData): Promise<GeoData> {
+  const [topo, en] = await Promise.all([json<Topo>('japan.topo.json'), json<Record<string, string>>('muni-en.json', {})]);
+  const { path } = projector(topo.meta);
   const muniObj = topo.objects.muni as GeometryCollection;
-  const prefs = shapes(prefObj, () => '').sort((a, b) => Number(a.code) - Number(b.code));
-  const munis = shapes(muniObj, (c) => en[c] ?? '');
+  const munis = shapes(topo, muniObj, path, (c) => en[c] ?? '');
 
   // Tokyo's Izu and Ogasawara islands lie hundreds of km south of the city (and Ogasawara sits
   // in an inset), so framing all of Tokyo would make the wards tiny.
@@ -94,14 +146,6 @@ export async function loadGeo(): Promise<GeoData> {
                            [Math.max(b[1][0], s.bbox[1][0]), Math.max(b[1][1], s.bbox[1][1])]] : s.bbox);
   }
 
-  const frame = (key: string) => {
-    const b = insets[key];
-    const m = 12_000;
-    const [x0, y0] = P([b.x0 - m, b.y1 + m]);
-    const [x1, y1] = P([b.x1 + m, b.y0 - m]);
-    return { key, x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  };
-
   const cache = new Map<string, string>();
   const muniBorders = (pref: string) => {
     let d = cache.get(pref);
@@ -112,32 +156,7 @@ export async function loadGeo(): Promise<GeoData> {
     }
     return d;
   };
-
-  return {
-    width: WIDTH,
-    height,
-    prefs,
-    munis,
-    prefBorders: path(mesh(topo, prefObj as never, (a, b) => a !== b)) ?? '',
-    insets: Object.keys(insets).map(frame),
-    prefFrame,
-    muniBorders,
-    P,
-    unitsPerMetre: k,
-    insetScale: { okinawa: topo.meta.layout?.okinawa.k ?? 1, ogasawara: topo.meta.layout?.ogasawara.k ?? 1 },
-    // fall back to polygon centroids if anchors.json is missing
-    adjacent: (() => {
-      const set = new Set<string>();
-      const gs = prefObj.geometries;
-      neighbors(gs as never).forEach((ns, i) => ns.forEach((j) => {
-        const a = Number(gs[i].id), b = Number(gs[j].id);
-        set.add(`${Math.min(a, b)}-${Math.max(a, b)}`);
-      }));
-      return set;
-    })(),
-    anchors: anchorsRaw.length === 47 ? anchorsRaw.map(P) : prefs.map((p) => p.centroid),
-    source: topo.meta.source,
-  };
+  return { ...geo, munis, prefFrame, muniBorders };
 }
 
 /** Expressways as three SVG paths (by road class), interchanges as SVG points. */

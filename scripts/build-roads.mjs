@@ -2,7 +2,7 @@
 //
 //   node scripts/build-roads.mjs [path/to/N06-YY/UTF-8]
 //
-// Download N06-YY_GML.zip from https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2024.html
+// Download N06-YY_GML.zip from https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html
 // and unzip it into data/geo/. Only sections / joints still in service (設置期間 終了 = 9999).
 //   sections: N06_007 路線名, N06_008 道路種別 (1 高速自動車国道, 2 一般国道の自動車専用道路,
 //             3 高規格幹線以外の自動車専用道路 etc., 4 本州四国連絡道路, 5 都市高速道路)
@@ -15,7 +15,7 @@ import { project, r10 } from './lib/project.mjs';
 import { prefAt, prefs } from './lib/planar.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const dir = resolve(root, process.argv[2] ?? 'data/geo/N06-24/UTF-8');
+const dir = resolve(root, process.argv[2] ?? 'data/geo/N06-25/N06-25_GML/UTF-8');
 const tag = dir.match(/N06-(\d+)/)?.[1] ?? '24';
 const tmp = resolve(root, 'data/geo/tmp');
 const out = resolve(root, 'public/geo/roads.json');
@@ -73,7 +73,7 @@ writeFileSync(out, JSON.stringify({
   source: {
     ja: `国土数値情報（高速道路時系列データ N06, 20${tag}年度）`,
     en: `MLIT National Land Numerical Information, expressways (N06, FY20${tag})`,
-    url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2024.html',
+    url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html',
   },
   roads,
   joints: uniq,

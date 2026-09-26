@@ -147,5 +147,11 @@ const layout = {
 topo.meta = { proj: PROJ, bounds: bbox(gj.features), insets, layout, source: 'MLIT 国土数値情報 N03 (2025-01-01)' };
 delete topo.crs;
 writeFileSync(out, JSON.stringify(topo));
+// prefecture-only topology for the first paint (the municipalities are loaded afterwards)
+const prefOut = resolve(root, 'public/geo/pref.topo.json');
+mapshaper(['-i', out, '-o', prefOut, 'format=topojson', 'target=pref', 'force']);
+const prefTopo = JSON.parse(readFileSync(prefOut, 'utf8'));
+prefTopo.meta = topo.meta;
+writeFileSync(prefOut, JSON.stringify(prefTopo));
 console.log(`wrote ${out}: ${(statSync(out).size / 1024).toFixed(0)} KB,`,
   topo.objects.muni.geometries.length, 'municipalities,', topo.objects.pref.geometries.length, 'prefectures');

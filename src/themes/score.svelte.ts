@@ -73,7 +73,7 @@ export class ScoreTheme implements ThemeView {
         raw: range(0).map((i) => ((this.stats.ic[i] + this.stats.sic[i]) / this.stats.area[i]) * 1000),
         fmt: (v) => `${fmtNum(L, v, 1)}${L === 'ja' ? ' IC/千㎢' : ' ICs per 1,000 km²'}`,
         hint: { ja: '面積あたりのIC・スマートIC数', en: 'Interchanges (incl. smart ICs) per area' },
-        source: { ja: '国土数値情報 N06（2024年度）', en: 'MLIT N06 expressways (FY2024)' } },
+        source: { ja: '国土数値情報 N06（2025年度）', en: 'MLIT N06 expressways (FY2025)' } },
       { key: 'drivers', ja: 'ドライバーの採用しやすさ', en: 'Driver hiring', group: 'labour', dir: -1,
         raw: range(1).map((c) => this.jobs.ratio.driver[jp][c - 1]), fmt: (v) => `${fmtNum(L, v, 2)}${L === 'ja' ? '倍' : '×'}`,
         hint: { ja: '自動車運転の有効求人倍率。低いほど採用しやすい', en: 'Job openings ratio for drivers: lower = easier to hire' }, source: jbSrc },

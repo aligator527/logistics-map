@@ -22,7 +22,9 @@
     "etl:risk": "node scripts/etl-risk.mjs",
     "news": "node scripts/fetch-news.mjs",
     "etl:mesh": "node scripts/etl-mesh.mjs",
-    "etl:muni": "node scripts/etl-muni.mjs"
+    "etl:muni": "node scripts/etl-muni.mjs",
+    "test": "node --test 'tests/*.test.mjs'",
+    "check-sources": "node scripts/check-sources.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
