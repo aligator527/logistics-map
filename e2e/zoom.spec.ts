@@ -192,3 +192,22 @@ test('split view: a second map, zoomed together', async ({ page }, info) => {
   }), { timeout: 5000 }).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('your own data from a CSV becomes a demand', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  const errors = await open(page, 't=local&mu=23206&tb=calc');
+  await page.locator('details.ud summary').click();
+  // coordinates only (the address search is offline in tests)
+  await page.locator('details.ud input[type=file]').setInputFiles({ name: 'stores.csv', mimeType: 'text/csv',
+    buffer: Buffer.from('店舗名,緯度,経度,出荷量\n名古屋,35.1709,136.8815,120\n豊田,35.0826,137.1560,80\n岐阜,35.4233,136.7606,60\n海の上,34.0,138.0,5\n') });
+  const ud = page.locator('details.ud');
+  await expect(ud).toContainText('地点 3');
+  await expect(ud).toContainText('位置不明 1');
+  await expect(ud).toContainText('名古屋市');
+  await page.locator('details.cost summary').click();
+  await expect(page.locator('details.cost label', { hasText: '配送先の需要' }).locator('select')).toHaveValue('user');
+  await expect(page.locator('details.cost')).toContainText('年間配送費');
+  // a metric of its own in the indicator list
+  await expect(page.locator('section.controls select option', { hasText: '自社データ（需要）' }).first()).toBeAttached();
+  expect(errors).toEqual([]);
+});

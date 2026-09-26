@@ -24,7 +24,7 @@
   import { MUNI_PRESETS } from './themes/muni-presets';
   import { tripClass } from './lib/trips';
   import type { Diesel } from './themes/now.svelte';
-  import { live, WARN, INT_COLOR } from './lib/live.svelte';
+  import { live, WARN, INT_COLOR, jmaCourse, jmaLocation } from './lib/live.svelte';
   import type { Network } from './lib/travel';
   import { TILE_LAYERS } from './lib/tiles';
   import { pointInfo, groundRisk, type PointInfo } from './lib/pointinfo';
@@ -34,6 +34,7 @@
   import Tour from './components/Tour.svelte';
   import { measure, area as areaOf } from './lib/measure.svelte';
   import { pins } from './lib/pins.svelte';
+  import { userData } from './lib/userdata.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, shared, plotRing, type ShortItem } from './lib/shortlist.svelte';
@@ -348,9 +349,9 @@
     for (const t of live.typhoons) {
       if (!t.pos || projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside') continue;
       out.push({ key: `t${t.id}`, kind: 'typhoon', xy: toMap(t.pos[1], t.pos[0]), r: 9, label: `${tt('typhoon')}${Number(t.number.slice(2)) || ''}${L === 'ja' ? '号' : ''}`, major: true,
-                 tip: { title: `${tt('typhoon')} ${Number(t.number.slice(2)) || ''}${L === 'ja' ? '号' : ''} ${t.name[L === 'ja' ? 'jp' : 'en']}`, sub: `${t.location} · ${t.time.slice(5, 16).replace('T', ' ')}`,
+                 tip: { title: `${tt('typhoon')} ${Number(t.number.slice(2)) || ''}${L === 'ja' ? '号' : ''} ${t.name[L === 'ja' ? 'jp' : 'en']}`, sub: `${jmaLocation(t.location, L)} · ${t.time.slice(5, 16).replace('T', ' ')}`,
                         big: `${t.pressure} hPa`, rows: [[L === 'ja' ? '最大風速' : 'Max wind', `${t.wind} m/s`], [L === 'ja' ? '最大瞬間風速' : 'Gust', `${t.gust} m/s`],
-                                                      [L === 'ja' ? '進路' : 'Course', `${t.course} ${t.speed} km/h`]], source: tt('jmaSource') } });
+                                                      [L === 'ja' ? '進路' : 'Course', `${jmaCourse(t.course, L)} ${t.speed} km/h`]], source: tt('jmaSource') } });
     }
     return out;
   });
@@ -561,7 +562,19 @@
   }
   function onnewsplace(code: string) { onpick(code); }
   $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
-  const pois = $derived.by(() => [...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois, ...inspectPois]);
+  const pois = $derived.by(() => [...userPois, ...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois, ...inspectPois]);
+  /** the user's own places (自社データ): size by volume */
+  const userPois = $derived.by((): Poi[] => {
+    const d = userData.data;
+    if (!geo || !d || app.layer !== 'local') return [];
+    const max = Math.max(...d.points.map((p) => p.w), 1);
+    return d.points.slice(0, 3000).flatMap((p, k): Poi[] => {
+      const { p: q, space } = projectLL(p.lon, p.lat, geo!.layout);
+      if (space === 'outside') return [];
+      return [{ key: `u${k}`, kind: 'user', xy: geo!.P(q), r: 2.5 + 5 * Math.sqrt(p.w / max), label: p.name, major: false,
+        tip: { title: p.name, sub: p.addr ?? muniLabel(p.muni), rows: [[tt('udVolume'), fmtNum(L, p.w, 0)]], note: tt('dmUser') } }];
+    });
+  });
   const inspectPois = $derived.by((): Poi[] => {
     const i = s.inspect;
     if (!i || !geo?.layout) return [];

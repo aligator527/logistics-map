@@ -215,6 +215,12 @@ test('demand, wages and land trend', () => {
   // distance to the nearest primary emergency / key logistics road (km, straight line from the population centre)
   assert.ok(m.m.dEmerg[ix('13101')] < 1 && m.m.dLogi[ix('13101')] < 5, '千代田区 is on both networks');
   assert.equal(m.m.dEmerg.filter((v) => v === null).length, 0, 'every municipality has a distance');
+  // liquefaction-prone land (浦安: landfill) and long floods (江戸川区); actual logistics pay per prefecture
+  assert.ok(m.m.hz_liq[ix('12227')] > 80, '浦安市 mostly liquefaction-prone');
+  assert.ok(m.m.hz_dur3[ix('13123')] > 50, '江戸川区: floods lasting 3+ days');
+  assert.equal(m.wageOcc.perPref.length, 47);
+  for (const k of ['truckL', 'truck', 'handling']) assert.ok(m.wageOcc.perPref.every((p) => p[k]?.hourly > 1000 && p[k].hourly < 4000), `hourly pay of ${k}`);
+  assert.equal(m.wageOcc.partTimeTransport.filter((v) => !(v > 900)).length, 0, 'part-time pay in every prefecture');
   assert.ok(m.m.mfgEmp[ix('22138')] > 10_000 && m.m.retail[ix('22139')] > 0, '浜松市 new wards filled');
   assert.ok(m.m.income[ix('13101')] > 1000, '千代田区: income per taxpayer > 1,000万円');
   assert.equal(m.m.income[ix('14101')], m.m.income[ix('14102')], 'wards of 横浜市 take the city figure');

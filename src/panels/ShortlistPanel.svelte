@@ -11,6 +11,7 @@
   import type { DossierTable, DossierSection } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
   import { estimate, costs, transport } from '../lib/costs.svelte';
+  import { commuteFrom } from '../lib/labour';
   const statusName = (st: Status | undefined) => tt(`st_${st ?? 'cand'}` as Key);
   let noteOpen = $state<string | null>(null);
   let hideDropped = $state(false);
@@ -141,7 +142,7 @@
     const ci = costs.inputs;
     out.push({ title: tt('rpPremises'), rows: [
       [tt('rpView'), `${s.view?.legend.title ?? ''}`],
-      ...(scr ? [[tt('screenTitle'), `${scr.steps.map((st) => `${st.label} ${st.rule.op === 'ge' ? '≥' : '≤'} ${lt?.metrics.find((m) => m.key === st.rule.key)?.fmt(st.rule.v) ?? st.rule.v}`).join('、')} → ${fmtNum(L, scr.keep.size, 0)} / ${fmtNum(L, scr.total, 0)}`] as [string, string]] : []),
+      ...(scr ? [[tt('screenTitle'), `${scr.steps.map((st) => `${st.label} ${st.rule.op === 'ge' ? '≥' : '≤'} ${lt?.metrics.find((m) => m.key === st.rule.key)?.fmt(st.rule.v) ?? st.rule.v}`).join(L === 'ja' ? '、' : ', ')} → ${fmtNum(L, scr.keep.size, 0)} / ${fmtNum(L, scr.total, 0)}`] as [string, string]] : []),
       [tt('rpRouting'), [app.peak ? tt('peakSpeed') : tt('rpDaytime'), app.ferries ? tt('ferries') : '', app.closures.length ? `${tt('closedCount')} ${app.closures.length}` : ''].filter(Boolean).join('・')],
       [tt('rpCost'), `${tt('costPlot')} ${fmtCompact(L, ci.plot)}㎡・${tt('costStaff')} ${ci.staff}・${tt('trRuns')} ${ci.runs}×${ci.days}${L === 'ja' ? '日' : ' days'}・${tt('trLoad')} ${ci.load}%`],
     ], note: tt('rpNote') });
@@ -236,6 +237,12 @@
             row(tt('trYearly'), trs.map((x) => x?.yearly ?? NaN), oku, -1),
             row(tt('trPerRun'), trs.map((x) => x?.km ?? NaN), (v) => `${fmtNum(L, v, 0)} km`, -1),
             row(tt('trCo2'), trs.map((x) => (x ? x.co2 / 1000 : NaN)), (v) => `${fmtNum(L, v, 0)} t`, -1),
+            ...(() => {
+              // labour: transport / handling workers within a 30-minute drive, from each candidate's municipality
+              const r = lt!.router ? lt!.rt() : null;
+              const cm = items.map((it) => { const mc = muniOf(it); const i = mc ? lt!.indexOf(mc) : -1; return r && i >= 0 ? commuteFrom(r.toMunis([r.muni(i)]))?.[1] ?? null : null; });
+              return [row(`${tt('commuteTitle')} 30${L === 'ja' ? '分' : ' min'}`, cm.map((c) => c?.workers ?? NaN), (v) => `${fmtCompact(L, v)}${L === 'ja' ? '人' : ''}`, 1)];
+            })(),
           ] : [];
         })(),
       ] });
@@ -263,7 +270,7 @@
   </div>
   {#if incoming.length}
     <div class="shared" role="status">
-      <p>{tt('sharedList')}（{incoming.length}）: {incoming.slice(0, 4).map((x) => shortLabel(x)).join('、')}{incoming.length > 4 ? '…' : ''}</p>
+      <p>{tt('sharedList')}（{incoming.length}）: {incoming.slice(0, 4).map((x) => shortLabel(x)).join(L === 'ja' ? '、' : ', ')}{incoming.length > 4 ? '…' : ''}</p>
       <p class="acts">
         <button type="button" class="btn" onclick={() => takeShared(false)}>{tt('sharedAdd')}</button>
         {#if shortlist.items.length}<button type="button" class="btn" onclick={() => takeShared(true)}>{tt('sharedReplace')}</button>{/if}

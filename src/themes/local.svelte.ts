@@ -2,6 +2,7 @@
 // (1,898 municipalities / wards), with ranks, a comparison of two municipalities and the table.
 
 import { app } from '../lib/state.svelte';
+import { userData } from '../lib/userdata.svelte';
 import type { Label } from '../lib/data';
 import { SEQ, fmtCompact, fmtMinutes, fmtNum, makeClasses, type Classes } from '../lib/scale';
 import { hubGroups, Reach, type Grid, type HubItem, type Place, type Router } from '../lib/travel';
@@ -196,7 +197,7 @@ export class LocalTheme implements ThemeView {
     const src = (k: string) => S[k]?.[L] ?? '';
     const share = (k: string) => (i: number) => { const a = m.area?.[i], x = m[k]?.[i]; return a && x !== null && x !== undefined ? (x / (a * 100)) * 100 : NaN; };
     const mins = (x: number) => fmtMinutes(L, x);
-    const arr = (a: Float32Array | null | undefined) => (i: number) => { const x = a?.[i]; return x === undefined || !isFinite(x) ? NaN : x; };
+    const arr = (a: ArrayLike<number> | null | undefined) => (i: number) => { const x = a?.[i]; return x === undefined || !isFinite(x) ? NaN : x; };
     const net = this.router?.net.source[L] ?? '';
     const hz = (k: string, ja: string, en: string, hja: string, hen: string): LocalMetric => ({
       key: `hz_${k}`, ja, en, group: 'risk', get: v(`hz_${k}`), fmt: pct(1), better: -1, hint: { ja: hja, en: hen }, source: src('hazard') });
@@ -222,6 +223,9 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '店舗配送の需要（2021年）', en: 'Store-delivery demand (2021)' }, source: src('retail') },
       { key: 'mailorder', ja: '通信販売・EC事業者の従業者', en: 'Mail-order / e-commerce employees', group: 'demand', get: v('mailorder'), fmt: people, better: 1,
         hint: { ja: '通信販売・訪問販売小売業（2021年）。EC関連の集積', en: 'Mail-order and door-to-door retail (2021): e-commerce cluster' }, source: src('retail') },
+      ...(userData.perMuni ? [{ key: 'user', ja: '自社データ（需要）', en: 'Your data (demand)', group: 'demand' as const, get: (i: number) => userData.perMuni![i] ?? 0,
+        fmt: (x: number) => fmtCompact(L, x), better: 1 as const,
+        hint: { ja: `読み込んだファイル（${userData.data?.file ?? ''}）の数量を市区町村ごとに合計`, en: `Volumes from your file (${userData.data?.file ?? ''}) summed per municipality` }, source: this.ctx.tt('userSource') }] : []),
       ...('mfgShip' in m ? [
         { key: 'mfgShip', ja: '製造品出荷額等（2024年）', en: 'Manufacturing shipments (2024)', group: 'demand' as const, get: v('mfgShip'),
           fmt: (x: number) => (L === 'ja' ? (x >= 10000 ? `${fmtNum(L, x / 10000, 2)}兆円` : `${fmtNum(L, x, x >= 100 ? 0 : 1)}億円`) : `¥${fmtCompact(L, x * 1e8)}`), better: 1 as const,
@@ -276,6 +280,10 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '従業地の就業者 ÷ 常住地の就業者。100%超は働きに来る人が多い地域', en: 'Workers employed here ÷ workers living here; above 100% = net inflow' }, source: src('workers') },
       { key: 'pool30', ja: '30km圏の輸送・運搬の就業者', en: 'Transport & handling workers within 30 km', group: 'labour', get: v('pool30'), fmt: people, better: 1,
         hint: { ja: '2020年国勢調査（常住地）', en: '2020 census, by residence' }, source: src('workers') },
+      ...(this.compete30 ? [{ key: 'compete', ja: '物流雇用の競合度（30km圏）', en: 'Competition for logistics workers (30 km)', group: 'labour' as const,
+        get: arr(this.compete30), fmt: (x: number) => `${fmtNum(L, x, 2)}${L === 'ja' ? '倍' : '×'}`, better: -1 as const,
+        hint: { ja: '30km圏の倉庫業・道路貨物運送業の従業者（従業地、2021年）÷ 30km圏に住む輸送・運搬の就業者（2020年）。1を超えると地元の人手より雇用が多く、採用が難しい目安', en: 'Warehousing + road-freight employees by workplace within 30 km (2021) ÷ transport and handling workers living within 30 km (2020). Above 1: more jobs than local workers, harder hiring' },
+        source: src('workers') }] : []),
       { key: 'work2050', ja: '生産年齢人口の増減（2025→2050）', en: 'Working-age change 2025→2050', group: 'labour', get: v('work2050'), fmt: signed, diverging: true, better: 1,
         hint: { ja: '15〜64歳。将来の人手の確保しやすさ', en: 'Ages 15–64: future labour supply' }, source: src('proj') },
       { key: 'old2025', ja: '高齢化率（2025年）', en: 'Share aged 65+ (2025)', group: 'labour', get: v('old2025'), fmt: pct(1), better: -1,
@@ -289,7 +297,26 @@ export class LocalTheme implements ThemeView {
         hz('tsunami', '津波浸水想定区域の人口割合', 'Residents in tsunami zones', '津波浸水想定（都道府県）の区域', 'Prefectural tsunami inundation scenarios'),
         hz('sabo', '土砂災害警戒区域の人口割合', 'Residents in landslide-warning zones', '土石流・急傾斜地の崩壊・地すべりの警戒区域', 'Debris-flow, steep-slope and landslide warning zones'),
       ] : []),
+      ...('hz_liq' in m ? [
+        hz('liq', '液状化しやすい地形の人口割合', 'Residents on liquefaction-prone land', '国交省「地形区分に基づく液状化の発生傾向図」で上位2区分（埋立地・旧河道、干拓地・自然堤防など）に住む人の割合。250mメッシュの傾向で、地震は特定しない', 'Share living in the two highest classes of the MLIT landform-based liquefaction tendency map (landfill, old river beds, polders, levees); 250 m mesh, not a specific earthquake'),
+      ] : []),
+      ...('hz_dur3' in m ? [
+        hz('dur3', '浸水が3日以上続く区域の人口割合', 'Residents where floods last 3+ days', '想定最大規模の洪水で0.5m以上の浸水が3日以上続く区域。浸水継続時間を公表している河川のみ', 'Where maximum-scenario flooding stays above 0.5 m for 3 days or more; only rivers with published duration data'),
+      ] : []),
     ];
+  });
+  /** logistics jobs (倉庫業 + 道路貨物運送業, by workplace) within 30 km per transport / handling worker living within 30 km */
+  readonly compete30 = $derived.by(() => {
+    const m = this.d.m, xy = (this.d as unknown as { xy?: [number, number][] }).xy;
+    if (!xy || !m.truck || !m.wh || !m.pool30) return null;
+    const n = xy.length, R2 = 30_000 ** 2, jobs = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const [xi, yi] = xy[i];
+      let s = 0;
+      for (let j = 0; j < n; j++) { const dx = xy[j][0] - xi, dy = xy[j][1] - yi; if (dx * dx + dy * dy <= R2) s += (m.truck[j] ?? 0) + (m.wh[j] ?? 0); }
+      jobs[i] = s;
+    }
+    return Array.from(jobs, (s, i) => { const p = m.pool30[i] ?? 0; return p > 0 ? Math.round((s / p) * 100) / 100 : NaN; });
   });
   readonly metric = $derived.by(() => this.metrics.find((x) => x.key === app.lmet) ?? this.metrics[0]);
   readonly raw = $derived.by(() => this.d.codes.map((_, i) => this.metric.get(i)));

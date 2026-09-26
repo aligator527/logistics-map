@@ -10,6 +10,9 @@
 //   surge   高潮浸水想定区域, 0.5 m or more
 //   tsunami 津波浸水想定, any depth
 //   sabo    土砂災害警戒区域 (土石流・急傾斜地の崩壊・地すべり), any
+//   liq     地形区分に基づく液状化の発生傾向図 (国交省都市局, 250 m mesh), the two highest of five classes
+//           (埋立地・旧河道など / 干拓地・自然堤防など); tiles are resampled, so colours are matched to the nearest class
+//   dur3    浸水継続時間（想定最大規模）3 days or more (only rivers with published duration data)
 // Tiles are cached in data/raw/hazard/ (not committed). Terms:
 // https://disaportal.gsi.go.jp/hazardmap/copyright/opendata.html
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -31,6 +34,15 @@ const rank = (r, g, b) => {
   for (const [R, G, B, k] of DEPTH) { const d = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2; if (d < bd) { bd = d; best = k; } }
   return best;
 };
+// liquefaction tendency: five classes, weakest (1) to strongest (5)
+const LIQ = [[200, 200, 203, 1], [255, 245, 0, 2], [255, 170, 0, 3], [255, 40, 0, 4], [200, 0, 255, 5]];
+// flood duration: < 12 h (1) … ≥ 4 weeks (7)
+const DUR = [[160, 210, 255, 1], [0, 65, 255, 2], [250, 245, 0, 3], [255, 153, 0, 4], [255, 40, 0, 5], [180, 0, 104, 6], [96, 0, 96, 7]];
+const nearest = (pal, r, g, b) => {
+  let best = 0, bd = Infinity;
+  for (const [R, G, B, k] of pal) { const d = (R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2; if (d < bd) { bd = d; best = k; } }
+  return best;
+};
 // layer -> tile sets and a pixel test
 const LAYERS = [
   { key: 'flood', tiles: ['01_flood_l2_shinsuishin_data'], hit: (r, g, b) => rank(r, g, b) >= 2 },
@@ -38,6 +50,8 @@ const LAYERS = [
   { key: 'surge', tiles: ['03_hightide_l2_shinsuishin_data'], hit: (r, g, b) => rank(r, g, b) >= 2 },
   { key: 'tsunami', tiles: ['04_tsunami_newlegend_data'], hit: () => true },
   { key: 'sabo', tiles: ['05_dosekiryukeikaikuiki', '05_kyukeishakeikaikuiki', '05_jisuberikeikaikuiki'], hit: () => true },
+  { key: 'liq', tiles: ['08_03_ekijoka_zenkoku'], hit: (r, g, b) => nearest(LIQ, r, g, b) >= 4 },
+  { key: 'dur3', tiles: ['01_flood_l2_keizoku_data'], hit: (r, g, b) => nearest(DUR, r, g, b) >= 4 },
 ];
 
 const missFile = resolve(RAW, 'missing.json');

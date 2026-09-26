@@ -10,6 +10,8 @@
   import { shortlist } from '../lib/shortlist.svelte';
   import SimPanel from './SimPanel.svelte';
   import CostPanel from './CostPanel.svelte';
+  import UserDataPanel from './UserDataPanel.svelte';
+  import { commuteFrom } from '../lib/labour';
   import { LocalTheme } from '../themes/local.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -22,6 +24,7 @@
 
 {#if localLevel && lt}
   {#if part === 'calc'}
+  <UserDataPanel />
   {#if app.lmet === 'iso' || app.lmet === 'shift' || app.iso}
     {@const kind = app.iso.startsWith('net:') ? app.iso : 'one'}
     <section class="panel">
@@ -61,7 +64,7 @@
               {@const worst = lt.codes.map((c, i) => ({ c, d: delay[i] })).filter((x) => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 5)}
               <p class="help">{tt('closureLost')}: <strong class="tnum">{fmtCompact(L, lost)}{L === 'ja' ? '人' : ''}</strong></p>
               {#if worst.length}
-                <p class="help">{tt('closureWorst')}: {#each worst as w, k (w.c)}{k ? '、' : ''}<button type="button" class="linkish" onclick={() => onpick(w.c)}>{muniLabel(w.c)}</button> <span class="tnum">{w.d >= 600 ? tt('unreachable') : `+${fmtMinutes(L, w.d)}`}</span>{/each}</p>
+                <p class="help">{tt('closureWorst')}: {#each worst as w, k (w.c)}{k ? (L === 'ja' ? '、' : ', ') : ''}<button type="button" class="linkish" onclick={() => onpick(w.c)}>{muniLabel(w.c)}</button> <span class="tnum">{w.d >= 600 ? tt('unreachable') : `+${fmtMinutes(L, w.d)}`}</span>{/each}</p>
               {/if}
             {/if}
           </div>
@@ -79,6 +82,15 @@
         <p class="sub-eyebrow">{tt('isoPop')}{lt.gridTimes ? '（1km）' : ''}</p>
         <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)} ${tt('isoWithin')}`,
                                                      value: `${fmtCompact(L, x.pop)}${L === 'ja' ? '人' : ''}`, pct: (x.pop / top) * 100 }))} />
+        {#if lt.isoTimes && !lt.isNetwork}
+          {@const cm = commuteFrom(lt.isoTimes)}
+          {#if cm}
+            <p class="sub-eyebrow">{tt('commuteTitle')}</p>
+            <ul class="plain">{#each cm as c (c.lim)}<li>{fmtMinutes(L, c.lim)} {tt('isoWithin')}: <strong class="tnum">{fmtCompact(L, c.workers)}{L === 'ja' ? '人' : ''}</strong>
+              <span class="small">（{tt('commutePop')} {fmtCompact(L, c.pop)}）</span></li>{/each}</ul>
+            <p class="src">{tt('commuteNote')}</p>
+          {/if}
+        {/if}
         {#if lt.tripPop}
           {@const tp = lt.tripPop}
           {@const tot = tp[0] + tp[1] + tp[2] || 1}
@@ -106,7 +118,7 @@
           <ul class="plain">
             {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
               {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
-              <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
+              <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join(L === 'ja' ? '、' : ', ') : tt('noRoad')}</li>
             {/each}
           </ul>
         {/if}

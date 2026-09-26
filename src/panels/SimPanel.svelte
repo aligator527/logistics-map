@@ -9,6 +9,7 @@
   import Segmented from '../components/Segmented.svelte';
   import { costs, estimate } from '../lib/costs.svelte';
   import { VEHICLES } from '../lib/fares';
+  import { userData, demandArray } from '../lib/userdata.svelte';
 
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -23,6 +24,8 @@
   let onlyScreened = $state(false);
   let mode = $state<'coverage' | 'cost'>('coverage');
   let simOpen = $state(false);
+  /** coverage of the user's own demand instead of residents */
+  let coverUser = $state(false);
   /** land bought: its price counted each year at this rate (%) */
   let landRate = $state(5);
   let running = $state(false);
@@ -54,8 +57,8 @@
     };
     w.onerror = () => { running = false; w.terminate(); };
     const cand = candidates(), ci = costs.inputs;
-    const demand = ((muni.m as Record<string, (number | null)[]>)[ci.demand] ?? muni.m.pop).map((v) => v ?? 0);
-    const req: SimRequest = { net: lt.router.net, pop: muni.m.pop.map((v) => v ?? 0), candidates: cand, fixed: JSON.parse(JSON.stringify(fixed)), minutes, n,
+    const demand = demandArray(ci.demand);
+    const req: SimRequest = { net: lt.router.net, pop: coverUser && userData.perMuni ? userData.perMuni : muni.m.pop.map((v) => v ?? 0), candidates: cand, fixed: JSON.parse(JSON.stringify(fixed)), minutes, n,
       // ferry fares are not in the table: across the sea, demand needs its own site in cost mode
       ferries: mode === 'cost' ? false : app.ferries, peak: app.peak, closed: [...lt.closedEdges], mode,
       cost: mode === 'cost' ? {
@@ -93,6 +96,7 @@
                    onchange={(v) => (existing = v)} />
         <label class="chk"><input type="checkbox" bind:checked={needZone} /> {tt('simNeedZone')}</label>
         <label class="chk"><input type="checkbox" bind:checked={avoidFlood} /> {tt('simAvoidFlood')}</label>
+        {#if mode === 'coverage' && userData.perMuni}<label class="chk"><input type="checkbox" bind:checked={coverUser} /> {tt('simCoverUser')}</label>{/if}
         {#if app.pref}<label class="chk"><input type="checkbox" bind:checked={inPref} /> {tt('simInPref')}</label>{/if}
         {#if s.screened}<label class="chk"><input type="checkbox" bind:checked={onlyScreened} /> {tt('screenOnly')}（{s.screened.keep.size}）</label>{/if}
         <p class="src">{tt('simCandidates')}: {count}</p>

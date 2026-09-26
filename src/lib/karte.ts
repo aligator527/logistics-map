@@ -7,7 +7,8 @@ import { t, type Key, type Lang } from './i18n';
 import { fmtCompact, fmtMinutes, fmtNum } from './scale';
 import { live, WARN } from './live.svelte';
 import { project as projectLL } from './project';
-import { addressAt, groundRisk, hazardsAt, pointInfo, DEPTH_LABEL } from './pointinfo';
+import { commuteFrom } from './labour';
+import { addressAt, groundRisk, hazardsAt, pointInfo, DEPTH_LABEL, DURATION_LABEL, LIQUEFACTION_LABEL } from './pointinfo';
 import { tripClass } from './trips';
 import type { DossierSection } from '../components/Dossier.svelte';
 
@@ -68,8 +69,11 @@ export async function buildKarte(lon: number, lat: number): Promise<Karte> {
     [L === 'ja' ? '高潮（想定最大）' : 'Storm surge (max.)', hz.surge ? DEPTH_LABEL[hz.surge][L] : tt('hzNone')],
     [L === 'ja' ? '津波浸水想定' : 'Tsunami', hz.tsunami ? (L === 'ja' ? '区域内' : 'inside') : tt('hzNone')],
     [L === 'ja' ? '土砂災害警戒区域' : 'Landslide-warning zone', hz.sabo ? (L === 'ja' ? '区域内' : 'inside') : tt('hzNone')],
+    [L === 'ja' ? '浸水継続時間（想定最大）' : 'Flood duration (max.)', hz.duration ? DURATION_LABEL[hz.duration][L] : (hz.flood ? tt('noData') : tt('hzNone'))],
+    [L === 'ja' ? '内水（雨水出水）' : 'Pluvial flooding', hz.naisui ? DEPTH_LABEL[hz.naisui][L] : (L === 'ja' ? 'なし・未公開' : 'none or not published')],
+    [L === 'ja' ? '液状化の発生傾向（地形区分）' : 'Liquefaction tendency (landform)', hz.liquefaction ? LIQUEFACTION_LABEL[hz.liquefaction][L] : tt('noData')],
     ...(mcode && muni ? [[tt('hzQuake'), `${fmtNum(L, muni.m.quake[muni.codes.indexOf(mcode)] ?? NaN, 0)}%`] as [string, string]] : []),
-  ], note: L === 'ja' ? 'ハザードマップポータルサイトのオープンデータ（地点の周囲約10m）。地震は市区町村の人口重心での値。' : 'Hazard Map Portal open data (about 10 m around the point); earthquake at the municipality’s population centre.' });
+  ], note: L === 'ja' ? 'ハザードマップポータルサイトのオープンデータ（地点の周囲約10m）。浸水継続時間は公表河川のみ、内水は公開している65市区町村のみ。液状化は国交省「地形区分に基づく液状化の発生傾向図」（250mメッシュ、地震を特定しない傾向）。地震は市区町村の人口重心での値。' : 'Hazard Map Portal open data (about 10 m around the point). Duration only for rivers with published data; pluvial only for the 65 municipalities that publish it. Liquefaction: MLIT landform-based tendency map (250 m mesh, not for a specific earthquake). Earthquake at the municipality’s population centre.' });
 
   // 3. reach by road
   if (lt?.router && lt.reach && mcode) {
@@ -86,6 +90,7 @@ export async function buildKarte(lon: number, lat: number): Promise<Karte> {
       [L === 'ja' ? '最寄りのIC・入口まで' : 'To the nearest interchange', ic],
       ...[30, 60, 120].map((m) => [`${tt('isoPop')} ${fmtMinutes(L, m)}`, `${fmtCompact(L, pop(m))}${L === 'ja' ? '人' : ''}`] as [string, string]),
       [`${tt('trip2024')}：${tt('trip1')}`, `${fmtCompact(L, trips[0])}${L === 'ja' ? '人' : ''}`],
+      ...(commuteFrom(t) ?? []).map((c) => [`${tt('commuteTitle')} ${fmtMinutes(L, c.lim)}`, `${fmtCompact(L, c.workers)}${L === 'ja' ? '人' : ''}`] as [string, string]),
       hub('port', 'tPortHub'), hub('air', 'tAirHub'), hub('rail', 'tRailHub'),
       ...(bcp ? await import('./bcp').then(({ nearestKm }) => [
         [tt('bcpE1'), `${fmtNum(L, nearestKm(bcp, lon, lat, 'emergency', '1', geo.layout), 1)} km`],

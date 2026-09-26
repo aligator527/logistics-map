@@ -25,27 +25,27 @@
     if (jobs) out.push({ name: ja('有効求人倍率（職業別）', 'Job-opening ratios'), asOf: jobs.periods.at(-1)![L], cadence: ja('年度（自動）', 'Fiscal year (automatic)'), next: ja('翌年度の6月頃', 'around June'), auto: true });
     if (ssw) out.push({ name: ja('特定技能', 'Specified skilled workers'), asOf: ssw.periods.at(-1)![L], cadence: ja('半年（自動）', 'Half-yearly (automatic)'), next: ja('約6か月後', 'about 6 months later'), auto: true });
     // updated by hand when a release appears
-    const manual: [string, string, string, string, string, string, string][] = [
-      ['行政区域（N03）', 'Boundaries (N03)', '2026-01-01', '毎年', 'Yearly', '2027年春', 'spring 2027'],
-      ['国勢調査・1kmメッシュ人口', 'Census, 1 km population', '2020年', '5年', 'Every 5 years', '2025年調査の結果（2026〜27年に順次）', '2025 census results (2026–27)'],
-      ['将来推計人口（1kmメッシュ）', 'Population projection (1 km)', '令和6年推計', '国勢調査ごと', 'After each census', '2025年国勢調査の後', 'after the 2025 census'],
-      ['住民基本台帳（世帯・転入超過）', 'Resident register', '2026-01-01', '毎年', 'Yearly', '2027年夏', 'summer 2027'],
-      ['経済センサス‐活動調査', 'Economic Census', '2021年', '5年', 'Every 5 years', '2026年調査の結果（2027〜28年）', '2026 survey results (2027–28)'],
-      ['製造品出荷額等', 'Manufacturing shipments', '2024年実績', '毎年', 'Yearly', '2026年7月頃（2025年実績）', 'July 2026 (2025 figures)'],
-      ['地価公示（工業地）', 'Land prices', '2026年', '毎年', 'Yearly', '2027年3月', 'March 2027'],
-      ['用途地域（A29）', 'Zoning (A29)', '2019年度', '不定期', 'Irregular', '–', '–'],
-      ['高速道路（N06）', 'Expressways (N06)', '2025年度', '毎年', 'Yearly', '2026年度版', 'FY2026 edition'],
-      ['道路交通センサス（旅行速度）', 'Road census (speeds)', '2021年度', '約5年', 'About 5 years', '令和7年度調査の結果（2027年頃）', 'FY2025 survey results (around 2027)'],
-      ['物流センサス', 'Freight census', '2021年（第11回）', '5年', 'Every 5 years', '第12回（2026年調査）の結果', '12th survey (2026) results'],
-      ['標準的な運賃', 'Standard freight rates', '2024年3月告示', '改定時', 'On revision', '適正原価制度へ移行（2028年までに）', 'replaced by binding cost rates (by 2028)'],
-      ['最低賃金', 'Minimum wage', '令和7年度', '毎年', 'Yearly', '2026年10月', 'October 2026'],
-      ['緊急輸送道路（N10）', 'Emergency roads (N10)', '2024年3月', '不定期', 'Irregular', '–', '–'],
-      ['重要物流道路（N12）', 'Key logistics roads (N12)', '2021年4月', '不定期', 'Irregular', '–', '–'],
-      ['大型車誘導区間（リンクのみ）', 'Large-vehicle routes (link only)', '2026年3月版', '不定期', 'Irregular', '新版で自動チェック', 'checked for new editions'],
-      ['地震動予測（J-SHIS）', 'Earthquake hazard (J-SHIS)', '2024年版', '毎年', 'Yearly', '2025年版', '2025 edition'],
-      ['登記所備付地図', 'Registry maps', '2025年', '毎年', 'Yearly', '2026年版（公開後）', '2026 edition (when out)'],
+    const manual: [string, string, string, string, string, string, string, string][] = [
+      ['行政区域（N03）', 'Boundaries (N03)', '2026-01-01', '2026-01-01', '毎年', 'Yearly', '2027年春', 'spring 2027'],
+      ['国勢調査・1kmメッシュ人口', 'Census, 1 km population', '2020年', '2020', '5年', 'Every 5 years', '2025年調査の結果（2026〜27年に順次）', '2025 census results (2026–27)'],
+      ['将来推計人口（1kmメッシュ）', 'Population projection (1 km)', '令和6年推計', '2024 projection', '国勢調査ごと', 'After each census', '2025年国勢調査の後', 'after the 2025 census'],
+      ['住民基本台帳（世帯・転入超過）', 'Resident register', '2026-01-01', '2026-01-01', '毎年', 'Yearly', '2027年夏', 'summer 2027'],
+      ['経済センサス‐活動調査', 'Economic Census', '2021年', '2021', '5年', 'Every 5 years', '2026年調査の結果（2027〜28年）', '2026 survey results (2027–28)'],
+      ['製造品出荷額等', 'Manufacturing shipments', '2024年実績', '2024 figures', '毎年', 'Yearly', '2026年7月頃（2025年実績）', 'July 2026 (2025 figures)'],
+      ['地価公示（工業地）', 'Land prices', '2026年', '2026', '毎年', 'Yearly', '2027年3月', 'March 2027'],
+      ['用途地域（A29）', 'Zoning (A29)', '2019年度', 'FY2019', '不定期', 'Irregular', '–', '–'],
+      ['高速道路（N06）', 'Expressways (N06)', '2025年度', 'FY2025', '毎年', 'Yearly', '2026年度版', 'FY2026 edition'],
+      ['道路交通センサス（旅行速度）', 'Road census (speeds)', '2021年度', 'FY2021', '約5年', 'About 5 years', '令和7年度調査の結果（2027年頃）', 'FY2025 survey results (around 2027)'],
+      ['物流センサス', 'Freight census', '2021年（第11回）', '2021 (11th)', '5年', 'Every 5 years', '第12回（2026年調査）の結果', '12th survey (2026) results'],
+      ['標準的な運賃', 'Standard freight rates', '2024年3月告示', 'March 2024 notice', '改定時', 'On revision', '適正原価制度へ移行（2028年までに）', 'replaced by binding cost rates (by 2028)'],
+      ['最低賃金', 'Minimum wage', '令和7年度', 'FY2025', '毎年', 'Yearly', '2026年10月', 'October 2026'],
+      ['緊急輸送道路（N10）', 'Emergency roads (N10)', '2024年3月', 'March 2024', '不定期', 'Irregular', '–', '–'],
+      ['重要物流道路（N12）', 'Key logistics roads (N12)', '2021年4月', 'April 2021', '不定期', 'Irregular', '–', '–'],
+      ['大型車誘導区間（リンクのみ）', 'Large-vehicle routes (link only)', '2026年3月版', 'March 2026 edition', '不定期', 'Irregular', '新版で自動チェック', 'checked for new editions'],
+      ['地震動予測（J-SHIS）', 'Earthquake hazard (J-SHIS)', '2024年版', '2024 edition', '毎年', 'Yearly', '2025年版', '2025 edition'],
+      ['登記所備付地図', 'Registry maps', '2025年', '2025', '毎年', 'Yearly', '2026年版（公開後）', '2026 edition (when out)'],
     ];
-    for (const [nj, ne, asOf, cj, ce, nx, nxe] of manual) out.push({ name: ja(nj, ne), asOf, cadence: ja(cj, ce), next: ja(nx, nxe) });
+    for (const [nj, ne, asOf, asOfEn, cj, ce, nx, nxe] of manual) out.push({ name: ja(nj, ne), asOf: ja(asOf, asOfEn), cadence: ja(cj, ce), next: ja(nx, nxe) });
     return out;
   });
 </script>

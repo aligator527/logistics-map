@@ -132,8 +132,8 @@ export const DEPTH_LABEL: Record<number, { ja: string; en: string }> = {
   4: { ja: '5〜10m', en: '5–10 m' }, 5: { ja: '10〜20m', en: '10–20 m' }, 6: { ja: '20m以上', en: '≥ 20 m' },
 };
 const pixelCache = new Map<string, Promise<ImageData | null>>();
-function tilePixels(layer: string, x: number, y: number): Promise<ImageData | null> {
-  const key = `${layer}/${x}/${y}`;
+function tilePixels(layer: string, x: number, y: number, z = 16): Promise<ImageData | null> {
+  const key = `${layer}/${z}/${x}/${y}`;
   if (!pixelCache.has(key)) {
     pixelCache.set(key, new Promise((res) => {
       const img = new Image();
@@ -146,37 +146,61 @@ function tilePixels(layer: string, x: number, y: number): Promise<ImageData | nu
         res(ctx.getImageData(0, 0, 256, 256));
       };
       img.onerror = () => res(null); // 404: no zone on this tile
-      img.src = `https://disaportaldata.gsi.go.jp/raster/${layer}/16/${x}/${y}.png`;
+      img.src = `https://disaportaldata.gsi.go.jp/raster/${layer}/${z}/${x}/${y}.png`;
     }));
   }
   return pixelCache.get(key)!;
 }
-async function sample(layer: string, lon: number, lat: number, depth: boolean): Promise<number> {
-  const n = 2 ** 16, fx = ((lon + 180) / 360) * n;
+// 内水 tiles also use two older sub-classes of the depth legend
+const DEPTH_NAISUI: [number, number, number, number][] = [...DEPTH, [255, 255, 179, 1], [248, 225, 166, 2]];
+// flood duration (想定最大規模): < 12 h … ≥ 4 weeks
+const DURATION: [number, number, number, number][] = [[160, 210, 255, 1], [0, 65, 255, 2], [250, 245, 0, 3], [255, 153, 0, 4], [255, 40, 0, 5], [180, 0, 104, 6], [96, 0, 96, 7]];
+export const DURATION_LABEL: Record<number, { ja: string; en: string }> = {
+  1: { ja: '12時間未満', en: '< 12 h' }, 2: { ja: '12時間〜1日', en: '12 h – 1 day' }, 3: { ja: '1日〜3日', en: '1–3 days' }, 4: { ja: '3日〜1週間', en: '3 days – 1 week' },
+  5: { ja: '1週間〜2週間', en: '1–2 weeks' }, 6: { ja: '2週間以上', en: '≥ 2 weeks' }, 7: { ja: '4週間以上', en: '≥ 4 weeks' },
+};
+// liquefaction tendency by landform (250 m mesh; tiles resampled, so the majority of the window counts)
+const LIQUEFACTION: [number, number, number, number][] = [[200, 200, 203, 1], [255, 245, 0, 2], [255, 170, 0, 3], [255, 40, 0, 4], [200, 0, 255, 5]];
+export const LIQUEFACTION_LABEL: Record<number, { ja: string; en: string }> = {
+  1: { ja: '弱（山地・丘陵など）', en: 'Weakest (hills, mountains)' }, 2: { ja: 'やや弱（急勾配の谷底低地など）', en: 'Weak (steep valley floors)' },
+  3: { ja: '中（緩勾配の谷底低地・扇状地など）', en: 'Moderate (gentle valley floors, fans)' }, 4: { ja: 'やや強（干拓地・自然堤防など）', en: 'Strong (reclaimed polders, levees)' },
+  5: { ja: '強（埋立地・旧河道など）', en: 'Strongest (landfill, old river beds)' },
+};
+/** the class at a point, from a 5 × 5 pixel window: the deepest class, the majority class, or 1 when anything is drawn */
+async function sample(layer: string, lon: number, lat: number, mode: 'deepest' | 'majority' | 'any', palette = DEPTH, z = 16): Promise<number> {
+  const n = 2 ** z, fx = ((lon + 180) / 360) * n;
   const s = Math.sin((lat * Math.PI) / 180), fy = (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n;
   const tx = Math.floor(fx), ty = Math.floor(fy), px = Math.floor((fx - tx) * 256), py = Math.floor((fy - ty) * 256);
-  const img = await tilePixels(layer, tx, ty);
+  const img = await tilePixels(layer, tx, ty, z);
   if (!img) return 0;
   let best = 0;
+  const votes = new Map<number, number>();
   for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
     const x = px + dx, y = py + dy;
     if (x < 0 || y < 0 || x > 255 || y > 255) continue;
     const o = (y * 256 + x) * 4;
     if (img.data[o + 3] < 128) continue;
-    if (!depth) return 1;
+    if (mode === 'any') return 1;
     let k = 0, bd = Infinity;
-    for (const [R, G, B, r] of DEPTH) { const d = (R - img.data[o]) ** 2 + (G - img.data[o + 1]) ** 2 + (B - img.data[o + 2]) ** 2; if (d < bd) { bd = d; k = r; } }
+    for (const [R, G, B, r] of palette) { const d = (R - img.data[o]) ** 2 + (G - img.data[o + 1]) ** 2 + (B - img.data[o + 2]) ** 2; if (d < bd) { bd = d; k = r; } }
     best = Math.max(best, k);
+    votes.set(k, (votes.get(k) ?? 0) + 1);
   }
+  if (mode === 'majority') return [...votes.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0;
   return best;
 }
-export interface Hazards { flood: number; surge: number; tsunami: boolean; sabo: boolean }
-/** flood / storm-surge depth class (0 = outside), tsunami and landslide-warning zones at the point */
+/** depth classes 0 = outside; duration 0 = no data; liquefaction 0 = not evaluated (water) */
+export interface Hazards { flood: number; surge: number; tsunami: boolean; sabo: boolean; duration: number; naisui: number; liquefaction: number }
+/** flood / storm-surge / pluvial depth class, flood duration, liquefaction tendency, tsunami and landslide zones at the point */
 export async function hazardsAt(lon: number, lat: number): Promise<Hazards> {
-  const [flood, surge, tsunami, s1, s2, s3] = await Promise.all([
-    sample('01_flood_l2_shinsuishin_data', lon, lat, true), sample('03_hightide_l2_shinsuishin_data', lon, lat, true),
-    sample('04_tsunami_newlegend_data', lon, lat, false),
-    sample('05_dosekiryukeikaikuiki', lon, lat, false), sample('05_kyukeishakeikaikuiki', lon, lat, false), sample('05_jisuberikeikaikuiki', lon, lat, false),
+  const [flood, surge, tsunami, s1, s2, s3, duration, naisui, liquefaction] = await Promise.all([
+    sample('01_flood_l2_shinsuishin_data', lon, lat, 'deepest'), sample('03_hightide_l2_shinsuishin_data', lon, lat, 'deepest'),
+    sample('04_tsunami_newlegend_data', lon, lat, 'any'),
+    sample('05_dosekiryukeikaikuiki', lon, lat, 'any'), sample('05_kyukeishakeikaikuiki', lon, lat, 'any'), sample('05_jisuberikeikaikuiki', lon, lat, 'any'),
+    sample('01_flood_l2_keizoku_data', lon, lat, 'deepest', DURATION),
+    sample('02_naisui_data', lon, lat, 'deepest', DEPTH_NAISUI),
+    // this layer stops at zoom 15
+    sample('08_03_ekijoka_zenkoku', lon, lat, 'majority', LIQUEFACTION, 15),
   ]);
-  return { flood, surge, tsunami: tsunami > 0, sabo: s1 + s2 + s3 > 0 };
+  return { flood, surge, tsunami: tsunami > 0, sabo: s1 + s2 + s3 > 0, duration, naisui, liquefaction };
 }

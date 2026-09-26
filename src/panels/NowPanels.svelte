@@ -2,7 +2,7 @@
   import { app } from '../lib/state.svelte';
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
-  import { live, WARN, INT_COLOR } from '../lib/live.svelte';
+  import { live, WARN, INT_COLOR, jmaCourse, jmaLocation } from '../lib/live.svelte';
   import { WARN_COLORS } from '../lib/warncolors';
   import { project as projectLL } from '../lib/project';
   import { pad2 } from '../themes/types';
@@ -51,7 +51,7 @@
         {#each live.rivers as r (r.river + r.name)}
           <li><span class="lv-chip" class:inv={r.level >= 3} style:background={WARN_COLORS[app.dark ? 'dark' : 'light'][r.level - 1]}>L{r.level}</span>
             <strong>{r.river}</strong> — {r.name} · {new Date(r.at).toLocaleString(L === 'ja' ? 'ja-JP' : 'en-GB', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-            {#if r.munis.length}<span class="small">（{r.munis.slice(0, 4).map((c) => muniLabel(c)).join('、')}{r.munis.length > 4 ? ` ほか${r.munis.length - 4}` : ''}）</span>{/if}</li>
+            {#if r.munis.length}<span class="small">（{r.munis.slice(0, 4).map((c) => muniLabel(c)).join(L === 'ja' ? '、' : ', ')}{r.munis.length > 4 ? (L === 'ja' ? ` ほか${r.munis.length - 4}` : ` and ${r.munis.length - 4} more`) : ''}）</span>{/if}</li>
         {/each}
       </ul>
     {:else}<p class="src">{tt('riversNone')}</p>{/if}
@@ -62,8 +62,8 @@
     {#if live.typhoons.length}
       <ul class="plain">
         {#each live.typhoons as t (t.id)}
-          <li><strong>{tt('typhoon')} {Number(t.number.slice(2)) || ''}{L === 'ja' ? '号' : ''} {t.name[L === 'ja' ? 'jp' : 'en']}</strong> — {t.location}, {t.pressure} hPa,
-            {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {t.course}{t.speed ? ` ${t.speed} km/h` : ''}{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
+          <li><strong>{tt('typhoon')} {Number(t.number.slice(2)) || ''}{L === 'ja' ? '号' : ''} {t.name[L === 'ja' ? 'jp' : 'en']}</strong> — {jmaLocation(t.location, L)}, {t.pressure} hPa,
+            {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {jmaCourse(t.course, L)}{t.speed ? ` ${t.speed} km/h` : ''}{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
             {#if t.pos && geo && projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside'}<span class="small">（{tt('offMap')}）</span>{/if}</li>
         {/each}
       </ul>

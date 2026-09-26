@@ -206,3 +206,16 @@ export const INT_COLOR: Record<string, [string, string]> = {
   '3': ['#0041ff', '#fff'], '4': ['#fae696', '#111'], '5-': ['#ffe600', '#111'], '5+': ['#ff9900', '#111'],
   '6-': ['#ff2800', '#fff'], '6+': ['#a50021', '#fff'], '7': ['#b40068', '#fff'],
 };
+
+// JMA typhoon text in English: the 16-point course and "X の 南 約 210 km" positions
+const DIRS: Record<string, string> = { 北: 'N', 北北東: 'NNE', 北東: 'NE', 東北東: 'ENE', 東: 'E', 東南東: 'ESE', 南東: 'SE', 南南東: 'SSE',
+  南: 'S', 南南西: 'SSW', 南西: 'SW', 西南西: 'WSW', 西: 'W', 西北西: 'WNW', 北西: 'NW', 北北西: 'NNW' };
+export function jmaCourse(s: string, lang: 'ja' | 'en') {
+  if (lang === 'ja') return s;
+  return DIRS[s] ?? (/停滞/.test(s) ? 'stationary' : /ゆっくり/.test(s) ? 'slowly' : s);
+}
+export function jmaLocation(s: string, lang: 'ja' | 'en') {
+  if (lang === 'ja') return s;
+  const m = s.match(/^(.+?)の(北北東|北東|東北東|東南東|南東|南南東|南南西|南西|西南西|西北西|北西|北北西|北|東|南|西)約?(\d+)(?:km|キロ)/);
+  return m ? `about ${m[3]} km ${DIRS[m[2]]} of ${m[1]}` : s;
+}

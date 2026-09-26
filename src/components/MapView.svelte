@@ -21,7 +21,7 @@
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
   export interface Poi {
-    key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news' | 'origin' | 'fac'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
+    key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news' | 'origin' | 'fac' | 'user'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
     /** fill (earthquake intensity) and text inside the marker (intensity, news count) */
     color?: string; badge?: string; ink?: string;
     /** news: something from the last 7 days */
@@ -1177,6 +1177,8 @@
         {:else if h.kind === 'fac'}
           <!-- a facility named in the news: diamond, filled when completed -->
           <rect class="fac" class:done={h.filled} x={-h.r} y={-h.r} width={2 * h.r} height={2 * h.r} rx="1.5" transform="rotate(45)" />
+        {:else if h.kind === 'user'}
+          <rect class="usr" x={-h.r} y={-h.r} width={2 * h.r} height={2 * h.r} rx={h.r * 0.3} />
         {:else if h.kind === 'origin'}
           <circle class="org" r={h.r} />
           <circle class="org-c" r={h.r * 0.38} />
@@ -1430,6 +1432,7 @@
   .site.sel .dot, .site.sel .ring-out { stroke: var(--accent); stroke-width: 3; }
   .site:hover .dot, .site:hover .ring-out { stroke-width: 2.4; }
   .poi .pm { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
+  .poi .usr { fill: var(--accent); fill-opacity: 0.75; stroke: var(--surface); stroke-width: 1; }
   .poi .fac { fill: var(--surface); stroke: var(--clay); stroke-width: 1.8; }
   .poi .fac.done { fill: var(--clay); stroke: var(--surface); stroke-width: 1.2; }
   .poi.fac text { fill: var(--clay); }

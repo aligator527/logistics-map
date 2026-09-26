@@ -1486,6 +1486,69 @@
    "script": "etl-demand"
   },
   {
+   "file": "data/raw/wage/wss_000040420946.xlsx",
+   "bytes": 144901,
+   "sha256": "84eec7b7d9c4f2a31a285e35c6441ae953c1dac2838b490f06d9a3da3f5bda00",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040420947.xlsx",
+   "bytes": 145735,
+   "sha256": "ecfa6fe90ddebddacdd1850c56df560c0a3938834152d0d8ceed895cb0532076",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040420948.xlsx",
+   "bytes": 145556,
+   "sha256": "750510e64077ed86a188077900beea171491a684e5e240ee7129fb325147ab75",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040420949.xlsx",
+   "bytes": 143837,
+   "sha256": "03e949bea67be446a7b526b43fbe0762f8bf8408e1811cdf4b5dfd364b0bb706",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040420950.xlsx",
+   "bytes": 106723,
+   "sha256": "ec65735ab3351a3b5754e9706f418b9f92cd7d1a83a6874366479c932856c043",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040421195.xlsx",
+   "bytes": 251646,
+   "sha256": "504ed50beceef1ff228a0dcbfaa5f7b9251dcdc10de12a8601a0f11bf4e0a23e",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040421196.xlsx",
+   "bytes": 253391,
+   "sha256": "89f079272d9b63d5f156ab17f259443ce82b47c6b3b35364304dc18a5bce9b37",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040421197.xlsx",
+   "bytes": 252057,
+   "sha256": "cd27baf1dfdbf553708430e084118665c38ca773f1ce2ee5ff855768902fbb5e",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
+   "file": "data/raw/wage/wss_000040421198.xlsx",
+   "bytes": 251052,
+   "sha256": "8c322bd1fb44c73de6b719bd104365cbd9bb0e093c1eb7cd3b8cb38f9f5ff65b",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)",
+   "script": "etl-wages"
+  },
+  {
    "file": "data/raw/zoning/A29-19_01_GML.zip",
    "bytes": 9136548,
    "sha256": "3375b81bf485cd8f59360cc0bce0eef45f170bc39bc35896323d0df110c76f9c",

@@ -3,8 +3,9 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { fmtNum } from '../lib/scale';
-  import { costs, estimate, transport, type DemandKey } from '../lib/costs.svelte';
+  import { costs, estimate, transport, type DemandKey, type WageBasis } from '../lib/costs.svelte';
   import { VEHICLES, REGION_NAMES } from '../lib/fares';
+  import { userData } from '../lib/userdata.svelte';
 
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -19,9 +20,10 @@
     return { land: med((x) => x.land), staff: med((x) => x.staff), fuel: med((x) => x.fuel) };
   });
   // runs: recomputed when the inputs, the site or the routing options change
-  const tr = $derived.by(() => { void app.peak; void app.ferries; void s.lt?.closedEdges; void costs.inputs.vehicle; void costs.inputs.runs; void costs.inputs.load; void costs.inputs.limit; void costs.inputs.demand; void costs.inputs.days; return i >= 0 ? transport(i, costs.inputs) : null; });
-  const DEMANDS: [DemandKey, Key][] = [['pop', 'dmPop'], ['hh', 'dmHh'], ['retail', 'dmRetail'], ['mailorder', 'dmMail'], ['mfgShip', 'dmMfg'], ['wsEmp', 'dmWs']];
+  const tr = $derived.by(() => { void app.peak; void app.ferries; void s.lt?.closedEdges; void costs.inputs.vehicle; void costs.inputs.runs; void costs.inputs.load; void costs.inputs.limit; void costs.inputs.demand; void userData.perMuni; void costs.inputs.days; return i >= 0 ? transport(i, costs.inputs) : null; });
+  const DEMANDS = $derived<[DemandKey, Key][]>([['pop', 'dmPop'], ['hh', 'dmHh'], ['retail', 'dmRetail'], ['mailorder', 'dmMail'], ['mfgShip', 'dmMfg'], ['wsEmp', 'dmWs'], ...(userData.perMuni ? [['user', 'dmUser'] as [DemandKey, Key]] : [])]);
   const LIMITS = [60, 120, 180, 240, 360, 600];
+  const WAGES: [WageBasis, Key][] = [['handling', 'wbHandling'], ['part', 'wbPart'], ['truckL', 'wbTruckL'], ['truck', 'wbTruck'], ['min', 'wbMin']];
   const oku = (y: number) => (isFinite(y) ? (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`) : '–');
   const FIELDS: [keyof typeof costs.inputs, Key, string][] = [
     ['plot', 'costPlot', '㎡'], ['staff', 'costStaff', ''], ['hours', 'costHours', 'h'], ['premium', 'costPremium', '%'],
@@ -39,6 +41,10 @@
             <span class="in"><input type="number" min="0" step="any" bind:value={costs.inputs[k]} onchange={() => costs.save()} />{#if unit}<span class="u">{unit}</span>{/if}</span></label>
         {/each}
       </div>
+      <label class="basis"><span class="small">{tt('wageBasis')}</span>
+        <select bind:value={costs.inputs.wageBasis} onchange={() => costs.save()}>
+          {#each WAGES as [k, lab] (k)}<option value={k}>{tt(lab)}</option>{/each}
+        </select></label>
       <table class="res">
         <thead><tr><th></th><th>{s.muniLabel(app.muni)}</th><th>{tt('costMedian')}</th></tr></thead>
         <tbody>
@@ -72,7 +78,7 @@
         <p class="src">{tt('trNote').replace('{r}', REGION_NAMES[tr.region] ?? tr.region)}
           <a href="https://www.mlit.go.jp/jidosha/jidosha_tk4_000118.html">{tt('trSource')}</a> · <a href="https://www.greenpartnership.jp/co2">{tt('co2Source')}</a></p>
       {:else if s.lt && !s.lt.router}<p class="src" role="status">{tt('loadingNetwork')}</p>{/if}
-      <p class="src">{L === 'ja' ? `地価 ${fmtNum(L, e.landPrice, 0)}円/㎡ · 最低賃金 ${fmtNum(L, e.wage, 0)}円 · 軽油 ${fmtNum(L, e.diesel, 1)}円/L` : `Land ¥${fmtNum(L, e.landPrice, 0)}/m² · minimum wage ¥${fmtNum(L, e.wage, 0)} · diesel ¥${fmtNum(L, e.diesel, 1)}/L`}.
+      <p class="src">{L === 'ja' ? `地価 ${fmtNum(L, e.landPrice, 0)}円/㎡ · 時給 ${fmtNum(L, e.wage, 0)}円（最低賃金 ${fmtNum(L, e.minWage, 0)}円） · 軽油 ${fmtNum(L, e.diesel, 1)}円/L` : `Land ¥${fmtNum(L, e.landPrice, 0)}/m² · hourly ¥${fmtNum(L, e.wage, 0)} (minimum ¥${fmtNum(L, e.minWage, 0)}) · diesel ¥${fmtNum(L, e.diesel, 1)}/L`}.
         {tt('costNote')} <button type="button" class="linkish" onclick={() => costs.reset()}>{tt('costReset')}</button></p>
     </details>
   </section>
@@ -86,6 +92,8 @@
   .in input { width: 100%; min-height: 32px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); }
   .u { font-size: 11px; color: var(--muted); }
   .grid select { width: 100%; min-height: 32px; }
+  .basis { display: grid; gap: 2px; margin: 6px 0; }
+  .basis select { min-height: 32px; }
   .res { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
   .res th, .res td { padding: 4px 2px; border-bottom: 1px solid var(--line); text-align: right; }
   .res th:first-child { text-align: left; color: var(--ink-2); font-weight: 500; }
