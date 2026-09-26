@@ -117,7 +117,7 @@ class Store {
     if (app.site >= 0 && s && !app.compare && s.pref !== app.pref) app.pref = s.pref;
   };
   clearFocus = () => { app.pref = 0; app.site = -1; app.muni = ''; };
-  showReach = (key: string) => { app.stopCompare(); app.layer = 'local'; app.lmet = 'iso'; app.iso = key; };
+  showReach = (key: string) => { app.stopCompare(); app.layer = 'local'; app.lmet = 'iso'; app.iso = key; app.tab = 'calc'; };
 
   /** a municipality's population centre as lon/lat (from its map position, insets undone) */
   muniLonLat = (code: string): [number, number] | null => {

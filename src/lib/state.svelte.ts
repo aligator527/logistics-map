@@ -25,6 +25,9 @@ function store(key: string, v: string) {
   try { localStorage.setItem(key, v); } catch { /* private mode etc. */ }
 }
 
+export const SIDE_TABS = ['overview', 'metrics', 'calc', 'short', 'news'] as const;
+export type SideTab = (typeof SIDE_TABS)[number];
+
 class AppState {
   lang = $state<Lang>(readStored('lang', ['ja', 'en'] as const) ?? detectLang());
   theme = $state<Theme>(readStored('theme', ['system', 'light', 'dark'] as const) ?? 'system');
@@ -101,6 +104,8 @@ class AppState {
   showFac = $state(false);
   /** industrial zoning (用途地域) of the focused prefecture */
   showZone = $state(false);
+  /** side panel tab */
+  tab = $state<SideTab>('overview');
   /** buildings / land parcels at street level (on unless turned off) */
   showBld = $state(true);
   showFude = $state(true);
@@ -145,6 +150,9 @@ class AppState {
   }
 
   // ------------------------------------------------------------ URL <-> state
+  /** the side tab a view opens on: a reach map shows its numbers */
+  defaultTab(): SideTab { return this.layer === 'local' && (this.lmet === 'iso' || this.lmet === 'shift') ? 'calc' : 'overview'; }
+
   toHash(lists: HashLists): string {
     const p = new URLSearchParams();
     if (this.layer !== 'warehouse') p.set('t', this.layer);
@@ -194,6 +202,7 @@ class AppState {
     if (this.showFac) p.set('fc', '1');
     if (this.showZone) p.set('zn', '1');
     if (!this.showBld) p.set('bd', '0');
+    if (this.tab !== this.defaultTab()) p.set('tb', this.tab);
     if (!this.showFude) p.set('fd', '0');
     if (this.base) p.set('bm', this.base);
     if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
@@ -267,6 +276,8 @@ class AppState {
     this.showFac = p.get('fc') === '1';
     this.showZone = p.get('zn') === '1';
     this.showBld = p.get('bd') !== '0';
+    const tb = p.get('tb') as SideTab | null;
+    this.tab = tb && (SIDE_TABS as readonly string[]).includes(tb) ? tb : this.defaultTab();
     this.showFude = p.get('fd') !== '0';
     this.base = /^[a-z]{2,12}$/.test(p.get('bm') ?? '') ? p.get('bm')! : '';
     const fo = Number(p.get('fo'));

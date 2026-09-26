@@ -89,7 +89,6 @@ test('no parcel data here: said so on the map', async ({ page }, info) => {
 test('a measured plot goes into the shortlist and onto the map', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'mouse');
   const errors = await open(page, 't=local&mv=16.5/35.2500/136.9700');
-  await page.evaluate(() => localStorage.removeItem('shortlist'));
   await page.getByRole('button', { name: '距離・面積を測る' }).click();
   const b = (await page.locator('div.map').first().boundingBox())!;
   for (const [fx, fy] of [[0.4, 0.35], [0.6, 0.35], [0.6, 0.6], [0.4, 0.6]]) await page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
@@ -97,6 +96,7 @@ test('a measured plot goes into the shortlist and onto the map', async ({ page }
   await box.getByRole('button', { name: '閉じて面積' }).click();
   await box.getByRole('button', { name: /候補に追加/ }).click();
   await box.getByRole('button', { name: '完了' }).click();
+  await page.getByRole('tab', { name: /候補/ }).click();
   await expect(page.locator('aside ul.short li').filter({ hasText: '区画' })).toContainText(/\d+\.\d\d ha/);
   await expect(page.locator('path.plot')).toHaveCount(1);
   expect(errors).toEqual([]);
@@ -113,4 +113,31 @@ test('1 km cell under the pointer on a reach map', async ({ page }, info) => {
     await expect(page.locator('.tip').filter({ hasText: '1kmメッシュ' })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expect(page.locator('.tip').filter({ hasText: '1kmメッシュ' })).toContainText('人口');
+});
+
+test('side panel: tabs, width and hiding (wide screens)', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'wide layout');
+  const errors = await open(page, 't=local&mu=23206');
+  const side = page.locator('aside.side');
+  // the panel scrolls on its own and is never taller than the window
+  const vh = page.viewportSize()!.height;
+  expect((await side.boundingBox())!.height).toBeLessThanOrEqual(vh);
+  await page.getByRole('tab', { name: '指標' }).click();
+  await expect(page).toHaveURL(/tb=metrics/);
+  await expect(side).toContainText('市区町村の指標');
+  await page.getByRole('tab', { name: '指標' }).press('ArrowRight');
+  await expect(page.getByRole('tab', { name: '到達圏・計算' })).toHaveAttribute('aria-selected', 'true');
+  // narrower with the keyboard on the splitter
+  const w0 = (await side.boundingBox())!.width;
+  await page.getByRole('separator').focus();
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+  expect((await side.boundingBox())!.width).toBeLessThan(w0 - 40);
+  // hide: the map takes the width, one button brings the panel back
+  const m0 = (await page.locator('div.map').first().boundingBox())!.width;
+  await page.getByRole('button', { name: 'パネルを隠す' }).click();
+  await expect(side).toBeHidden();
+  expect((await page.locator('div.map').first().boundingBox())!.width).toBeGreaterThan(m0 + 200);
+  await page.getByRole('button', { name: 'パネルを表示' }).click();
+  await expect(side).toBeVisible();
+  expect(errors).toEqual([]);
 });

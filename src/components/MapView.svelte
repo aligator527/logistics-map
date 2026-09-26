@@ -327,7 +327,9 @@
   });
   const plotPaths = $derived.by(() => plots.flatMap((pl) => {
     const s = pl.ring.map(([lon, lat]) => viewBoxAt(lon, lat)).filter((p): p is [number, number] => !!p).map((p) => transform.apply(p));
-    if (s.length < 3) return [];
+    const span = Math.max(...s.map((q) => q[0])) - Math.min(...s.map((q) => q[0]));
+    // a plot only means something once it is more than a speck on screen
+    if (s.length < 3 || span / px < 10) return [];
     const x = s.reduce((a, p) => a + p[0], 0) / s.length, y = s.reduce((a, p) => a + p[1], 0) / s.length;
     return [{ key: pl.key, label: pl.label, x, y, d: s.map(([px_, py], i) => `${i ? 'L' : 'M'}${px_.toFixed(2)},${py.toFixed(2)}`).join('') + 'Z' }];
   }));

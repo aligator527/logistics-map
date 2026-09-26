@@ -15,9 +15,12 @@
   const p = $derived(app.pref);
   const lt = $derived(s.lt), muni = $derived(s.muni), localLevel = $derived(s.localLevel), names = $derived(s.names), sites = $derived(s.sites);
   const { pname, muniLabel, onpick, originName } = s;
+  /** which side-panel tab is showing */
+  let { part }: { part: 'overview' | 'metrics' | 'calc' } = $props();
 </script>
 
 {#if localLevel && lt}
+  {#if part === 'calc'}
   {#if app.lmet === 'iso' || app.lmet === 'shift' || app.iso}
     {@const kind = app.iso.startsWith('net:') ? app.iso : 'one'}
     <section class="panel">
@@ -88,15 +91,28 @@
       <p class="src note">{tt('isoNote')} {#if app.lmet === 'shift'}{tt('tripNote')} {/if}<a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
     </section>
   {/if}
+  {#if !(app.lmet === 'iso' || app.lmet === 'shift' || app.iso)}
+    <section class="panel">
+      <p class="eyebrow">{tt('isoTitle')}</p>
+      <p class="help">{tt('calcIntro')}</p>
+      <p class="memo">
+        <button type="button" class="btn" onclick={() => { app.lmet = 'iso'; if (app.muni) app.iso = `muni:${app.muni}`; }}>{tt(app.muni ? 'isoFrom' : 'showIso')}</button>
+      </p>
+    </section>
+  {/if}
   <CostPanel />
   <SimPanel />
-  {#if app.muni && lt.indexOf(app.muni) >= 0}
+  {/if}
+  {#if part === 'metrics' && app.muni && lt.indexOf(app.muni) >= 0}
     <section class="panel">
       <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>
       <MuniProfile rows={lt.profile(app.muni)} lang={L} current={app.lmet} onmetric={(k) => (app.lmet = k)} />
     </section>
   {/if}
-  {#if app.ma || app.mb}
+  {#if part === 'metrics' && !(app.muni && lt.indexOf(app.muni) >= 0)}
+    <section class="panel"><p class="help">{tt('pickMuniForMetrics')}</p></section>
+  {/if}
+  {#if part === 'overview' && (app.ma || app.mb)}
     <section class="panel">
       <p class="eyebrow">{tt('compareMunis')}</p>
       <ComparePanel {names} lang={L} a={1} b={2} rows={lt.compareRows}
@@ -105,6 +121,7 @@
                     onclear={(slot) => (slot === 'a' ? (app.ma = '') : (app.mb = ''))} />
     </section>
   {/if}
+  {#if part === 'overview'}
   {@const met = lt.metric}
   {@const topM = lt.codes.map((c, i) => ({ c, v: lt!.raw[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
     .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v) || (muni?.m.pop[lt!.indexOf(b.c)] ?? 0) - (muni?.m.pop[lt!.indexOf(a.c)] ?? 0)).slice(0, 10)}
@@ -113,4 +130,5 @@
     <BarList bars={topM.map((x) => ({ key: x.c, label: muniLabel(x.c), value: met.fmt(x.v),
                                       pct: (Math.abs(x.v) / Math.max(...topM.map((y) => Math.abs(y.v)), 1e-9)) * 100, neg: x.v < 0, onclick: () => onpick(x.c) }))} />
   </section>
+  {/if}
 {/if}

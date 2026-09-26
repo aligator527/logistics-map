@@ -23,10 +23,11 @@
   </thead>
   <tbody>
     {#each rows as r (r.c.key)}
-      <tr class:off={r.w === 0}>
+      <tr class:off={r.w === 0} title={`${r.c[lang]}: ${isFinite(r.raw) ? r.c.fmt(r.raw) : '–'} · ${r.c.source[lang]}`}>
         <th scope="row">
           <span class="nm">{r.c[lang]}</span>
-          <span class="raw tnum">{isFinite(r.raw) ? r.c.fmt(r.raw) : '–'} · {r.c.source[lang]}</span>
+          <span class="sr-only">{isFinite(r.raw) ? r.c.fmt(r.raw) : '–'} · {r.c.source[lang]}</span>
+          <span class="raw tnum" aria-hidden="true">{isFinite(r.raw) ? r.c.fmt(r.raw) : '–'}</span>
         </th>
         <td class="bar">
           <span class="track" aria-hidden="true"><span class="fill" style:width="{isFinite(r.p) ? r.p : 0}%"></span><span class="mid"></span></span>
@@ -39,12 +40,14 @@
 </table>
 
 <style>
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { padding: 6px 0; border-bottom: 1px solid var(--line); vertical-align: middle; text-align: left; }
-  th { font-weight: 500; }
-  .nm { display: block; }
-  .raw { display: block; font-size: 11.5px; color: var(--muted); font-weight: 400; }
-  .bar { width: 44%; padding-left: 10px; }
+  /* one line per criterion; its raw value stays short, the source is in the tooltip */
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { padding: 3px 0; border-bottom: 1px solid var(--line); vertical-align: middle; text-align: left; }
+  tr { cursor: help; }
+  th { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+  .nm { margin-right: 6px; }
+  .raw { font-size: 11.5px; color: var(--muted); font-weight: 400; }
+  .bar { width: 40%; padding-left: 10px; }
   .track { position: relative; display: inline-block; width: calc(100% - 30px); height: 8px; background: var(--surface-2); border-radius: 0 3px 3px 0; vertical-align: middle; }
   .fill { position: absolute; inset: 0 auto 0 0; background: var(--blue); border-radius: 0 3px 3px 0; }
   /* the median prefecture scores 50 */

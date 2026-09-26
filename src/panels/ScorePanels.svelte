@@ -22,6 +22,8 @@
   });
   const sensFor = (th: object | null) => (sens && sens.key === th ? sens.r : null);
   const { pname, muniLabel, onpick } = s;
+  /** which side-panel tab is showing */
+  let { part }: { part: 'overview' | 'metrics' } = $props();
 </script>
 
 {#snippet stability(sens: Sensitivity, i: number, n: number)}
@@ -41,6 +43,7 @@
 {/snippet}
 
 {#if app.layer === 'score'}
+  {#if part === 'metrics'}
   <section class="panel">
     <div class="head-row">
       <p class="eyebrow">{tt('weights')}</p>
@@ -62,7 +65,8 @@
       {#if sensFor(sc)}{@render stability(sensFor(sc)!, p - 1, 47)}{/if}
     </section>
   {/if}
-  {#if muniLevel && msc}
+  {/if}
+  {#if part === 'overview' && muniLevel && msc}
     {@const inPref = msc.codes.map((c, i) => ({ c, i, v: msc!.result.total[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
       .sort((a, b) => b.v - a.v).slice(0, 10)}
     <section class="panel">

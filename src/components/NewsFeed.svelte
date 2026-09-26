@@ -42,7 +42,7 @@
     return [...byTopic.filter((it) => it.prefs.includes(pref)), ...byTopic.filter((it) => !it.prefs.includes(pref))];
   });
   const inPref = $derived(pref ? list.filter((it) => it.prefs.includes(pref)).length : 0);
-  const shown = $derived(open ? list.slice(0, 40) : list.slice(0, 6));
+  const shown = $derived(open ? list.slice(0, 40) : list.slice(0, 5));
 </script>
 
 <div class="news">

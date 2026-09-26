@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { store as s } from './lib/store.svelte';
   import NowPanels from './panels/NowPanels.svelte';
   import LocalPanels from './panels/LocalPanels.svelte';
@@ -13,7 +13,7 @@
   import { loadCensusIndex, loadDpl, loadJobs, loadRoads, loadSsw, loadWarehouse, METRICS, fmtDate, fmtValue, fmtYm, fmtYoy,
            isBuilt, valueOf, yoyOf, type CensusIndex, type Dpl, type Jobs, type Roads, type Ssw, type Warehouse } from './lib/data';
   import { loadGeo, loadMunis, roadPaths, type GeoData, type Shape } from './lib/geo';
-  import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme } from './lib/state.svelte';
+  import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme, type SideTab } from './lib/state.svelte';
   import { prefName, t, type Key } from './lib/i18n';
   import { fmtCompact, fmtMinutes, fmtNum, fmtPct, fmtSqm } from './lib/scale';
   import { WarehouseTheme } from './themes/warehouse.svelte';
@@ -34,7 +34,7 @@
   import { measure, area as areaOf } from './lib/measure.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
-  import { shortlist, plotRing, type ShortItem } from './lib/shortlist.svelte';
+  import { shortlist, shared, plotRing, type ShortItem } from './lib/shortlist.svelte';
   import { downloadCsv } from './lib/csv';
   import { pad2, type Ctx, type ThemeView } from './themes/types';
   import MapView, { type Marker, type Poi } from './components/MapView.svelte';
@@ -253,6 +253,7 @@
     if (!ll) return;
     s.inspectLoading = true;
     s.inspect = null;
+    app.tab = 'overview';
     pointInfo(ll[0], ll[1]).then((i) => (s.inspect = i)).finally(() => (s.inspectLoading = false));
   }
   /** elevation and landform at the selected DPL site */
@@ -356,6 +357,63 @@
   let newsPins = $state<string[]>([]);
   let newsFocus = $state<string | null>(null);
   let mapW = $state(1000);
+  // ------------------------------------------------------------ side panel: tabs, width, hide
+  const freshCut = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+  const shortAlerts = $derived.by(() => {
+    if (!live.warnTime) return 0;
+    let n = 0;
+    for (const it of shortlist.items) {
+      const code = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni : null;
+      if (code && live.level(code, true) >= 2) n++;
+    }
+    return n;
+  });
+  const tabs = $derived.by(() => {
+    const out: { key: SideTab; label: string; count?: number; alert?: boolean }[] = [{ key: 'overview', label: tt('tabOverview') }];
+    if (app.layer === 'local' && localLevel) out.push({ key: 'metrics', label: tt('tabMetrics') }, { key: 'calc', label: tt('tabCalc') });
+    if (app.layer === 'score') out.push({ key: 'metrics', label: tt('tabWeights') });
+    out.push({ key: 'short', label: tt('tabShort'), count: shortlist.items.length, alert: shortAlerts > 0 });
+    if (news) out.push({ key: 'news', label: tt('tabNews'), count: news.items.filter((it) => it.date >= freshCut).length || undefined });
+    return out;
+  });
+  /** the tab on show: the chosen one when this subject has it */
+  const tab = $derived<SideTab>(app.compare ? 'overview' : tabs.some((x) => x.key === app.tab) ? app.tab : 'overview');
+  $effect(() => { void tab; if (sideEl) sideEl.scrollTop = 0; });
+  function tabKey(e: KeyboardEvent) {
+    const i = tabs.findIndex((x) => x.key === tab);
+    const j = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -2;
+    if (j === -2) return;
+    e.preventDefault();
+    const k = tabs[(j + tabs.length) % tabs.length].key;
+    app.tab = k;
+    requestAnimationFrame(() => document.getElementById(`tab-${k}`)?.focus());
+  }
+  const readNum = (k: string, d: number) => { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } };
+  let sideW = $state(readNum('sideW', 420));
+  let sideHidden = $state((() => { try { return localStorage.getItem('sideHidden') === '1'; } catch { return false; } })());
+  const clampW = (w: number) => Math.round(Math.max(300, Math.min(760, w, innerWidth * 0.55)));
+  $effect(() => { try { localStorage.setItem('sideW', String(sideW)); localStorage.setItem('sideHidden', sideHidden ? '1' : '0'); } catch { /* private mode */ } });
+  function startResize(e: PointerEvent) {
+    const x0 = e.clientX, w0 = sideW;
+    const move = (ev: PointerEvent) => (sideW = clampW(w0 + x0 - ev.clientX));
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); document.body.classList.remove('resizing'); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+    document.body.classList.add('resizing');
+    e.preventDefault();
+  }
+  function resizeKey(e: KeyboardEvent) {
+    if (e.key === 'ArrowLeft') sideW = clampW(sideW + 20);
+    else if (e.key === 'ArrowRight') sideW = clampW(sideW - 20);
+    else if (e.key === 'Home') sideW = 300;
+    else if (e.key === 'End') sideW = clampW(760);
+    else return;
+    e.preventDefault();
+  }
+  // a shared shortlist link: show the list it offers
+  $effect(() => { if (lists && shared.tokens.length) untrack(() => (app.tab = 'short')); });
+  // the controls bar sticks to the top on wide screens: the panel sticks just below it
+  let ctlH = $state(0);
+
   // phones: the controls fold away, and a bar at the bottom keeps the selection in sight while the details are off screen
   let ctlOpen = $state(false);
   let sideEl = $state<HTMLElement | null>(null);
@@ -795,7 +853,7 @@
     <Segmented label={tt('subject')} value={app.layer} options={subjects} onchange={(v) => { app.layer = v; highlight = null; }} />
   </nav>
 
-  <section class="controls" class:collapsed={!ctlOpen} aria-label={tt('metric')}>
+  <section class="controls" class:collapsed={!ctlOpen} aria-label={tt('metric')} bind:offsetHeight={ctlH}>
     <button type="button" class="btn ctl-toggle" aria-expanded={ctlOpen} onclick={() => (ctlOpen = !ctlOpen)}>
       <span>{tt('viewSettings')}</span><span class="ctl-sum">{view.legend.title}</span><span aria-hidden="true">{ctlOpen ? '▴' : '▾'}</span>
     </button>
@@ -868,7 +926,7 @@
       {#if lt}
         <label class="ctl">
           <span class="lab">{tt('localMetric')}</span>
-          <select class="sel" value={app.lmet} onchange={(e) => (app.lmet = e.currentTarget.value)}>
+          <select class="sel" value={app.lmet} onchange={(e) => { app.lmet = e.currentTarget.value; if (app.lmet === 'iso' || app.lmet === 'shift') app.tab = 'calc'; }}>
             {#each ['people', 'demand', 'access', 'land', 'industry', 'labour', 'risk'] as g (g)}
               <optgroup label={tt(`lg_${g}` as Key)}>
                 {#each lt.metrics.filter((m) => m.group === g) as m (m.key)}<option value={m.key}>{m[L]}</option>{/each}
@@ -983,7 +1041,7 @@
     </div>
   </section>
 
-  <main id="main" class="grid">
+  <main id="main" class="grid" class:side-hidden={sideHidden} style:--side-w="{sideW}px">
     <div class="mapcol" bind:clientWidth={mapW}>
       <div class="viewbar">
         <Segmented label={`${tt('map')} / ${tt('table')}`} value={app.view}
@@ -994,6 +1052,10 @@
         {/if}
         {#if app.view === 'table'}<button type="button" class="btn" onclick={exportTable}>{tt('exportCsv')}</button>{/if}
         <ExportMenu />
+        {#if sideHidden}
+          <button type="button" class="btn show-side" onclick={() => (sideHidden = false)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M10 2L5 7l5 5M6 2L1 7l5 5" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>{tt('showPanel')}</button>
+        {/if}
         <div class="search-slot"><PlaceSearch {places} lang={L} onpick={onplace} /></div>
         {#if app.layer === 'flows' && fl.loading}<span class="small" role="status">{tt('loadingFlows')}</span>{/if}
       </div>
@@ -1074,7 +1136,25 @@
       </div>
     </div>
 
-    <aside class="side" aria-live="polite" bind:this={sideEl}>
+    <aside class="side" class:hidden={sideHidden} aria-label={tt('sidePanel')} bind:this={sideEl} style:--side-top="{ctlH}px">
+      <!-- a focusable window splitter (WAI-ARIA): arrow keys change the width -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+      <div class="resizer" role="separator" aria-orientation="vertical" aria-label={tt('resizePanel')} aria-valuenow={sideW} aria-valuemin={300} aria-valuemax={760}
+           tabindex="0" onpointerdown={startResize} onkeydown={resizeKey}></div>
+      <div class="side-head">
+        <div class="side-tabs" role="tablist" aria-label={tt('sidePanel')}>
+          {#each tabs as tb (tb.key)}
+            <button type="button" role="tab" id="tab-{tb.key}" aria-selected={tab === tb.key} aria-controls="side-body" tabindex={tab === tb.key ? 0 : -1}
+                    onclick={() => (app.tab = tb.key)} onkeydown={tabKey}>
+              {tb.label}{#if tb.count}<span class="cnt tnum">{tb.count}</span>{/if}{#if tb.alert}<span class="alert-dot" aria-label={tt('liveWarn')}></span>{/if}
+            </button>
+          {/each}
+        </div>
+        <button type="button" class="btn ghost hide-side" aria-label={tt('hidePanel')} title={tt('hidePanel')} onclick={() => (sideHidden = true)}>
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2l5 5-5 5M8 2l5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
+        </button>
+      </div>
+      <div class="side-body" id="side-body" role="tabpanel" aria-labelledby="tab-{tab}" aria-live="polite">
       {#if app.compare}
         <section class="panel">
           <p class="eyebrow">{tt('compare')} · {view.periodLabel}</p>
@@ -1090,6 +1170,7 @@
         {@const p = app.pref}
         {@const r = p && !mapMuni ? rank(view, p) : 0}
         {@const tr = view.trend}
+        {#if tab === 'overview'}
         <PointPanel />
         <section class="panel readout">
           {#if mt && app.muni && mt.indexOf(app.muni) >= 0}
@@ -1172,9 +1253,9 @@
 
         <NowPanels />
 
-        <LocalPanels />
+        <LocalPanels part="overview" />
 
-        <ScorePanels />
+        <ScorePanels part="overview" />
 
         {#if tr}
         <section class="panel">
@@ -1209,8 +1290,14 @@
           </section>
         {/if}
         <GlossaryPanel />
-        <ShortlistPanel />
-        {#if news}
+        {:else if tab === 'metrics'}
+          <LocalPanels part="metrics" />
+          <ScorePanels part="metrics" />
+        {:else if tab === 'calc'}
+          <LocalPanels part="calc" />
+        {:else if tab === 'short'}
+          <ShortlistPanel />
+        {:else if tab === 'news' && news}
           <section class="panel">
             <p class="eyebrow">{tt('news')}</p>
             <NewsFeed {news} lang={L} pref={p} {pname} onpref={(c) => onpick(String(c))} {srcName}
@@ -1220,6 +1307,7 @@
           </section>
         {/if}
       {/if}
+      </div>
     </aside>
     {#if mini && !sideSeen}
       <div class="minibar" role="status">

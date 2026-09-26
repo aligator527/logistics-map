@@ -90,6 +90,9 @@ test('reach map from a municipality', async ({ page }) => {
 test('shortlist: add, export CSV, clear', async ({ page }) => {
   await open(page, 't=local&mu=11203&r=11');
   await page.locator('aside button', { hasText: '候補に追加' }).first().click();
+  // the list has its own tab, with the count on it
+  await expect(page.getByRole('tab', { name: /候補\s*1/ })).toBeVisible();
+  await page.getByRole('tab', { name: /候補/ }).click();
   const list = page.locator('aside ul.short li');
   await expect(list).toHaveCount(1);
   const dl = page.waitForEvent('download');
@@ -118,8 +121,9 @@ test('network reach on the 1 km grid, 2024 trip types', async ({ page }) => {
 
 test('shortlist comparison table and rank stability', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('shortlist', JSON.stringify([{ kind: 'muni', code: '23206' }, { kind: 'muni', code: '11203' }, { kind: 'pref', code: '13' }])));
-  await open(page, 't=score&sl=muni&mu=11229&r=11');
+  await open(page, 't=score&sl=muni&mu=11229&r=11&tb=metrics');
   await expect(page.locator('.stab')).toContainText('%');
+  await page.getByRole('tab', { name: /候補/ }).click();
   await page.locator('aside button', { hasText: '候補を比較' }).click();
   const table = page.locator('table.cmp');
   await expect(table).toBeVisible();

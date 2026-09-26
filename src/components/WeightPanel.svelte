@@ -26,10 +26,10 @@
       <fieldset>
         <legend>{t(lang, g.label)}</legend>
         {#each items as { c, k } (c.key)}
-          <div class="row" class:off={weights[k] === 0}>
+          <div class="row" class:off={weights[k] === 0} title={c.hint[lang]}>
             <label for="{uid}-{c.key}">
               <span class="nm">{c[lang]}</span>
-              <span class="hint">{c.hint[lang]}</span>
+              <span class="sr-only">{c.hint[lang]}</span>
             </label>
             <input id="{uid}-{c.key}" type="range" min="0" max="5" step="1" value={weights[k]}
                    aria-valuetext={`${t(lang, 'weightOf')} ${weights[k]}`}
@@ -43,14 +43,17 @@
 </div>
 
 <style>
-  .weights { display: grid; gap: 12px; }
-  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; }
-  legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 0 4px; }
-  .row { display: grid; grid-template-columns: 1fr 110px 18px; gap: 4px 10px; align-items: center; min-height: 40px; }
+  .weights { display: grid; gap: 8px; }
+  /* two columns once the panel is wide enough; the description is in the tooltip */
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 2px 16px; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+  legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 0 2px; }
+  .row { display: grid; grid-template-columns: 1fr 18px; grid-template-areas: 'nm nm' 'in out'; gap: 0 8px; align-items: center; cursor: help; }
+  label { grid-area: nm; }
+  input[type='range'] { grid-area: in; }
+  output { grid-area: out; }
   .row.off .nm { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
-  label { display: grid; min-width: 0; }
-  .nm { font-size: 13px; font-weight: 500; }
-  .hint { font-size: 11.5px; color: var(--muted); line-height: 1.35; }
-  input[type='range'] { width: 100%; accent-color: var(--blue); height: 28px; margin: 0; }
+  label { display: grid; min-width: 0; padding-top: 4px; }
+  .nm { font-size: 12.5px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  input[type='range'] { width: 100%; accent-color: var(--blue); height: 24px; margin: 0; cursor: pointer; }
   output { font-size: 13px; font-weight: 600; text-align: right; }
 </style>
