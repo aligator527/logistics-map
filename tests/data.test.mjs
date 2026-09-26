@@ -149,7 +149,11 @@ test('hazard shares and road network', async () => {
 test('news: headlines and links only', { skip: !existsSync(new URL('../public/data/news.json', import.meta.url)) }, () => {
   const n = load('data/news.json');
   for (const it of n.items) {
-    assert.deepEqual(Object.keys(it).sort(), ['date', 'link', 'munis', 'prefs', 'src', 't', 'topics']);
+    // headline, link, tags and a short preview — never an article body
+    const keys = Object.keys(it).filter((k) => k !== 'img').sort();
+    assert.deepEqual(keys, ['date', 'ex', 'link', 'munis', 'prefs', 'src', 't', 'topics']);
+    assert.ok(it.ex.length <= 110, `excerpt too long: ${it.ex.length}`);
+    if (it.img) assert.match(it.img, /^https:\/\/prcdn\.freetls\.fastly\.net\//, 'preview images only from the PR TIMES CDN');
     assert.match(it.link, /^https:\/\//);
     assert.match(it.date, /^\d{4}-\d{2}-\d{2}$/);
   }

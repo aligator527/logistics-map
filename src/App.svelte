@@ -30,7 +30,9 @@
   import BarList from './components/BarList.svelte';
   import WeightPanel from './components/WeightPanel.svelte';
   import ScoreBreakdown from './components/ScoreBreakdown.svelte';
-  import NewsFeed, { type News } from './components/NewsFeed.svelte';
+  import NewsFeed, { type News, type NewsItem } from './components/NewsFeed.svelte';
+  import NewsStrip from './components/NewsStrip.svelte';
+  import type { NewsGroup } from './lib/newsmap';
   import SiteCard, { type Catchment } from './components/SiteCard.svelte';
   import PlaceSearch, { type Place } from './components/PlaceSearch.svelte';
   import Dossier, { type DossierSection } from './components/Dossier.svelte';
@@ -264,28 +266,52 @@
     }
     return out;
   });
-  /** news markers: municipality when tagged, else prefecture (last 90 days) */
-  const newsPois = $derived.by((): Poi[] => {
+  // ------------------------------------------------------------ news on the map
+  /** topic filter shared by the side list and the map */
+  let newsTopic = $state('');
+  /** callouts pinned by a click on the map; the place under the pointer (list, card, carousel) */
+  let newsPins = $state<string[]>([]);
+  let newsFocus = $state<string | null>(null);
+  let mapW = $state(1000);
+  /** wide map: callout cards over the sea; narrow: a card strip under the map */
+  const newsCards = $derived(mapW >= 640);
+  const srcName = (k: string) => news?.sources.find((s) => s.key === k)?.[L] ?? k;
+  /** group key of a news item: its first municipality, else prefecture, else national */
+  const newsKeyOf = (it: NewsItem) => (it.munis.length ? `m${it.munis[0]}` : it.prefs.length ? `p${pad2(it.prefs[0])}` : 'jp');
+  /** news of the last 90 days grouped by place (an item naming two places is shown at both) */
+  const newsGroups = $derived.by((): NewsGroup[] => {
     if (!geo || !news || !app.showNews) return [];
     const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
-    const groups = new Map<string, typeof news.items>();
+    const fresh = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10);
+    const groups = new Map<string, NewsItem[]>();
     for (const it of news.items) {
-      if (it.date < since) continue;
-      const keys = it.munis.length ? it.munis : it.prefs.map((p) => pad2(p));
+      if (it.date < since || (newsTopic && !it.topics.includes(newsTopic))) continue;
+      const keys = it.munis.length ? it.munis.map((c) => `m${c}`) : it.prefs.length ? it.prefs.map((c) => `p${pad2(c)}`) : ['jp'];
       for (const k of keys) (groups.get(k) ?? groups.set(k, []).get(k)!).push(it);
     }
-    const out: Poi[] = [];
+    const out: NewsGroup[] = [];
     for (const [k, items] of groups) {
+      const code = k === 'jp' ? '' : k.slice(1);
       let xy: [number, number] | null = null;
-      if (k.length === 5 && muni) { const i = muni.codes.indexOf(k); const c = (muni as unknown as { xy?: [number, number][] }).xy?.[i]; if (c) xy = geo.P(c); }
-      if (!xy && k.length === 2) xy = geo.anchors[Number(k) - 1];
-      if (!xy) continue;
-      out.push({ key: `n${k}`, kind: 'news', xy, r: 6, badge: String(items.length), label: '', major: false, code: k,
-                 tip: { title: k.length === 5 ? muniLabel(k) : pname(Number(k)), sub: `${items.length} ${tt('newsOnMap')}`,
-                        rows: items.slice(0, 4).map((it) => [it.date.slice(5), it.t.length > 34 ? it.t.slice(0, 33) + '…' : it.t] as [string, string]) } });
+      if (k.startsWith('m') && muni) { const c = (muni as unknown as { xy?: ([number, number] | null)[] }).xy?.[muni.codes.indexOf(code)]; if (c) xy = geo.P(c); }
+      if (k.startsWith('p')) xy = geo.anchors[Number(code) - 1];
+      if (k !== 'jp' && !xy) continue;
+      out.push({ key: k, code, label: k === 'jp' ? tt('japan') : k.startsWith('m') ? muniLabel(code) : pname(Number(code)), xy, latest: items[0].date,
+                 items: items.map((it) => ({ t: it.t, link: it.link, ex: it.ex ?? '', img: it.img ?? null, date: it.date, src: srcName(it.src), isNew: it.date >= fresh })) });
     }
-    return out;
+    return out.sort((a, b) => b.latest.localeCompare(a.latest));
   });
+  const newsPois = $derived.by((): Poi[] => newsGroups.filter((g) => g.xy).map((g) => ({
+    key: g.key, kind: 'news', xy: g.xy!, r: 9, badge: String(g.items.length), label: '', major: false, fresh: g.items.some((x) => x.isNew),
+    tip: { title: g.label, sub: `${g.items.length} ${tt('newsOnMap')}`, note: tt('newsClick'),
+           rows: g.items.slice(0, 3).map((it) => [it.date.slice(5), it.t.length > 34 ? it.t.slice(0, 33) + '…' : it.t] as [string, string]) } })));
+  const nationalNews = $derived(newsGroups.find((g) => g.key === 'jp') ?? null);
+  function onnews(key: string) {
+    if (newsCards) newsPins = newsPins.includes(key) ? newsPins.filter((k) => k !== key) : [...newsPins, key].slice(-4);
+    else newsFocus = key;
+  }
+  function onnewsplace(code: string) { onpick(code); }
+  $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
   const pois = $derived.by(() => [...hubPois, ...livePois, ...newsPois, ...originPois]);
   /** origin of the reach map */
   const originPois = $derived.by((): Poi[] => {
@@ -785,7 +811,7 @@
   </section>
 
   <main id="main" class="grid">
-    <div class="mapcol">
+    <div class="mapcol" bind:clientWidth={mapW}>
       <div class="viewbar">
         <Segmented label={`${tt('map')} / ${tt('table')}`} value={app.view}
                    options={[{ value: 'map', label: tt('map') }, { value: 'table', label: tt('table') }]}
@@ -799,6 +825,7 @@
       </div>
 
       {#if app.view === 'map'}
+        <div class="mapwrap">
         <MapView
           bind:this={mapView}
           {geo} values={view.values} classes={view.classes} lang={L} {highlight}
@@ -811,7 +838,19 @@
           flows={view.flows} {rings} {pois} {tracks} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
           prefTip={view.prefTip} {muniTip} {siteTip}
           {onpick} onclear={clearFocus} {onsite}
+          news={newsGroups} {newsCards} {newsPins} {newsFocus} newsAuto={mapW >= 900 ? 3 : 2}
+          {onnews} onnewsclose={(k) => (newsPins = newsPins.filter((x) => x !== k))} {onnewsplace}
+          onnewshover={(k) => (newsFocus = k)}
         />
+        {#if nationalNews && newsCards}
+          <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
+            {tt('newsNational')} <strong class="tnum">{nationalNews.items.length}</strong>
+          </button>
+        {/if}
+        </div>
+        {#if !newsCards && newsGroups.length}
+          <NewsStrip groups={newsGroups} lang={L} focus={newsFocus} onfocus={(k) => (newsFocus = k)} onplace={onnewsplace} />
+        {/if}
       {:else}
         {#if nowWarn && nt && muni}
           <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={muni.codes.indexOf(app.muni)}
@@ -1184,7 +1223,10 @@
         {#if news}
           <section class="panel">
             <p class="eyebrow">{tt('news')}</p>
-            <NewsFeed {news} lang={L} pref={p} {pname} onpref={(c) => onpick(String(c))} />
+            <NewsFeed {news} lang={L} pref={p} {pname} onpref={(c) => onpick(String(c))} {srcName}
+                      topic={newsTopic} ontopic={(k) => (newsTopic = k)}
+                      onhover={(it) => (newsFocus = it && app.showNews ? newsKeyOf(it) : null)}
+                      onmap={app.showNews ? (it) => { const k = newsKeyOf(it); if (k === 'jp' || newsGroups.some((g) => g.key === k)) onnews(k); } : undefined} />
           </section>
         {/if}
       {/if}
@@ -1289,6 +1331,10 @@
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
   .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
   .k-news { fill: currentColor; }
+  .mapwrap { position: relative; }
+  .national { position: absolute; left: 8px; top: 8px; z-index: 6; min-height: 32px; font-size: 12.5px;
+              background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }
+  .national[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
 
   .grid {
     display: grid; gap: 24px 32px;

@@ -1,9 +1,11 @@
-// News feed -> public/data/news.json (headline, date, link, source, topic and prefecture tags)
+// News feed -> public/data/news.json (headline, date, link, source, topic and place tags, preview)
 //
 //   node scripts/fetch-news.mjs
 //
-// Runs daily in GitHub Actions (.github/workflows/update-news.yml). Only headlines and links are
-// stored — never article bodies or descriptions. The file is a rolling archive: new items are
+// Runs daily in GitHub Actions (.github/workflows/update-news.yml). Stored per item: headline, link,
+// a short excerpt (the lead, EXCERPT characters, quoted with source and link — never the article
+// body) and, for PR TIMES releases, the URL of the release's own preview image (og:image, loaded
+// from the PR TIMES CDN by the browser, not copied). The file is a rolling archive: new items are
 // merged with the previous run (feeds such as MLIT cover only ~2 days), deduplicated by link and
 // kept for KEEP_DAYS.
 //
@@ -18,6 +20,17 @@ const OUT = resolve(root, 'public/data/news.json');
 const KEEP_DAYS = 180, MAX_ITEMS = 400;
 const UA = 'Mozilla/5.0 (compatible; logistics-map news fetcher; +https://github.com/aligator527)';
 const norm = (s) => String(s ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
+const EXCERPT = 110, MAX_PAGE_FETCHES = 80;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// logistics real-estate brands: 「MFLP八千代勝田台」, 「Landport」, 「LOGI'Q」 …
+// (not a bare 「ロジ」: it is inside 「プロジェクト」)
+const FACILITY = /物流|倉庫|ロジス|ロジック|ロジクロス|MFLP|Landport|LOGI|DPL|配送センター|冷凍冷蔵/;
+const PRTIMES_TERMS = 'https://prtimes.jp/main/html/kiyaku (営利目的の無断利用は不可 — 非営利の範囲で使用)';
+/** a developer's own releases on PR TIMES (company RSS), logistics items only */
+const developer = (key, id, ja, en) => ({
+  key, ja: `${ja}（PR TIMES）`, en: `${en} (PR TIMES)`, enabled: true, group: 'developer',
+  url: `https://prtimes.jp/companyrdf.php?company_id=${id}`, terms: PRTIMES_TERMS, keep: (it) => FACILITY.test(it.title),
+});
 
 const LOGI = /物流|倉庫|貨物|運送|トラック|ドライバー|自動車運送|宅配|荷主|ロジスティクス|港湾|フェリー|鉄道貨物|2024年問題|特定技能|育成就労/;
 const SOURCES = [
@@ -38,9 +51,18 @@ const SOURCES = [
   {
     key: 'daiwa', ja: '大和ハウス工業（PR TIMES）', en: 'Daiwa House (PR TIMES)', enabled: true,
     url: 'https://prtimes.jp/companyrdf.php?company_id=2296',
-    terms: 'https://prtimes.jp/main/html/kiyaku (営利目的の無断利用は不可 — 非営利の範囲で使用)',
+    terms: PRTIMES_TERMS, group: 'developer',
     keep: (it) => /DPL|物流|倉庫|ロジスティクス/.test(it.title),
   },
+  developer('prologis', 95695, 'プロロジス', 'Prologis'),
+  developer('mitsui', 51782, '三井不動産', 'Mitsui Fudosan'),
+  developer('nomura', 25694, '野村不動産HD', 'Nomura Real Estate'),
+  developer('tokyu', 6953, '東急不動産', 'Tokyu Land'),
+  developer('nskre', 1379, '日鉄興和不動産', 'Nippon Steel Kowa Real Estate'),
+  developer('cre', 12732, 'シーアールイー', 'CRE'),
+  developer('hhre', 33147, '阪急阪神不動産', 'Hankyu Hanshin Properties'),
+  developer('kasumigaseki', 48076, '霞ヶ関キャピタル', 'Kasumigaseki Capital'),
+  developer('tlc', 91164, '東京流通センター', 'Tokyo Ryutsu Center'),
   // --- trade media: disabled until the publisher allows headline links (see their terms)
   { key: 'lnews', ja: 'LNEWS', en: 'LNEWS', enabled: false, url: 'https://www.lnews.jp/institution/feed',
     terms: 'https://www.lnews.jp/contents/appropriation.html', keep: (it) => !/^【PR】/.test(it.title) },
@@ -112,7 +134,17 @@ function prefsOf(title) {
   return [...out].sort((a, b) => a - b);
 }
 
-function tagsOf(title) {
+/** place tags from the headline; the excerpt only when the headline names no place. Parentheses are
+ *  dropped from the excerpt first: they hold the company's head office (「（所在：東京都中央区…）」). */
+function tagsOf(title, ex = '') {
+  let tags = tagsOfText(title);
+  if (!tags.prefs.length && ex) {
+    const fromEx = tagsOfText(ex.replace(/（[^）]*）|\([^)]*\)/g, '').replace(/[(（][^)）]*$/, ''));
+    tags = { ...tags, prefs: fromEx.prefs, munis: fromEx.munis };
+  }
+  return tags;
+}
+function tagsOfText(title) {
   const prefs = prefsOf(title);
   const ms = munisOf(title, prefs);
   // DPL facility names carry their municipality (longest name first: 「DPL新横浜II」 before 「DPL新横浜」)
@@ -150,6 +182,54 @@ async function fetchSource(src) {
   }).filter((it) => it.title && it.link && it.date);
 }
 
+// ------------------------------------------------------------------ previews
+const decode = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+  .replace(/&nbsp;/g, ' ').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n));
+/** first sentence(s) of a lead, cut to EXCERPT characters */
+function excerpt(text) {
+  const s = norm(decode(text))
+    .replace(/\[表: [^\]]*\]|\[画像[^\]]*\]|^\[[^\]]*\]\s*/g, '')   // PR TIMES: 「[会社名]」「[表: url]」
+    .replace(/[(（][^()（）]*(本社|所在|代表|社長|CEO)[^()（）]*([)）]|$)/g, '')   // head-office boilerplate (NFKC: （） → ())
+    .replace(/(以下|、以下)「[^」]*」/g, '').trim();
+  if (!s) return '';
+  return s.length > EXCERPT ? `${s.slice(0, EXCERPT - 1)}…` : s;
+}
+/** PR TIMES og:image, resized by the PR TIMES CDN to a card-sized preview */
+function prtimesImage(html) {
+  const m = html.match(/<meta property="og:image" content="([^"]+)"/);
+  if (!m || !/prcdn|prtimes/.test(m[1])) return null;
+  const u = new URL(decode(m[1]));
+  u.searchParams.set('width', '480'); u.searchParams.set('height', '320'); u.searchParams.set('fit', 'bounds');
+  return u.toString();
+}
+/** lead paragraph of a press page: the first sentence-like line after the headline */
+function leadOf(html, title) {
+  const text = decode(html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, '').replace(/<br\s*\/?>|<\/p>|<\/div>|<\/h\d>/g, '\n').replace(/<[^>]+>/g, ''));
+  const lines = text.split('\n').map((l) => norm(l)).filter(Boolean);
+  const start = Math.max(0, lines.findIndex((l) => l.includes(norm(title).slice(0, 12))));
+  return lines.slice(start + 1).find((l) => l.length > 40 && /。/.test(l) && !/Copyright|JavaScript|Cookie/.test(l)) ?? '';
+}
+let pageFetches = 0;
+async function preview(it, srcKey, desc) {
+  const out = {};
+  if (desc) out.ex = excerpt(desc);
+  const isPr = /prtimes\.jp/.test(it.link);
+  if ((out.ex && !isPr) || pageFetches >= MAX_PAGE_FETCHES) return out;
+  try {
+    pageFetches++;
+    const r = await fetch(it.link, { headers: { 'User-Agent': UA } });
+    if (r.ok) {
+      const html = new TextDecoder('utf-8').decode(Buffer.from(await r.arrayBuffer()));
+      // img: null = looked, none; missing = not looked yet (retried on the next run)
+      if (isPr) out.img = prtimesImage(html);
+      if (!out.ex) out.ex = excerpt(leadOf(html, it.t));
+    }
+    await sleep(400);
+  } catch { /* keep what we have */ }
+  return out;
+}
+
+const cutoff = new Date(Date.now() - KEEP_DAYS * 864e5).toISOString().slice(0, 10);
 const prev = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : { items: [] };
 // re-apply the current source rules to the archive (sources may be disabled or filters tightened)
 const rules = new Map(SOURCES.filter((s) => s.enabled).map((s) => [s.key, s.keep]));
@@ -162,13 +242,13 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
     const items = await fetchSource(src);
     const kept = items.filter((it) => src.keep(it));
     for (const it of kept) {
-      byLink.set(it.link, {
-        ...tagsOf(it.title),
-        t: it.title,
-        link: it.link,
-        date: it.date.toISOString().slice(0, 10),
-        src: src.key,
-      });
+      if (it.date.toISOString().slice(0, 10) < cutoff) continue; // outside the archive window: no preview fetch
+      const old = byLink.get(it.link);
+      const base = { t: it.title, link: it.link, date: it.date.toISOString().slice(0, 10), src: src.key };
+      // previews are fetched once per item and kept in the archive
+      const done = old && 'ex' in old && (!/prtimes\.jp/.test(it.link) || 'img' in old);
+      const pv = done ? { ex: old.ex, img: old.img } : await preview(base, src.key, it.desc || '');
+      byLink.set(it.link, { ...base, ex: pv.ex || old?.ex || '', ...(pv.img !== undefined ? { img: pv.img } : old && 'img' in old ? { img: old.img } : {}) });
     }
     report.push(`${src.key}: ${kept.length}/${items.length}`);
   } catch (e) {
@@ -176,15 +256,21 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
   }
 }
 // tags are recomputed for the whole archive, so improvements to the rules apply to old items too
-for (const [k, it] of byLink) byLink.set(k, { ...it, ...tagsOf(it.t) });
+for (const [k, it] of byLink) {
+  // archive items from before previews existed get one now (limited per run)
+  const done = 'ex' in it && (!/prtimes\.jp/.test(it.link) || 'img' in it);
+  const pv = done ? {} : await preview(it, it.src, '');
+  const ex = pv.ex || it.ex || '';
+  const img = pv.img !== undefined ? pv.img : it.img;
+  byLink.set(k, { ...it, ex, ...(img !== undefined ? { img } : {}), ...tagsOf(it.t, ex) });
+}
 
-const cutoff = new Date(Date.now() - KEEP_DAYS * 864e5).toISOString().slice(0, 10);
 const items = [...byLink.values()].filter((it) => it.date >= cutoff)
   .sort((a, b) => b.date.localeCompare(a.date) || a.t.localeCompare(b.t)).slice(0, MAX_ITEMS);
 writeFileSync(OUT, JSON.stringify({
   generated: new Date().toISOString(),
-  sources: SOURCES.filter((s) => s.enabled).map(({ key, ja, en, url, terms }) => ({ key, ja, en, url, terms })),
+  sources: SOURCES.filter((s) => s.enabled).map(({ key, ja, en, url, terms, group }) => ({ key, ja, en, url, terms, group: group ?? 'public' })),
   topics: TOPICS.map(({ key, ja, en }) => ({ key, ja, en })),
   items,
 }));
-console.log(`news.json: ${items.length} items (${report.join(', ')})`);
+console.log(`news.json: ${items.length} items, ${items.filter((i) => i.munis.length).length} with a municipality, ${items.filter((i) => i.img).length} with an image (${report.join(', ')})`);

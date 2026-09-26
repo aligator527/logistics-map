@@ -8,6 +8,8 @@
   import { classOf, type Classes } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
   import Tooltip, { type Tip } from './Tooltip.svelte';
+  import NewsCallout from './NewsCallout.svelte';
+  import { buildSat, placeCards, type Mask, type NewsGroup } from '../lib/newsmap';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
@@ -15,6 +17,8 @@
     key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news' | 'origin'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
     /** fill (earthquake intensity) and text inside the marker (intensity, news count) */
     color?: string; badge?: string; ink?: string;
+    /** news: something from the last 7 days */
+    fresh?: boolean;
     /** click: select this prefecture / municipality */
     code?: string;
   }
@@ -23,6 +27,7 @@
 
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
+        news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -56,6 +61,19 @@
     pois?: Poi[];
     /** radius rings around a point (viewBox units), e.g. a DPL site's 10 / 30 / 60 km */
     rings?: { xy: [number, number]; r: number; label: string }[];
+    /** news grouped by place; their points are pois of kind 'news' with the group key */
+    news?: NewsGroup[];
+    /** draw callout cards over the sea (wide maps); else only the focused point is linked to the page below */
+    newsCards?: boolean;
+    newsPins?: string[];
+    /** group under the pointer in the side list / carousel */
+    newsFocus?: string | null;
+    /** how many of the latest places get a card without a click */
+    newsAuto?: number;
+    onnews?: (key: string) => void;
+    onnewsclose?: (key: string) => void;
+    onnewsplace?: (code: string) => void;
+    onnewshover?: (key: string | null) => void;
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -251,6 +269,7 @@
     if (tg.flow !== null) { pinned = touch && flows[tg.flow] ? flows[tg.flow].tip : null; return; }
     if (tg.poi !== null) {
       const h = pois[tg.poi];
+      if (h?.kind === 'news') { onnews?.(h.key); pinned = null; return; }
       if (h?.code) onpick(h.code);
       pinned = touch && h ? h.tip : null;
       return;
@@ -290,6 +309,83 @@
     return hover.code ? shapeOf(hover.code) : null;
   });
   const selMuniShape = $derived(selMuni ? muniByCode.get(selMuni) ?? null : null);
+
+  // ------------------------------------------------------------ news callouts
+  /** viewBox -> pixels in the map box (the SVG is letterboxed when its height is capped) */
+  const fit = $derived.by(() => {
+    const s = Math.min(boxW / geo.width, boxH / geo.height);
+    return { s, ox: (boxW - geo.width * s) / 2, oy: (boxH - geo.height * s) / 2 };
+  });
+  const toScreen = (xy: [number, number]): [number, number] => {
+    const [x, y] = transform.apply(xy);
+    return [fit.ox + x * fit.s, fit.oy + y * fit.s];
+  };
+  // Land (and the inset boxes) drawn at 1/4 size: the free sea around Japan is where cards go.
+  // Rebuilt after zooming settles (one frame later), not on every pointer move.
+  let mask = $state.raw<Mask | null>(null);
+  let maskTimer = 0;
+  $effect(() => {
+    if (!newsCards || !news.length) { mask = null; return; }
+    const tr = transform, f = fit, W = boxW, H = boxH;
+    cancelAnimationFrame(maskTimer);
+    maskTimer = requestAnimationFrame(() => {
+      const q = 4, w = Math.ceil(W / q), h = Math.ceil(H / q);
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
+      const k = (f.s * tr.k) / q;
+      ctx.setTransform(k, 0, 0, k, (f.ox + tr.x * f.s) / q, (f.oy + tr.y * f.s) / q);
+      ctx.fillStyle = '#000';
+      for (const s of geo.prefs) ctx.fill(new Path2D(s.d));
+      for (const r of geo.insets) ctx.fillRect(r.x, r.y, r.w, r.h);
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const occ = new Uint8Array(w * h);
+      for (let i = 0; i < occ.length; i++) occ[i] = px[i * 4 + 3] > 40 ? 1 : 0;
+      mask = { w, h, q, sat: buildSat(occ, w, h) };
+    });
+    return () => cancelAnimationFrame(maskTimer);
+  });
+  let dismissed = $state<string[]>([]);
+  const CARD = { w: 310, h: 158 };
+  const callouts = $derived.by(() => {
+    if (!newsCards || !mask || !news.length) return [];
+    const inView = (g: NewsGroup) => {
+      if (!g.xy) return true;
+      const [x, y] = toScreen(g.xy);
+      return x > 4 && y > 4 && x < boxW - 4 && y < boxH - 4;
+    };
+    const byKey = new Map(news.map((g) => [g.key, g]));
+    const order: NewsGroup[] = [];
+    const add = (g: NewsGroup | undefined) => { if (g && !order.includes(g) && inView(g)) order.push(g); };
+    for (const k of newsPins) add(byKey.get(k));
+    if (newsFocus) add(byKey.get(newsFocus));
+    // the latest places, skipping one whose newest article is already on a card (an article naming two wards)
+    const shown = new Set(order.map((g) => g.items[0].link));
+    let n = 0;
+    for (const g of news.filter((g) => g.xy && !dismissed.includes(g.key) && !newsPins.includes(g.key) && inView(g))
+      .sort((a, b) => b.latest.localeCompare(a.latest))) {
+      if (n >= newsAuto) break;
+      if (shown.has(g.items[0].link)) continue;
+      shown.add(g.items[0].link); add(g); n++;
+    }
+    const pts = news.filter((g) => g.xy).map((g) => toScreen(g.xy!));
+    // keep the zoom buttons clear
+    const clear: [number, number, number, number][] = [[boxW - 56, boxH - 150, boxW, boxH], [0, 0, 200, 44]];
+    // a group with several items has a pager row
+    const placed = placeCards(order.map((g) => ({ key: g.key, p: g.xy ? toScreen(g.xy) : null, h: g.items.length > 1 ? CARD.h + 26 : CARD.h })), mask, boxW, boxH, CARD, clear, pts);
+    return placed.map((p) => ({ ...p, g: byKey.get(p.key)!, pin: newsPins.includes(p.key) }));
+  });
+  /** narrow maps: the focused point is linked to the card list below the map */
+  const focusLink = $derived.by(() => {
+    if (newsCards || !newsFocus) return null;
+    const g = news.find((x) => x.key === newsFocus);
+    if (!g?.xy) return null;
+    const [x, y] = toScreen(g.xy);
+    if (x < 0 || y < 0 || x > boxW || y > boxH) return null;
+    return { x, y };
+  });
+  const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 </script>
 
 <div class="map" bind:this={wrap}>
@@ -403,7 +499,7 @@
     {#each pois as h, hi (h.key)}
       {@const [x, y] = transform.apply(h.xy)}
       <g class="poi {h.kind}" transform="translate({x},{y}) scale({px})" data-poi={hi}>
-        <circle class="hit" r={Math.max(9, h.r + 3)} />
+        <circle class="hit" r={Math.max(9, h.r + 3)} cy={h.kind === 'news' ? -h.r - 5 : 0} />
         {#if h.kind === 'air'}
           <circle class="pm" r={h.r} />
           <path class="glyph" transform="scale({h.r / 6})" d="M0-4.2 0.9-1.2 4.2 0.6 4.2 1.5 0.9 0.6 0.6 3 1.8 3.9 1.8 4.5 0 3.9-1.8 4.5-1.8 3.9-0.6 3-0.9 0.6-4.2 1.5-4.2 0.6-0.9-1.2Z" />
@@ -423,8 +519,12 @@
           <circle class="org" r={h.r} />
           <circle class="org-c" r={h.r * 0.38} />
         {:else}
-          <rect class="nw" x={-h.r - 3} y={-h.r} width={2 * h.r + 6} height={2 * h.r} rx={h.r} />
-          <text class="nw-t" text-anchor="middle" dy="0.35em">{h.badge}</text>
+          <!-- news: a speech bubble with the number of items; a ring when the place is in focus -->
+          {#if newsFocus === h.key || newsPins.includes(h.key)}<circle class="nw-ring" r={h.r + 6} />{/if}
+          <path class="nw" d="M{-h.r - 4},{-h.r}h{2 * h.r + 8}a4 4 0 0 1 4 4v{2 * h.r - 8}a4 4 0 0 1-4 4h{-(h.r + 1)}l-3 5l-3-5h{-(h.r - 2)}a4 4 0 0 1-4-4v{-(2 * h.r - 8)}a4 4 0 0 1 4-4z"
+                transform="translate(0,{-h.r - 5})" />
+          {#if h.fresh}<circle class="nw-new" cx={h.r + 5} cy={-2 * h.r - 4} r="3.5" />{/if}
+          <text class="nw-t" text-anchor="middle" y={-h.r - 5} dy="0.35em">{h.badge}</text>
         {/if}
         {#if h.major && (transform.k >= 2.5 || h.kind === 'typhoon' || h.kind === 'quake' || h.kind === 'origin')}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
       </g>
@@ -448,6 +548,32 @@
       </g>
     {/each}
   </svg>
+
+  {#if callouts.length || focusLink}
+    <div class="callouts" style:width="{boxW}px" style:height="{boxH}px">
+      <svg class="leaders" width={boxW} height={boxH} aria-hidden="true">
+        {#each callouts as c (c.key)}
+          {#if c.path}
+            <path class="leader-halo" d={c.path} />
+            <path class="leader" class:draw={!reduceMotion} class:hot={newsFocus === c.key} d={c.path} pathLength="1" />
+            <circle class="leader-dot" cx={c.px} cy={c.py} r="3.5" />
+          {/if}
+        {/each}
+        {#if focusLink}
+          <path class="leader-halo" d="M{focusLink.x},{focusLink.y}V{boxH}" />
+          <path class="leader hot" d="M{focusLink.x},{focusLink.y}V{boxH}" />
+          <circle class="focus-ring" cx={focusLink.x} cy={focusLink.y} r="16" />
+        {/if}
+      </svg>
+      {#each callouts as c (c.key)}
+        <div class="callout" style:left="{c.x}px" style:top="{c.y}px" style:width="{c.w}px" style:height="{c.h}px">
+          <NewsCallout group={c.g} {lang} active={newsFocus === c.key || c.pin}
+                       onplace={onnewsplace} onhover={(on) => onnewshover?.(on ? c.key : null)}
+                       onclose={() => { if (c.pin) onnewsclose?.(c.key); else dismissed = [...dismissed, c.key]; }} />
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   <div class="sr-only" aria-live="polite">{kbdLabel}</div>
 
@@ -559,8 +685,12 @@
   .track { fill: none; stroke: var(--clay); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
   .track.forecast { stroke-dasharray: 5 4; }
   .nw { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
-  .nw-t { font-size: 10.5px; font-weight: 700; fill: var(--bg); stroke: none; pointer-events: none; }
+  .poi.news:hover .nw { fill: var(--ink-2); }
+  .nw-t { font-size: 12px; font-weight: 700; fill: var(--bg); stroke: none; pointer-events: none; }
+  .nw-new { fill: var(--clay); stroke: var(--surface); stroke-width: 1.5; }
+  .nw-ring { fill: none; stroke: var(--ink); stroke-width: 2; stroke-dasharray: 3 2; }
   .overlay .poi.news text.nw-t, .overlay .poi.quake text.qk-t { paint-order: normal; stroke: none; }
+  .overlay .poi.news text.nw-t { fill: var(--bg); }
   .ring { fill: var(--mark); fill-opacity: 0.05; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
   .ring-label { font-size: 11px; font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
   .flow { cursor: pointer; }
@@ -583,6 +713,17 @@
   }
   .joint text { font-weight: 500; font-size: 10.5px; fill: var(--ink-2); }
 
+  .callouts { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 5; }
+  .leaders { position: absolute; inset: 0; overflow: visible; }
+  .leader, .leader-halo { fill: none; stroke-linejoin: round; stroke-linecap: round; }
+  .leader-halo { stroke: var(--surface); stroke-width: 4; stroke-opacity: 0.85; }
+  .leader { stroke: var(--ink); stroke-width: 1.3; }
+  .leader.hot { stroke-width: 2.2; }
+  .leader.draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 0.45s ease-out forwards; }
+  @keyframes draw { to { stroke-dashoffset: 0; } }
+  .leader-dot { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
+  .focus-ring { fill: none; stroke: var(--ink); stroke-width: 2; }
+  .callout { position: absolute; pointer-events: auto; }
   .zoom { position: absolute; right: 8px; bottom: 8px; display: flex; flex-direction: column; gap: 4px; }
   .zbtn {
     width: 40px; height: 40px; display: grid; place-items: center;
