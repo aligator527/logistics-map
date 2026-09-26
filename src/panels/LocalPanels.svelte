@@ -1,0 +1,72 @@
+<script lang="ts">
+  import { app } from '../lib/state.svelte';
+  import { store as s } from '../lib/store.svelte';
+  import { t, type Key } from '../lib/i18n';
+  import { fmtCompact, fmtMinutes } from '../lib/scale';
+  import BarList from '../components/BarList.svelte';
+  import MuniProfile from '../components/MuniProfile.svelte';
+  import ComparePanel from '../components/ComparePanel.svelte';
+  const L = $derived(app.lang);
+  const tt = (k: Key) => t(app.lang, k);
+  const p = $derived(app.pref);
+  const lt = $derived(s.lt), muni = $derived(s.muni), localLevel = $derived(s.localLevel), names = $derived(s.names), sites = $derived(s.sites);
+  const { pname, muniLabel, onpick, originName } = s;
+</script>
+
+{#if localLevel && lt}
+  {#if app.lmet === 'iso' || app.iso}
+    <section class="panel">
+      <div class="head-row">
+        <p class="eyebrow">{tt('isoTitle')}{lt.originKey ? ` · ${originName(lt.originKey)}` : ''}</p>
+        {#if app.iso}<button type="button" class="linkish" onclick={() => (app.iso = '')}>{tt('isoClear')}</button>{/if}
+      </div>
+      {#if !lt.router}
+        <p class="src" role="status">{tt('loadingNetwork')}</p>
+      {:else if !lt.isoTimes}
+        <p class="src">{tt('isoPick')}</p>
+      {:else}
+        {@const ip = lt.isoPop ?? []}
+        {@const top = Math.max(...ip.map((x) => x.pop), 1)}
+        <p class="sub-eyebrow">{tt('isoPop')}</p>
+        <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)}${L === 'ja' ? '' : ''} ${tt('isoWithin')}`,
+                                                     value: `${fmtCompact(L, x.pop)}${L === 'ja' ? '人' : ''}`, pct: (x.pop / top) * 100 }))} />
+        {@const st = lt.router.toPlaces([lt.originPlace(lt.originKey)!], sites.map((s) => lt!.router!.poi(`site:${s.name}`) ?? { ll: [0, 0] as [number, number], comp: -9, acc: [] }))}
+        <p class="sub-eyebrow">{tt('isoDpl')}</p>
+        <ul class="lvls">
+          {#each [30, 60, 120] as lim (lim)}<li>{fmtMinutes(L, lim)} <strong class="tnum">{st.filter((x) => x <= lim).length}</strong></li>{/each}
+        </ul>
+        <p class="sub-eyebrow">{tt('isoHubs')}</p>
+        <ul class="plain">
+          {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
+            {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
+            <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
+          {/each}
+        </ul>
+      {/if}
+      <p class="src note">{tt('isoNote')} <a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
+    </section>
+  {/if}
+  {#if app.muni && lt.indexOf(app.muni) >= 0}
+    <section class="panel">
+      <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>
+      <MuniProfile rows={lt.profile(app.muni)} lang={L} current={app.lmet} onmetric={(k) => (app.lmet = k)} />
+    </section>
+  {/if}
+  {#if app.ma || app.mb}
+    <section class="panel">
+      <p class="eyebrow">{tt('compareMunis')}</p>
+      <ComparePanel {names} lang={L} a={1} b={2} rows={lt.compareRows}
+                    labels={[app.ma ? muniLabel(app.ma) : '', app.mb ? muniLabel(app.mb) : '']}
+                    onset={() => {}} onswap={() => ([app.ma, app.mb] = [app.mb, app.ma])}
+                    onclear={(slot) => (slot === 'a' ? (app.ma = '') : (app.mb = ''))} />
+    </section>
+  {/if}
+  {@const met = lt.metric}
+  {@const topM = lt.codes.map((c, i) => ({ c, v: lt!.raw[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
+    .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v) || (muni?.m.pop[lt!.indexOf(b.c)] ?? 0) - (muni?.m.pop[lt!.indexOf(a.c)] ?? 0)).slice(0, 10)}
+  <section class="panel">
+    <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''} · {met[L]}</p>
+    <BarList bars={topM.map((x) => ({ key: x.c, label: muniLabel(x.c), value: met.fmt(x.v),
+                                      pct: (Math.abs(x.v) / Math.max(...topM.map((y) => Math.abs(y.v)), 1e-9)) * 100, neg: x.v < 0, onclick: () => onpick(x.c) }))} />
+  </section>
+{/if}

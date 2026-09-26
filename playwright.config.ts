@@ -6,7 +6,8 @@ const live = !!process.env.LIVE_URL;
 
 export default defineConfig({
   testDir: 'e2e',
-  testMatch: live ? 'live.spec.ts' : /^(?!live).*\.spec\.ts$/,
+  testMatch: live ? '**/live.spec.ts' : '**/*.spec.ts',
+  testIgnore: live ? undefined : '**/live.spec.ts',
   timeout: 60_000,
   expect: { timeout: 15_000 },
   fullyParallel: true,

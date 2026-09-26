@@ -165,3 +165,9 @@ class Live {
 }
 
 export const live = new Live();
+
+/** JMA seismic-intensity colours: fill, text */
+export const INT_COLOR: Record<string, [string, string]> = {
+  '3': ['#0041ff', '#fff'], '4': ['#fae696', '#111'], '5-': ['#ffe600', '#111'], '5+': ['#ff9900', '#111'],
+  '6-': ['#ff2800', '#fff'], '6+': ['#a50021', '#fff'], '7': ['#b40068', '#fff'],
+};

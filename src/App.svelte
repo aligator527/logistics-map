@@ -1,5 +1,13 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { store as s } from './lib/store.svelte';
+  import NowPanels from './panels/NowPanels.svelte';
+  import LocalPanels from './panels/LocalPanels.svelte';
+  import ScorePanels from './panels/ScorePanels.svelte';
+  import FlowsPanels from './panels/FlowsPanels.svelte';
+  import LabourPanels from './panels/LabourPanels.svelte';
+  import ShortlistPanel from './panels/ShortlistPanel.svelte';
+  import SourcesFooter from './panels/SourcesFooter.svelte';
   import { loadCensusIndex, loadDpl, loadJobs, loadRoads, loadSsw, loadWarehouse, METRICS, fmtDate, fmtValue, fmtYm, fmtYoy,
            isBuilt, valueOf, yoyOf, type CensusIndex, type Dpl, type Jobs, type Roads, type Ssw, type Warehouse } from './lib/data';
   import { loadGeo, loadMunis, roadPaths, type GeoData, type Shape } from './lib/geo';
@@ -13,7 +21,7 @@
   import { MUNI_PRESETS, MuniScoreTheme } from './themes/muniscore.svelte';
   import { LocalTheme } from './themes/local.svelte';
   import { NowTheme, type Diesel } from './themes/now.svelte';
-  import { live, WARN } from './lib/live.svelte';
+  import { live, WARN, INT_COLOR } from './lib/live.svelte';
   import { Router, type Network } from './lib/travel';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
@@ -40,29 +48,11 @@
   import Segmented from './components/Segmented.svelte';
   import type { Tip } from './components/Tooltip.svelte';
 
-  interface MuniData {
-    codes: string[];
-    m: Record<string, (number | null)[]> & { icName: string[]; landEst: number[] };
-    prefLand: (number | null)[];
-    sites: Record<string, Catchment>;
-    siteMedian: Record<string, number | null>;
-    sources: Record<string, { ja: string; en: string; url: string }>;
-  }
 
-  let w = $state.raw<Warehouse | null>(null);
-  let geo = $state.raw<GeoData | null>(null);
-  let dpl = $state.raw<Dpl | null>(null);
-  let roads = $state.raw<Roads | null>(null);
-  let census = $state.raw<CensusIndex | null>(null);
-  let ssw = $state.raw<Ssw | null>(null);
-  let jobs = $state.raw<Jobs | null>(null);
-  let news = $state.raw<News | null>(null);
-  /** airports (+ ports / rail freight stations in a non-commercial build) */
-  let hubs = $state.raw<{ noncommercial: boolean; items: { kind: 'air' | 'port' | 'rail'; name: string; cls: string; t: number | null; intl?: number | null; teu?: number | null; p: [number, number] }[];
-    sites: Record<string, { air: { n: string; km: number } | null; port?: { n: string; km: number } }>; sources: Record<string, { ja: string; en: string; url: string }> } | null>(null);
-  /** municipal indicators + DPL catchments (public/data/muni.json) */
-  let muni = $state.raw<MuniData | null>(null);
-  let risk = $state.raw<{ sites: Record<string, { quake: number | null; flood: number; surge: number }>; depthLegend: { rank: number; ja: string; en: string }[] } | null>(null);
+  // loaded data lives in the shared store (the side panels read it too)
+  const w = $derived(s.w), geo = $derived(s.geo), dpl = $derived(s.dpl), roads = $derived(s.roads), census = $derived(s.census);
+  const ssw = $derived(s.ssw), jobs = $derived(s.jobs), news = $derived(s.news), hubs = $derived(s.hubs), muni = $derived(s.muni);
+  const risk = $derived(s.risk), diesel = $derived(s.diesel);
   let error = $state<string | null>(null);
   let highlight = $state<number | null>(null);
 
@@ -70,10 +60,10 @@
   const tt = (k: Key) => t(L, k);
 
   // ------------------------------------------------------------ themes
-  const names = $derived(geo ? geo.prefs.map((p) => p.name) : []);
-  const pname = (c: number) => prefName(L, c, names[c - 1] ?? '');
+  const names = $derived(s.names), muniShape = $derived(s.muniShape);
+  const { pname, muniLabel, onpick, onsite, clearFocus, showReach, originName, hubRows, srcName } = s;
   const today = new Date();
-  const sites = $derived(dpl ? dpl.sites : []);
+  const sites = $derived(s.sites);
   const sitesIn = (pref: number) => sites.map((s, i) => [i, s] as [number, typeof s]).filter(([, s]) => s.pref === pref);
   const dplCount = (pref: number) => {
     const list = sitesIn(pref);
@@ -90,25 +80,9 @@
     adjacent: (a, b) => geo!.adjacent.has(`${Math.min(a, b)}-${Math.max(a, b)}`),
     dplCount,
   };
-  let wh = $state.raw<WarehouseTheme | null>(null);
-  let fl = $state.raw<FlowsTheme | null>(null);
-  let lb = $state.raw<LabourTheme | null>(null);
-  let sc = $state.raw<ScoreTheme | null>(null);
-  let msc = $state.raw<MuniScoreTheme | null>(null);
-  let lt = $state.raw<LocalTheme | null>(null);
-  let nt = $state.raw<NowTheme | null>(null);
-  let diesel = $state.raw<Diesel | null>(null);
-  const nowWarn = $derived(app.layer === 'now' && !!nt && nt.isWarn);
-  const muniLevel = $derived(app.layer === 'score' && app.slevel === 'muni' && !!msc);
-  const localLevel = $derived(app.layer === 'local' && !!lt);
-  /** the map shows municipalities (municipal score or the municipal data explorer) */
-  const mapMuni = $derived(muniLevel || localLevel || nowWarn);
-  /** the active municipal theme */
-  const mt = $derived(muniLevel ? msc : localLevel ? lt : null);
-  const view = $derived<ThemeView | null>(app.layer === 'flows' ? fl : app.layer === 'labour' ? lb
-    : app.layer === 'score' ? (muniLevel ? msc : sc) : app.layer === 'local' ? lt : app.layer === 'now' ? nt : wh);
-  /** the active score theme (prefecture or municipal) */
-  const scv = $derived(muniLevel ? msc! : sc);
+  const wh = $derived(s.wh), fl = $derived(s.fl), lb = $derived(s.lb), sc = $derived(s.sc), msc = $derived(s.msc), lt = $derived(s.lt), nt = $derived(s.nt);
+  const nowWarn = $derived(s.nowWarn), muniLevel = $derived(s.muniLevel), localLevel = $derived(s.localLevel), mapMuni = $derived(s.mapMuni);
+  const mt = $derived(s.mt), view = $derived(s.view), scv = $derived(s.scv);
 
   const lists = $derived<HashLists | null>(w && census && ssw && jobs && sc ? {
     quarters: w.quarters.map((x) => x.id),
@@ -125,37 +99,38 @@
   async function boot() {
     error = null;
     try {
-      const [ww, g, d, ci, s, j, ps, extra] = await Promise.all([loadWarehouse(), loadGeo(), loadDpl(), loadCensusIndex(), loadSsw(), loadJobs(),
+      const [ww, g, d, ci, sw, j, ps, extra] = await Promise.all([loadWarehouse(), loadGeo(), loadDpl(), loadCensusIndex(), loadSsw(), loadJobs(),
         fetch(`${import.meta.env.BASE_URL}geo/prefstats.json`).then((r) => r.json() as Promise<PrefStats>), loadRiskCriteria()]);
-      wh = new WarehouseTheme(ww, ctx);
-      fl = new FlowsTheme(ci, ctx);
-      lb = new LabourTheme(j, s, ctx);
-      sc = new ScoreTheme(ww, fl, j, s, ps, extra, ctx);
-      w = ww; geo = g; dpl = d; census = ci; ssw = s; jobs = j;
+      s.wh = new WarehouseTheme(ww, ctx);
+      const flows = new FlowsTheme(ci, ctx);
+      s.fl = flows;
+      s.lb = new LabourTheme(j, sw, ctx);
+      s.sc = new ScoreTheme(ww, flows, j, sw, ps, extra, ctx);
+      s.w = ww; s.geo = g; s.dpl = d; s.census = ci; s.ssw = sw; s.jobs = j;
       app.fromHash(location.hash, lists!);
       // municipalities (boundaries, names, municipal score) follow the first paint
-      loadMunis(g).then((full) => (geo = full)).catch((e) => console.warn('munis', e));
+      loadMunis(g).then((full) => (s.geo = full)).catch((e) => console.warn('munis', e));
       // roads are secondary: the map works without them
-      loadRoads().then((r) => (roads = r)).catch((e) => console.warn('roads', e));
-      diesel = await fetch(`${import.meta.env.BASE_URL}data/diesel.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      loadRoads().then((r) => (s.roads = r)).catch((e) => console.warn('roads', e));
+      s.diesel = await fetch(`${import.meta.env.BASE_URL}data/diesel.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (!d) return;
-        muni = d;
+        s.muni = d;
         sc!.landRaw = d.prefLand.map((v: number | null) => v ?? NaN);
         const t = new MuniScoreTheme(d, j, extra, ctx);
         t.setNamer(muniLabel);
-        msc = t;
+        s.msc = t;
         const l = new LocalTheme(d, ctx);
         l.setNamer(muniLabel);
-        lt = l;
+        s.lt = l;
         const nw = new NowTheme(diesel, d.codes, ctx);
         nw.setNamer(muniLabel);
-        nt = nw;
+        s.nt = nw;
         // the hash may carry municipal weights that were not known at boot
         app.fromHash(location.hash, lists!);
       }).catch((e) => console.warn('muni', e));
-      fetch(`${import.meta.env.BASE_URL}data/multimodal.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (hubs = d)).catch(() => {});
-      fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (news = n)).catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}data/multimodal.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (s.hubs = d)).catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (s.news = n)).catch(() => {});
     } catch (e) {
       error = String(e);
     }
@@ -204,7 +179,7 @@
       const r = await fetch(`${import.meta.env.BASE_URL}data/risk.json`);
       if (!r.ok) return [];
       const j = await r.json();
-      risk = j;
+      s.risk = j;
       return j.criteria as ExtraCriteria[];
     } catch {
       return [];
@@ -219,11 +194,6 @@
       .sort((x, y) => Number(x.built) - Number(y.built) || (x.i === app.site ? 1 : 0) - (y.i === app.site ? 1 : 0));
   });
   const roadLayer = $derived(geo && roads ? roadPaths(geo, roads) : null);
-  /** JMA seismic-intensity colours: fill, text */
-  const INT_COLOR: Record<string, [string, string]> = {
-    '3': ['#0041ff', '#fff'], '4': ['#fae696', '#111'], '5-': ['#ffe600', '#111'], '5+': ['#ff9900', '#111'],
-    '6-': ['#ff2800', '#fff'], '6+': ['#a50021', '#fff'], '7': ['#b40068', '#fff'],
-  };
   const toMap = (lon: number, lat: number) => geo!.P(projectLL(lon, lat, geo!.layout).p);
   const livePois = $derived.by((): Poi[] => {
     if (!geo || app.layer !== 'now') return [];
@@ -276,7 +246,6 @@
   let mapW = $state(1000);
   /** wide map: callout cards over the sea; narrow: a card strip under the map */
   const newsCards = $derived(mapW >= 640);
-  const srcName = (k: string) => news?.sources.find((s) => s.key === k)?.[L] ?? k;
   /** group key of a news item: its first municipality, else prefecture, else national */
   const newsKeyOf = (it: NewsItem) => (it.munis.length ? `m${it.munis[0]}` : it.prefs.length ? `p${pad2(it.prefs[0])}` : 'jp');
   /** news of the last 90 days grouped by place (an item naming two places is shown at both) */
@@ -354,8 +323,6 @@
     if (!xy) return [];
     return [{ key: 'origin', kind: 'origin', xy, r: 7, label: originName(k), major: true, tip: { title: originName(k), sub: tt('isoOrigin') } }];
   });
-  function originName(k: string) { return k.startsWith('muni:') ? muniLabel(k.slice(5)) : k.slice(5); }
-  function showReach(key: string) { app.stopCompare(); app.layer = 'local'; app.lmet = 'iso'; app.iso = key; }
   const hubPois = $derived.by((): Poi[] => {
     if (!geo || !hubs || !app.showHubs) return [];
     const maxT = { air: 0, port: 0, rail: 1 };
@@ -372,22 +339,6 @@
                tip: { title: h.name, sub: `${label[h.kind]} · ${h.cls}`, rows, source: src ? src[L] : undefined } };
     }).sort((a, b) => a.r - b.r);
   });
-
-  /** nearest cargo airport / major port of a DPL site */
-  function hubRows(name: string): [string, string][] {
-    const hb = hubs?.sites[name];
-    const out: [string, string][] = [];
-    if (lt?.router) {
-      for (const [g, key] of [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const) {
-        const h = lt.hubsFrom(`site:${name}`, g, 1)[0];
-        if (h) out.push([tt(key), `${h.name} · ${fmtMinutes(L, h.t)}`]);
-      }
-      if (out.length) return out;
-    }
-    if (hb?.air) out.push([tt('nearestAir'), `${hb.air.n} ${fmtNum(L, hb.air.km, 0)} km`]);
-    if (hb?.port) out.push([tt('nearestPort'), `${hb.port.n} ${fmtNum(L, hb.port.km, 0)} km`]);
-    return out;
-  }
 
   /** 10 / 30 / 60 km around the selected DPL site; typhoon gale areas in the live theme */
   const rings = $derived.by(() => [...siteRings, ...typhoonRings]);
@@ -408,14 +359,6 @@
   const dplSource = $derived(!dpl ? '' : L === 'ja' ? `${dpl.source.ja}（${fmtDate(L, dpl.source.updated)}更新）`
     : `${dpl.source.en} (updated ${fmtDate(L, dpl.source.updated)})`);
 
-  const muniShape = $derived(geo ? new Map(geo.munis.map((s) => [s.code, s])) : new Map<string, Shape>());
-  /** 「川口市（埼玉県）」 / "Kawaguchi City, Saitama" */
-  function muniLabel(code: string) {
-    const s = muniShape.get(code);
-    const c = Number(code.slice(0, 2));
-    if (!s) return code;
-    return L === 'ja' ? `${s.name}（${names[c - 1] ?? ''}）` : `${s.nameEn || s.name}, ${pname(c)}`;
-  }
   function muniTip(s: Shape): Tip {
     const c = Number(s.code.slice(0, 2));
     const n = sites.filter((x) => x.muni === s.code).length;
@@ -456,16 +399,6 @@
     };
   }
 
-  function onpick(code: string) {
-    app.site = -1;
-    if (code.length === 5) { app.muni = app.muni === code ? '' : code; app.pref = Number(code.slice(0, 2)); return; }
-    app.muni = '';
-    app.pick(Number(code));
-  }
-  function onsite(i: number) {
-    app.site = app.site === i ? -1 : i;
-    if (app.site >= 0 && !app.compare && sites[i].pref !== app.pref) app.pref = sites[i].pref;
-  }
   const places = $derived.by((): Place[] => {
     if (!geo) return [];
     const prefs = geo.prefs.map((p) => ({ key: p.code, name: L === 'ja' ? p.name : pname(Number(p.code)), alt: L === 'ja' ? pname(Number(p.code)) : p.name, parent: '', kind: 'pref' as const }));
@@ -575,44 +508,6 @@
     return { title: `${pname(p)}${app.muni && muniShape.get(app.muni) ? ` · ${L === 'ja' ? muniShape.get(app.muni)!.name : muniShape.get(app.muni)!.nameEn}` : ''}`, sections, sources: [...new Set(sources)] };
   });
 
-  // ------------------------------------------------------------ shortlist & CSV
-  function shortLabel(it: ShortItem) {
-    if (it.kind === 'pref') return pname(Number(it.code));
-    if (it.kind === 'muni') return muniLabel(it.code);
-    return sites[Number(it.code)]?.name ?? it.code;
-  }
-  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : 'dplIn');
-  /** live warning level at a shortlisted place (prefecture: its highest municipal level) */
-  function shortAlert(it: ShortItem): { level: number; text: string } {
-    if (!muni || !live.warnTime) return { level: 0, text: '' };
-    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : muni.codes.filter((c) => Number(c.slice(0, 2)) === Number(it.code));
-    let level = 0, best = '';
-    for (const c of codes) { const l = live.level(c, true); if (l > level) { level = l; best = c; } }
-    const text = best ? (live.warnings.get(best) ?? []).filter((k) => (WARN[k]?.level ?? 0) >= 2).map((k) => WARN[k]?.[L] ?? k).join('・') : '';
-    return { level, text: it.kind === 'pref' && best ? `${muniLabel(best)}: ${text}` : text };
-  }
-  function openShort(it: ShortItem) {
-    app.stopCompare();
-    if (it.kind === 'pref') { app.muni = ''; app.site = -1; app.pref = Number(it.code); }
-    else if (it.kind === 'muni') { app.site = -1; app.pref = Number(it.code.slice(0, 2)); app.muni = it.code; }
-    else { const i = Number(it.code); if (sites[i]) { app.site = i; app.pref = sites[i].pref; } }
-  }
-  function exportShortlist() {
-    const lm = lt?.metrics ?? [];
-    const head = ['kind', 'code', 'name', 'prefecture', ...(sc ? [tt('layerScore') + '（' + tt('byPref') + '）'] : []),
-      ...(msc ? [tt('layerScore') + '（' + tt('byMuni') + '）'] : []), ...lm.map((m) => m[L]), tt('pop30'), tt('nearestIc'), tt('nearestAir')];
-    const rows = shortlist.items.map((it) => {
-      const pc = it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0;
-      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : '';
-      const mi = mc && lt ? lt.indexOf(mc) : -1;
-      const ct = it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined;
-      const hb = it.kind === 'site' ? hubs?.sites[sites[Number(it.code)]?.name ?? '']?.air : undefined;
-      return [it.kind, it.code, shortLabel(it), pname(pc), ...(sc ? [sc.result.total[pc - 1]?.toFixed(1)] : []),
-        ...(msc ? [mi >= 0 && msc ? msc.result.total[msc.indexOf(mc)]?.toFixed(1) : ''] : []),
-        ...lm.map((m) => (mi >= 0 ? m.get(mi) : '')), ct?.pop30 ?? '', ct ? `${ct.icName ?? ''} ${ct.ic ?? ''}` : '', hb ? `${hb.n} ${hb.km}` : ''];
-    });
-    downloadCsv(`shortlist-${new Date().toISOString().slice(0, 10)}.csv`, [head, ...rows]);
-  }
   function exportTable() {
     if (!view) return;
     const cols = view.table.columns;
@@ -621,12 +516,6 @@
       : Array.from({ length: 47 }, (_, i) => ({ id: i + 1, label: pname(i + 1), code: pad2(i + 1) }));
     downloadCsv(`${app.layer}-${new Date().toISOString().slice(0, 10)}.csv`,
       [['code', tt('area'), ...cols.map((c) => c.label)], ...areas.map((a) => [a.code, a.label, ...cols.map((c) => { const v = c.get(a.id); return isFinite(v) ? v : ''; })])]);
-  }
-
-  function clearFocus() {
-    app.pref = 0;
-    app.site = -1;
-    app.muni = '';
   }
 
   // ------------------------------------------------------------ side panel helpers
@@ -1010,149 +899,11 @@
           </section>
         {/if}
 
-        {#if app.layer === 'now' && nt}
-          {#if nt.isWarn}
-            {@const lv = (muni?.codes ?? []).map((c) => ({ c, v: live.level(c, app.nlog) })).filter((x) => x.v > 0 && (!p || Number(x.c.slice(0, 2)) === p))}
-            <section class="panel">
-              <div class="head-row">
-                <p class="eyebrow">{tt('warnCounts')}{p ? ` · ${pname(p)}` : ''}</p>
-                <span class="small" role="status">{live.loading ? '…' : live.warnTime ? `${tt('liveUpdated')} ${new Date(live.warnTime).toLocaleTimeString(L === 'ja' ? 'ja-JP' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
-              </div>
-              {#if live.error}<p class="src">{tt('liveError')}: {live.error}</p>{/if}
-              <ul class="lvls">
-                {#each [5, 4, 3, 2] as l (l)}
-                  <li><span class="lv-sw" style:background={nt.categories?.[l - 1]?.color}></span>{nt.levelName(l)} <strong class="tnum">{lv.filter((x) => x.v === l).length}</strong></li>
-                {/each}
-              </ul>
-              <BarList ranked={false} bars={lv.filter((x) => x.v >= 3).sort((a, b) => b.v - a.v || a.c.localeCompare(b.c)).slice(0, 15).map((x) => ({
-                key: x.c, label: muniLabel(x.c),
-                value: nt!.kinds(x.c).filter((k) => (WARN[k]?.level ?? 2) >= 3).map((k) => WARN[k]?.[L] ?? k).join('・'),
-                pct: (x.v / 5) * 100, onclick: () => onpick(x.c) }))} />
-              <p class="src note">{tt('warnHint')}</p>
-            </section>
-          {:else if diesel}
-            {@const k = diesel.dates.length - 1}
-            {@const order = Array.from({ length: 47 }, (_, i) => i + 1).filter((c) => isFinite(nt!.price(c))).sort((a, b) => nt!.price(b) - nt!.price(a))}
-            <section class="panel">
-              <p class="eyebrow">{tt('diesel')} · {diesel.dates[k]}</p>
-              <BarList bars={[...order.slice(0, 5), ...order.slice(-5)].map((c) => ({ key: String(c), label: pname(c), value: `${nt!.yen(nt!.price(c))} (${nt!.signedYen(nt!.change(c, 1))})`,
-                                                                                         pct: ((nt!.price(c) - nt!.price(order.at(-1)!) + 1) / (nt!.price(order[0]) - nt!.price(order.at(-1)!) + 1)) * 100, onclick: () => onpick(pad2(c)) }))} />
-              <p class="src note">{tt('dieselStale')}</p>
-            </section>
-          {/if}
-          <section class="panel">
-            <p class="eyebrow">{tt('typhoon')}</p>
-            {#if live.typhoons.length}
-              <ul class="plain">
-                {#each live.typhoons as t (t.id)}
-                  <li><strong>{tt('typhoon')} {Number(t.number.slice(2)) || ''}{L === 'ja' ? '号' : ''} {t.name[L === 'ja' ? 'jp' : 'en']}</strong> — {t.location}, {t.pressure} hPa,
-                    {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {t.course} {t.speed} km/h{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
-                    {#if t.pos && geo && projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside'}<span class="small">（{tt('offMap')}）</span>{/if}</li>
-                {/each}
-              </ul>
-            {:else}<p class="src">{tt('noTyphoon')}</p>{/if}
-          </section>
-          <section class="panel">
-            <p class="eyebrow">{tt('quakes')}</p>
-            {#if live.quakes.length}
-              <ul class="plain">
-                {#each live.quakes.slice(0, 10) as q (q.eid)}
-                  <li><span class="int" style:background={INT_COLOR[q.maxi]?.[0]} style:color={INT_COLOR[q.maxi]?.[1]}>{q.maxi.replace('-', '弱').replace('+', '強')}</span>
-                    {q.name} · {new Date(q.at).toLocaleString(L === 'ja' ? 'ja-JP' : 'en-GB', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}{q.mag !== null ? ` · M${q.mag}` : ''}</li>
-                {/each}
-              </ul>
-            {:else}<p class="src">{tt('noQuakes')}</p>{/if}
-            <p class="src note">{tt('jmaSource')}</p>
-          </section>
-        {/if}
+        <NowPanels />
 
-        {#if localLevel && lt}
-          {#if app.lmet === 'iso' || app.iso}
-            <section class="panel">
-              <div class="head-row">
-                <p class="eyebrow">{tt('isoTitle')}{lt.originKey ? ` · ${originName(lt.originKey)}` : ''}</p>
-                {#if app.iso}<button type="button" class="linkish" onclick={() => (app.iso = '')}>{tt('isoClear')}</button>{/if}
-              </div>
-              {#if !lt.router}
-                <p class="src" role="status">{tt('loadingNetwork')}</p>
-              {:else if !lt.isoTimes}
-                <p class="src">{tt('isoPick')}</p>
-              {:else}
-                {@const ip = lt.isoPop ?? []}
-                {@const top = Math.max(...ip.map((x) => x.pop), 1)}
-                <p class="sub-eyebrow">{tt('isoPop')}</p>
-                <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)}${L === 'ja' ? '' : ''} ${tt('isoWithin')}`,
-                                                             value: `${fmtCompact(L, x.pop)}${L === 'ja' ? '人' : ''}`, pct: (x.pop / top) * 100 }))} />
-                {@const st = lt.router.toPlaces([lt.originPlace(lt.originKey)!], sites.map((s) => lt!.router!.poi(`site:${s.name}`) ?? { ll: [0, 0] as [number, number], comp: -9, acc: [] }))}
-                <p class="sub-eyebrow">{tt('isoDpl')}</p>
-                <ul class="lvls">
-                  {#each [30, 60, 120] as lim (lim)}<li>{fmtMinutes(L, lim)} <strong class="tnum">{st.filter((x) => x <= lim).length}</strong></li>{/each}
-                </ul>
-                <p class="sub-eyebrow">{tt('isoHubs')}</p>
-                <ul class="plain">
-                  {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
-                    {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
-                    <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
-                  {/each}
-                </ul>
-              {/if}
-              <p class="src note">{tt('isoNote')} <a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
-            </section>
-          {/if}
-          {#if app.muni && lt.indexOf(app.muni) >= 0}
-            <section class="panel">
-              <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>
-              <MuniProfile rows={lt.profile(app.muni)} lang={L} current={app.lmet} onmetric={(k) => (app.lmet = k)} />
-            </section>
-          {/if}
-          {#if app.ma || app.mb}
-            <section class="panel">
-              <p class="eyebrow">{tt('compareMunis')}</p>
-              <ComparePanel {names} lang={L} a={1} b={2} rows={lt.compareRows}
-                            labels={[app.ma ? muniLabel(app.ma) : '', app.mb ? muniLabel(app.mb) : '']}
-                            onset={() => {}} onswap={() => ([app.ma, app.mb] = [app.mb, app.ma])}
-                            onclear={(slot) => (slot === 'a' ? (app.ma = '') : (app.mb = ''))} />
-            </section>
-          {/if}
-          {@const met = lt.metric}
-          {@const topM = lt.codes.map((c, i) => ({ c, v: lt!.raw[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
-            .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v) || (muni?.m.pop[lt!.indexOf(b.c)] ?? 0) - (muni?.m.pop[lt!.indexOf(a.c)] ?? 0)).slice(0, 10)}
-          <section class="panel">
-            <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''} · {met[L]}</p>
-            <BarList bars={topM.map((x) => ({ key: x.c, label: muniLabel(x.c), value: met.fmt(x.v),
-                                              pct: (Math.abs(x.v) / Math.max(...topM.map((y) => Math.abs(y.v)), 1e-9)) * 100, neg: x.v < 0, onclick: () => onpick(x.c) }))} />
-          </section>
-        {/if}
+        <LocalPanels />
 
-        {#if app.layer === 'score'}
-          <section class="panel">
-            <div class="head-row">
-              <p class="eyebrow">{tt('weights')}</p>
-              {#if app.preset !== 'balanced'}<button type="button" class="linkish" onclick={() => { app.preset = 'balanced'; app.weights = {}; }}>{tt('resetWeights')}</button>{/if}
-            </div>
-            <WeightPanel criteria={scv!.criteria} weights={scv!.weights} lang={L} onweight={(k, v) => scv!.setWeight(k, v)} />
-            <p class="src note">{tt('scoreCaveat')}{#if muniLevel} {tt('inheritedNote')}{/if} <a href="#method" onclick={() => { const d = document.getElementById('method') as HTMLDetailsElement | null; if (d) d.open = true; }}>{tt('method')}</a></p>
-          </section>
-          {#if muniLevel && msc && app.muni && msc.indexOf(app.muni) >= 0}
-            <section class="panel">
-              <p class="eyebrow">{tt('breakdown')} · {muniLabel(app.muni)}</p>
-              <ScoreBreakdown criteria={msc.criteria} parts={msc.result.parts} weights={msc.weights} code={msc.indexOf(app.muni) + 1} lang={L} />
-            </section>
-          {:else if !muniLevel && p}
-            <section class="panel">
-              <p class="eyebrow">{tt('breakdown')} · {pname(p)}</p>
-              <ScoreBreakdown criteria={sc.criteria} parts={sc.result.parts} weights={sc.weights} code={p} lang={L} />
-            </section>
-          {/if}
-          {#if muniLevel && msc}
-            {@const inPref = msc.codes.map((c, i) => ({ c, i, v: msc!.result.total[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
-              .sort((a, b) => b.v - a.v).slice(0, 10)}
-            <section class="panel">
-              <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''}</p>
-              <BarList bars={inPref.map((x) => ({ key: x.c, label: muniLabel(x.c), value: view.fmt(x.v), pct: x.v, onclick: () => onpick(x.c) }))} />
-            </section>
-          {/if}
-        {/if}
+        <ScorePanels />
 
         {#if tr}
         <section class="panel">
@@ -1162,43 +913,9 @@
         </section>
         {/if}
 
-        {#if app.layer === 'flows'}
-          {#if p}
-            {#each ['out', 'in'] as const as dir (dir)}
-              {@const list = fl.partners(p, dir, 10)}
-              <section class="panel">
-                <p class="eyebrow">{tt(dir === 'out' ? 'topOut' : 'topIn')}</p>
-                <BarList bars={list.map((x) => ({ key: String(x.code), label: pname(x.code), value: `${fl!.tons(x.v)} · ${fmtPct(L, x.share, 0)}`,
-                                                   pct: (x.v / (list[0]?.v || 1)) * 100, onclick: () => onpick(String(x.code)) }))} />
-              </section>
-            {/each}
-          {:else}
-            {@const pairs = fl.topPairs(10)}
-            <section class="panel">
-              <p class="eyebrow">{tt('topPairs')}</p>
-              <BarList bars={pairs.map((x) => ({ key: `${x.o}-${x.d}`, label: `${pname(x.o)} → ${pname(x.d)}`, value: fl!.tons(x.v),
-                                                  pct: (x.v / (pairs[0]?.v || 1)) * 100, onclick: () => onpick(String(x.o)) }))} />
-            </section>
-          {/if}
-        {/if}
+        <FlowsPanels />
 
-        {#if app.layer === 'labour'}
-          {#if app.lmetric === 'ssw'}
-            <section class="panel note-card">
-              <p class="eyebrow">{tt('warehouseField')}</p>
-              <p>{tt('warehouseFieldNote')}</p>
-              {#if app.field === 'transport'}<p>{tt('transportFieldNote')}</p>{/if}
-            </section>
-          {:else}
-            <section class="panel">
-              <p class="eyebrow">{tt('regionShortfall')}</p>
-              <BarList ranked={false} bars={jobs.shortfall2024.regions.map((r) => ({ key: r.en, label: r[L], value: fmtPct(L, r.pct),
-                                                                                      pct: (r.pct / 20) * 100 }))} />
-              <p class="src note">{tt('shortfallNote')} <a href={jobs.shortfall2024.source.url}>{jobs.shortfall2024.source[L]}</a> ·
-                <a href={jobs.shortfall2024.national.source.url}>{jobs.shortfall2024.national.source[L]}</a></p>
-            </section>
-          {/if}
-        {/if}
+        <LabourPanels />
 
         {#if app.site >= 0 && sites[app.site] && muni?.sites[sites[app.site].name]}
           <section class="panel">
@@ -1220,40 +937,7 @@
             <BarList bars={topBars(view)} />
           </section>
         {/if}
-        <section class="panel">
-          <div class="head-row">
-            <p class="eyebrow">{tt('shortlist')}{shortlist.items.length ? `（${shortlist.items.length}）` : ''}</p>
-            {#if shortlist.items.length}
-              <span class="acts">
-                <button type="button" class="linkish" onclick={exportShortlist}>{tt('exportCsv')}</button>
-                <button type="button" class="linkish" onclick={() => shortlist.clear()}>{tt('clearAll')}</button>
-              </span>
-            {/if}
-          </div>
-          {#if shortlist.items.length}
-            {@const alerts = shortlist.items.map((it) => shortAlert(it)).filter((a) => a.level >= 2)}
-            {#if live.warnTime}
-              <p class="alert-line" class:hot={alerts.some((a) => a.level >= 3)} role="status">
-                {alerts.length ? `${tt('shortAlert')}：${alerts.length}` : tt('shortAlertNone')}
-                {#if alerts.length}<button type="button" class="linkish" onclick={() => { app.layer = 'now'; app.nmet = 'warn'; }}>{tt('layerNow')} →</button>{/if}
-              </p>
-            {/if}
-            <ul class="short">
-              {#each shortlist.items as it (it.kind + it.code)}
-                {@const al = shortAlert(it)}
-                <li>
-                  <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}
-                    {#if al.level >= 2}<span class="lv-chip" style:background={nt?.categories?.[al.level - 1]?.color} class:inv={al.level >= 3}
-                                            title={al.text}>{nt?.levelName(al.level) ?? ''}</span>{/if}</button>
-                  <span class="kind">{shortKind(it)}</span>
-                  <button type="button" class="btn ghost x" aria-label={tt('remove')} onclick={() => shortlist.toggle(it.kind, it.code)}>×</button>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="src">{tt('shortEmpty')}</p>
-          {/if}
-        </section>
+        <ShortlistPanel />
         {#if news}
           <section class="panel">
             <p class="eyebrow">{tt('news')}</p>
@@ -1267,187 +951,8 @@
     </aside>
   </main>
 
-  <footer class="foot">
-    <h2 class="eyebrow">{tt('sources')}</h2>
-    <dl>
-      <dt>{L === 'ja' ? '営業倉庫' : 'Warehouses'}</dt>
-      <dd>
-        <a href={w.source.url}>{w.source[L]}</a>. {w.source.scope[L]}
-        {L === 'ja' ? '収録' : 'Coverage'}: {L === 'ja' ? w.quarters[0].ja : w.quarters[0].en} – {L === 'ja' ? w.quarters.at(-1)!.ja : w.quarters.at(-1)!.en}
-        {L === 'ja' ? `（最新号 ${fmtDate(L, w.quarters.at(-1)!.published)}公表）。` : ` (latest issue published ${fmtDate(L, w.quarters.at(-1)!.published)}).`}
-        {tt('lagNote')} {#if w.notes.length}{tt('totalReplaced')} ({w.notes.map((n) => n.quarter).join(', ')}){/if}
-      </dd>
-      <dt>{tt('layerFlows')}</dt>
-      <dd><a href={census.source.url}>{census.source[L]}</a>: {census.years.map((y) => y.survey[L]).join(', ')}. {census.source.note[L]} {census.source.licence[L]}.</dd>
-      <dt>{tt('lm_jobs')}</dt>
-      <dd><a href={jobs.source.url}>{jobs.source[L]}</a> ({jobs.periods[0][L]}–{jobs.periods.at(-1)![L]}). {jobs.source.note[L]}</dd>
-      <dt>{tt('lm_ssw')}</dt>
-      <dd><a href={ssw.source.url}>{ssw.source[L]}</a> ({ssw.periods[0][L]}–{ssw.periods.at(-1)![L]}). {ssw.source.note[L]}</dd>
-      <dt>{L === 'ja' ? '輸送力不足' : 'Capacity shortfall'}</dt>
-      <dd><a href={jobs.shortfall2024.national.source.url}>{jobs.shortfall2024.national.source[L]}</a>; <a href={jobs.shortfall2024.source.url}>{jobs.shortfall2024.source[L]}</a></dd>
-      <dt>DPL</dt>
-      <dd><a href={dpl.source.url}>{dpl.source[L]}</a>{L === 'ja'
-        ? `（${fmtDate(L, dpl.source.updated)}更新、${fmtDate(L, dpl.source.retrieved)}取得）。`
-        : ` (updated ${fmtDate(L, dpl.source.updated)}, retrieved ${fmtDate(L, dpl.source.retrieved)}). `}{dpl.source.note[L]}</dd>
-      {#if roads}
-        <dt>{tt('layerRoads')}</dt>
-        <dd><a href={roads.source.url}>{roads.source[L]}</a></dd>
-      {/if}
-      {#if risk}
-        <dt>{tt('groupRisk')}</dt>
-        <dd>{#each (risk as unknown as { criteria: ExtraCriteria[] }).criteria as c, i (c.key)}{i ? '; ' : ''}{c[L]}: {c.source[L]}{/each}.
-          {L === 'ja' ? 'DPL地点のハザード：' : 'Hazards at DPL sites: '}<a href="https://www.j-shis.bosai.go.jp/">J-SHIS</a>,
-          <a href="https://disaportal.gsi.go.jp/hazardmap/copyright/opendata.html">{L === 'ja' ? 'ハザードマップポータルサイト' : 'Hazard Map Portal'}</a>.</dd>
-      {/if}
-      {#if news}
-        <dt>{tt('news')}</dt>
-        <dd>{#each news.sources as s, i (s.key)}{i ? ', ' : ''}<a href={s.url}>{s[L]}</a>{/each}. {L === 'ja' ? '国土交通省の見出しは国土交通省ウェブサイトへのリンクです。' : 'MLIT headlines link to the MLIT website.'}</dd>
-      {/if}
-      {#if hubs}
-        <dt>{tt('layerHubs')}</dt>
-        <dd>{#each Object.values(hubs.sources) as s, i (s.url)}{i ? '; ' : ''}<a href={s.url}>{s[L]}</a>{/each}</dd>
-      {/if}
-      <dt>{tt('boundaries')}</dt>
-      <dd>{tt('boundarySource')}</dd>
-    </dl>
-    {#if hubs?.noncommercial}<p class="next">{tt('noncommercialNote')}</p>{/if}
-    <details id="method" class="method">
-      <summary>{tt('method')}</summary>
-      <p>{tt('methodBody')}</p>
-    </details>
-    <p class="next">{tt('phaseNext')}</p>
-  </footer>
+  <SourcesFooter />
   {#if dossierOpen && dossier}
     <Dossier title={dossier.title} subtitle={tt('dossierSub')} sections={dossier.sections} sources={dossier.sources} lang={L} onclose={() => (dossierOpen = false)} />
   {/if}
 {/if}
-
-<style>
-  .skip { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--surface); padding: 8px 12px; border-radius: 8px; }
-  .skip:focus { left: 8px; }
-
-  .top {
-    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px;
-    padding: 16px clamp(16px, 3vw, 32px) 12px;
-  }
-  .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
-  .logo { flex: none; }
-  h1 { margin: 0; font-size: 20px; line-height: 1.25; letter-spacing: 0.01em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .phase { font-size: 11px; font-weight: 500; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; }
-  .sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); max-width: 72ch; }
-  .prefs { display: flex; gap: 8px; flex-wrap: wrap; }
-
-  .state { padding: 64px 16px; text-align: center; color: var(--ink-2); }
-  .small { font-size: 12px; color: var(--muted); }
-
-  .subjects { padding: 0 clamp(16px, 3vw, 32px) 12px; border-bottom: 1px solid var(--line); }
-  .subjects :global(.seg button) { min-height: 38px; padding: 0 18px; font-size: 14.5px; }
-
-  .controls {
-    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end;
-    padding: 12px clamp(16px, 3vw, 32px);
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-    position: sticky; top: 0; z-index: 40;
-  }
-  .ctl { display: grid; gap: 4px; min-width: 0; }
-  .ctl .lab { font-size: 12px; color: var(--muted); }
-  .ctl.time { flex: 1 1 280px; max-width: 520px; }
-  .sel {
-    min-height: 38px; padding: 0 10px; max-width: 100%;
-    border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-2); font-size: 13.5px;
-  }
-  .toggles { display: flex; gap: 6px; flex-wrap: wrap; }
-  .chip { min-height: 36px; font-size: 13px; }
-  .chip[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
-  .chip:disabled { opacity: 0.4; cursor: not-allowed; }
-  .chip[aria-pressed='true'] .ab { background: var(--bg); }
-  .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
-  .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
-  .k-news { fill: currentColor; }
-  .mapwrap { position: relative; }
-  .national { position: absolute; left: 8px; top: 8px; z-index: 6; min-height: 32px; font-size: 12.5px;
-              background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }
-  .national[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
-
-  .grid {
-    display: grid; gap: 24px 32px;
-    grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-    padding: 16px clamp(16px, 3vw, 32px) 24px;
-  }
-  .mapcol { min-width: 0; display: grid; gap: 10px; align-content: start; }
-  .viewbar { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
-  .search-slot { margin-left: auto; flex: 0 1 300px; }
-  @media (max-width: 720px) { .search-slot { flex-basis: 100%; margin-left: 0; } }
-  .below { display: grid; gap: 8px; }
-  .src { margin: 0; font-size: 11.5px; color: var(--muted); }
-  .src a { color: var(--muted); }
-  .src.note { margin-top: 8px; }
-
-  .side { display: grid; gap: 20px; align-content: start; min-width: 0; border-left: 1px solid var(--line); padding-left: 32px; }
-  .panel { min-width: 0; }
-  .readout .kpi { margin: 0; font-size: clamp(28px, 4vw, 36px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
-  .kpi-sub { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
-  .kpi-sub strong { color: var(--ink); font-weight: 600; }
-  .help { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
-  .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  .head-row .eyebrow { margin-bottom: 10px; }
-  .lvls { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
-  .lvls li { display: inline-flex; align-items: center; gap: 6px; }
-  .lv-sw { width: 14px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); display: inline-block; }
-  .plain { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
-  .int { display: inline-block; min-width: 30px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; margin-right: 6px; }
-  .memo { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .acts { display: inline-flex; gap: 12px; }
-  .short { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-  .short li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); }
-  .short .kind { font-size: 11.5px; color: var(--muted); }
-  .lv-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #111; border: 1px solid var(--line-strong); vertical-align: 1px; }
-  .lv-chip.inv { color: #fff; }
-  .alert-line { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-2); display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
-  .alert-line.hot { color: var(--ink); font-weight: 600; }
-  .sub-eyebrow { margin: 12px 0 6px; font-size: 12px; color: var(--muted); }
-  .short .x { min-height: 32px; padding: 0 8px; }
-  .note-card { border: 1px solid var(--line); border-left: 3px solid var(--mark); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); font-size: 13px; }
-  .note-card p { margin: 0; }
-  .note-card p + p { margin-top: 8px; color: var(--ink-2); }
-
-  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .tile {
-    display: grid; gap: 2px; text-align: left; padding: 10px 12px; min-height: 44px;
-    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
-  }
-  .tile:hover { border-color: var(--line-strong); }
-  .tile[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
-  .tl { font-size: 12px; color: var(--muted); }
-  .tv { font-size: 16px; font-weight: 600; }
-  .ty { font-size: 11.5px; color: var(--ink-2); }
-
-  .foot { padding: 20px clamp(16px, 3vw, 32px) 40px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
-  .foot dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; max-width: 110ch; }
-  .foot dt { color: var(--muted); }
-  .foot dd { margin: 0; }
-  .next { margin: 16px 0 0; color: var(--muted); }
-  .method { margin-top: 16px; max-width: 110ch; }
-  .method summary { cursor: pointer; font-weight: 600; color: var(--ink); min-height: 32px; }
-  .method p { margin: 6px 0 0; line-height: 1.7; }
-
-  @media (max-width: 1080px) {
-    .grid { grid-template-columns: 1fr; }
-    .side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 20px;
-            grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 24px 32px; }
-  }
-  @media (max-width: 720px) {
-    .top { padding-top: 12px; }
-    h1 { font-size: 18px; }
-    .sub { display: none; }
-    /* six subjects: two rows of three rather than a row wider than the phone */
-    .subjects :global(.seg) { display: flex; flex-wrap: wrap; width: 100%; }
-    .subjects :global(.seg button) { flex: 1 1 30%; min-width: 0; padding: 0 6px; font-size: 13.5px; }
-    .controls { position: static; gap: 10px 16px; }
-    .controls :global(.seg) { max-width: 100%; flex-wrap: wrap; }
-    .ctl.time { flex-basis: 100%; }
-    .foot dl { grid-template-columns: 1fr; }
-    .foot dt { margin-top: 8px; }
-  }
-</style>

@@ -30,7 +30,9 @@
     "jma-areas": "node scripts/build-jma-areas.mjs",
     "etl:hazard": "node scripts/etl-hazard.mjs",
     "network": "node scripts/build-network.mjs",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "raw:verify": "node scripts/raw-manifest.mjs",
+    "raw:update": "node scripts/raw-manifest.mjs --update"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

@@ -1,0 +1,789 @@
+{
+ "note": "raw inputs of the published data; verify with: node scripts/raw-manifest.mjs",
+ "files": [
+  {
+   "file": "data/geo/N03-20260101_GML.zip",
+   "bytes": 803201348,
+   "sha256": "1f714fca019e22e6f84012dba420384fc7b49c6ad8bd0a867ab1cfb593a78477",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2026.html",
+   "script": "build-geo"
+  },
+  {
+   "file": "data/geo/N06-24_GML.zip",
+   "bytes": 7751741,
+   "sha256": "d93847fd40fad45bf108448d43e1598f1148815fa8d696ec6085976860160969",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html",
+   "script": "build-roads, build-network"
+  },
+  {
+   "file": "data/geo/N06-25_GML.zip",
+   "bytes": 8289668,
+   "sha256": "742c8785dfb2f900f167972abe00d5c36103365c0f9fb11dc8a883aa358ac23e",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html",
+   "script": "build-roads, build-network"
+  },
+  {
+   "file": "data/raw/2010-Q2_001217778.xls",
+   "bytes": 486400,
+   "sha256": "6f757d6ecec630e1dadb7213231da9e694d5b5b40bf7b7fbb1c3aa0dda9539c6",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2010-Q3_000996468.xls",
+   "bytes": 468480,
+   "sha256": "b4a404af5b2a08bbab5ec1a3dcacc14e476b30f8bc76dcf071e65432530c616a",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2010-Q4_000996467.xls",
+   "bytes": 470016,
+   "sha256": "fc1443f146cf9ea8a5b3e48d411f2dbb99606adeb11a875c088085e9bff10de8",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2011-Q1_000996456.xls",
+   "bytes": 350208,
+   "sha256": "2d349af4e0ace4b7256686e6fe0c50853b8e58d11397111e482d0f009776cbd6",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2011-Q2_001096637.xls",
+   "bytes": 467968,
+   "sha256": "f41001f76552e44cc645ce914bb286fc5123260a99e4ef6e13b018f3bbc8224a",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2011-Q3_001096638.xls",
+   "bytes": 448000,
+   "sha256": "22d4a28fe9683d7900b150af805650dd12a1a70632703636e5be116a11c1e766",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2011-Q4_001096639.xls",
+   "bytes": 373760,
+   "sha256": "4cc90fcbfbaabeec4282f2c29d4d8268d926654101d1e831445b48a39d98d9ba",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2012-Q1_001115878.xls",
+   "bytes": 352256,
+   "sha256": "b4ad41936ebccb52f76153c268109b78531d7ecf8a2db3575ccd302726087d03",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2012-Q2_001090376.xls",
+   "bytes": 464384,
+   "sha256": "57e6c7297465fd26ea55bdbac9c03b6f9e6d371462aa34d4562fc1a11eb236ca",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2012-Q3_001090377.xls",
+   "bytes": 450048,
+   "sha256": "4ccab311a01189295c5ce658e355b61cb6ccaf618143778a4ceef0ac93d6139f",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2012-Q4_001090378.xls",
+   "bytes": 464384,
+   "sha256": "0fd6a88699f6638fc5b8fd10d06282caf7382839c51347503a7469b3811af09d",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2013-Q1_001090379.xls",
+   "bytes": 357376,
+   "sha256": "870c3e1e2fa2dc01af829ff3ca5092724e7e58ef83b86565954c56b6abd1f22a",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2013-Q2_001136774.xls",
+   "bytes": 392192,
+   "sha256": "10b3503953e84400cf0cff1d95c0e94c2566f739e0652b4c41b89c3da8a22229",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2013-Q3_001136775.xls",
+   "bytes": 437248,
+   "sha256": "dc90eb750bfe923af358143211d66fd95784f8ce9bc1541f2704c13df76a39a5",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2013-Q4_001136776.xls",
+   "bytes": 457728,
+   "sha256": "6ea10e7a94cc6546a211d9ccb9dbd15cdab21c1d8a8bed007853f09889ebac9a",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2014-Q1_001136777.xls",
+   "bytes": 348672,
+   "sha256": "3fc19e1bed96ffe2fc4ee957ad37925ecfeec7f6504fc86725fbd7cc0147d8c4",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2014-Q2_001179500.xls",
+   "bytes": 394752,
+   "sha256": "5ca9b319b46d25619d481ab7b292e3a6d06cee1ee48ec8e0d402ac59e0868013",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2014-Q3_001179502.xls",
+   "bytes": 439296,
+   "sha256": "e45af7b9903f8fd9b51830e176572c92b84d5110f233f0e1e888c8579734cf9b",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2014-Q4_001179505.xls",
+   "bytes": 453120,
+   "sha256": "6cc87100e8c188a71eca4b980a8d764eb779328b175f999be34a68953c318263",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2015-Q1_001179508.xls",
+   "bytes": 338432,
+   "sha256": "1cd826a6f6b10171413f7f07972ecbb1b36381fdb12f4b73479fbbcf007a1222",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2015-Q2_001179511.xls",
+   "bytes": 394752,
+   "sha256": "6f7e656bba50a6a3add1747e4e7160786cb0fc83e804eeecdff186dce12a1532",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2015-Q3_001179515.xls",
+   "bytes": 373248,
+   "sha256": "5ed7770c75d955290c43d0f804bd26fe9d7d163aed443221fd245e27eac6bf4e",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2015-Q4_001179518.xls",
+   "bytes": 453120,
+   "sha256": "81b1c4cad9ad20c62cbe81cb08f3ce0e637f7c8b85d0558963722c6cecdd6236",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2016-Q1_001179521.xls",
+   "bytes": 350720,
+   "sha256": "4ac6b147681cf1a19ea15389346ed94ee862abf713b7dccf8601ae98f94e8a1b",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2016-Q2_001183834.xls",
+   "bytes": 343552,
+   "sha256": "2c66055946fccb07790510a0d14baa608919366f701e6eee3035ed0febf1f549",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2016-Q3_001198236.xls",
+   "bytes": 364032,
+   "sha256": "86a7a37d648634890b4caba10ae1a2d0f56eca8d95d666332021e66f60855ac6",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2016-Q4_001198237.xls",
+   "bytes": 364544,
+   "sha256": "798305da4d0866f2c4397cf5c9154bfb30c6949a952bcec383ca35e5498e27c6",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2017-Q1_001236523.xls",
+   "bytes": 355840,
+   "sha256": "12ec67b9f9da57eefdc2d3d9af3d864bde37da0ae9e4ba6bbb6c17eabd58b45d",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2017-Q2_001272542.xls",
+   "bytes": 336896,
+   "sha256": "8215070fd3ffbb3a04eae4cf93a2fc9088d005d0d09c4df42453979b845ded15",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2017-Q3_001272543.xls",
+   "bytes": 307712,
+   "sha256": "7d1a872ce59d6a437b47ef4024de1836f8af970d7ed3b992ddb59188a6850955",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2017-Q4_001272544.xls",
+   "bytes": 308224,
+   "sha256": "36df08e127195ebcb9f4dec2232d9524cb50b73e5ede4b95dbeb854d6b2c31a3",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2018-Q1_001334900.xls",
+   "bytes": 309760,
+   "sha256": "4e7675f63ecd541bab1e81a17496d6fa700976997dd5d06f993e15a51add3357",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2018-Q2_001361998.xls",
+   "bytes": 338432,
+   "sha256": "d7c32cb300ca1161c83831f8c7aa2891f820f9fb1ba0336a6ca3f730323467f7",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2018-Q3_001323902.xls",
+   "bytes": 309760,
+   "sha256": "3fef0fb8dbd57e9d830c2ec575a8dd7f59ee5b5ca32d503742b14e6e990dc4a1",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2018-Q4_001324318.xls",
+   "bytes": 311296,
+   "sha256": "8f86f53cf40bb23d876fb79294eda81d43f7418457569050615aaf6f080f7134",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2019-Q1_001324321.xls",
+   "bytes": 310272,
+   "sha256": "8b2d18731c8c4088a5fb7cba0e19e3d1b59f96859694b9731f68ff88cf9bbf71",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2019-Q2_001347092.xls",
+   "bytes": 340992,
+   "sha256": "b5e5b46c3493dec49a2aa51054edd2c77d7602753367a2da76e2974fa8ec8f5d",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2019-Q3_001359214.xls",
+   "bytes": 311296,
+   "sha256": "f126963e0d297d252632ee8baa494d7e5a71556084e297e2fe02a357993d7896",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2019-Q4_001361999.xls",
+   "bytes": 311296,
+   "sha256": "24e53d477d75b841c28fa7cf19ce6eac298cf16a9579111ced73b8f9f2087135",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2020-Q1_001410404.xls",
+   "bytes": 312320,
+   "sha256": "5f30d3a87af76a281651153fb442f136165c6449b5e54cbabb5da4a385c4a003",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2020-Q2_001481362.xls",
+   "bytes": 343552,
+   "sha256": "252836e80f9c00938aed54daeee10b417102ddfc073886c44d86f5365055bd31",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2020-Q3_001481363.xls",
+   "bytes": 316416,
+   "sha256": "86109ae27eaec4fc8b3eeee4e3753af1dd58eb77dd805eba54c293e7a798a36c",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2020-Q4_001481364.xls",
+   "bytes": 316416,
+   "sha256": "b07a9d62ea4f533d9e93a570b6c07c2c379bda7b44a5b5022c3a088a62af4eb1",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2021-Q1_001481365.xls",
+   "bytes": 316416,
+   "sha256": "4af682ff8559c4e7824adf649b19a7a557a7fb44b142f7c3becfa46da40ee29b",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2021-Q2_001488225.xls",
+   "bytes": 342528,
+   "sha256": "55474dab2e3ef23ce514831f3b6285170f569cb1feb5804a92e27efc3a858c4f",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2021-Q3_001517394.xls",
+   "bytes": 316928,
+   "sha256": "080f5fdef8c3d0cfda4214b03ece7cb7f463be5cad6592151a05b92237f528bd",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2021-Q4_001582746.xls",
+   "bytes": 317440,
+   "sha256": "6a1d49886eadf0b889bd59d08a9482f2cfee9a183aacf7ca3b80950a2cac113a",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2022-Q1_001589750.xls",
+   "bytes": 317440,
+   "sha256": "e8b2ec99618e317e42affc4f6af9ea596fb313008762ff028286d13419189957",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2022-Q2_001725983.xls",
+   "bytes": 343552,
+   "sha256": "28ef1accb8c311d63f8553c114fdf3bfb68fb5e7d87ed0f5c87122d4d74de2c3",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2022-Q3_001725984.xls",
+   "bytes": 317952,
+   "sha256": "cc5c96227a796fd3887b572873427f10c4e506419703c6398550ebde8444fc46",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2022-Q4_001725981.xls",
+   "bytes": 317440,
+   "sha256": "406d626bf70b255010c33af71d2b45deb5db1ecf7d33563caa8b46f37967bdf6",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2023-Q1_001752767.xls",
+   "bytes": 312832,
+   "sha256": "e6fad2077775bece6a184b57c898564df42817d441233cfa0af61b4c3e2f6ee5",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2023-Q2_001899272.xls",
+   "bytes": 338432,
+   "sha256": "e1d88ea33b90951ecae75dfc8f49b72becfaad30c6d7afa48848763f8d836684",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2023-Q3_001899273.xls",
+   "bytes": 323584,
+   "sha256": "a049957f048f9ee30d9b9704491289a3f3352ccec905c8a07960be24f5515bad",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2023-Q4_001899274.xls",
+   "bytes": 324096,
+   "sha256": "208431e0d9ef646a86f30f3361b423fa89c93dfe369114c219c58b427d0a850b",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2024-Q1_001899275.xls",
+   "bytes": 314368,
+   "sha256": "dc35d6e97bf003681c49dc2202ef8eb0e288ecf065198e3403ba2628e384667d",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2024-Q2_002021351.xls",
+   "bytes": 337920,
+   "sha256": "6f589413bfe5c90681987ce6384f88494c270e7e67bfef6ea521ae3bdbf9a009",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2024-Q3_002021499.xls",
+   "bytes": 320000,
+   "sha256": "c158716d2ab50571ec533e7ca740f742123d9b7f0e5637df4cc4565d3b319e39",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2024-Q4_002021500.xls",
+   "bytes": 319488,
+   "sha256": "acfd789da275ac2c99eb49f97204ab46ca5abd1c2f13527d1ca5c7b3b849752c",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2025-Q1_002021501.xls",
+   "bytes": 325120,
+   "sha256": "caab9c4cc56e6290ad9cfad1640f4118730ef82f631af5122a2750839d6e3631",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/2025-Q2_002023083.xls",
+   "bytes": 338944,
+   "sha256": "1a532110bcaf598d705d47132075957fc080307b2b1136c9bcb5db346962635b",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (倉庫統計季報)",
+   "script": "etl-warehouse"
+  },
+  {
+   "file": "data/raw/census/2005_I-3-1.xls",
+   "bytes": 395264,
+   "sha256": "eee295547a0e7db74f7e38cf36593d258119b244af526b4c31c537b8745375e3",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2005_I-3-2.xls",
+   "bytes": 566272,
+   "sha256": "18fab73b6bdece062ac4b3935955c058f8a2c98f2c8afe6b2d9e149e8b5685f0",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2005_I-3-3.xls",
+   "bytes": 373760,
+   "sha256": "e8fcecd9ed1f73f64f20e2d5e72cf82ec9a4885c04475d716a62b5a722deeb39",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2010_I-3-1.xls",
+   "bytes": 415744,
+   "sha256": "84d53de6d89fba3fd63a55b49ee51a37b9b03afbc38331d59a720f63ce0db7a0",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2010_I-3-2.xls",
+   "bytes": 592896,
+   "sha256": "61adeac54fdffaaf53e8b69671b7a0ee09d86795532e89992168425befcf0cf7",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2010_I-3-3.xls",
+   "bytes": 416256,
+   "sha256": "40165524a00362a2579e0d255b5786b791fc140a2a88e16dd9fa71a06a0a1501",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2015_I-3-1.xls",
+   "bytes": 476672,
+   "sha256": "dffc3805f7426c076f6f10326140fad3330a98c671f1fc588dd813d23a4b1958",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2015_I-3-2.xls",
+   "bytes": 649728,
+   "sha256": "00040b71a501d81ec93f783e30fc403819cea3e2534b3841c0978a8000d33297",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2015_I-3-3.xls",
+   "bytes": 479744,
+   "sha256": "05296b6c2aa1b594a1241c04cb7f79dcc045898d863110cdd5cf5ab7f0c07620",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2021_I-3-1.xlsx",
+   "bytes": 225154,
+   "sha256": "4ac3eadc8a66e6514ef6af85730a7faf6719b937e2019a3fd1b75b261a76dc00",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2021_I-3-2.xlsx",
+   "bytes": 313972,
+   "sha256": "48361e5e4da0e326214851f7e14e509d87f805b62292256a3aa91621bcc1e873",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census/2021_I-3-3.xlsx",
+   "bytes": 233806,
+   "sha256": "d29ab1f380c5c9b1af419d291e8fd5ff8a2aaacbad61bc1e29e7c55b91a50814",
+   "source": "https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)",
+   "script": "etl-census"
+  },
+  {
+   "file": "data/raw/census2020/000032214569.xlsx",
+   "bytes": 15929298,
+   "sha256": "2bc7c3c3e235d83e212c2a091c6d611a7a43c122828b6bd12050d48bcc3432c6",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00200521 (国勢調査2020 第12表)",
+   "script": "etl-muni"
+  },
+  {
+   "file": "data/raw/census2020/000040067885.xlsx",
+   "bytes": 7021588,
+   "sha256": "618b96f3a4c380728f4cff18aef40f4151f80913399ab03e0fea4c147cce45c0",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00200553 (経済センサス2021 第9-1B表)",
+   "script": "etl-muni"
+  },
+  {
+   "file": "data/raw/diesel/260916s5.xlsx",
+   "bytes": 2648192,
+   "sha256": "b6e2a35b69253e4a89a083631c106212d12ccc42e2df7927baa722b895b4c1bd",
+   "source": "https://www.enecho.meti.go.jp/statistics/petroleum_and_lpgas/pl007/results.html",
+   "script": "etl-diesel"
+  },
+  {
+   "file": "data/raw/jobs/000040455706.xlsx",
+   "bytes": 1001209,
+   "sha256": "4c740910e86217951ea7ccfe9f0ed32ff53b3f088c3c97e2328fd13c5d5070ce",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450222 (職業安定業務統計)",
+   "script": "etl-jobs"
+  },
+  {
+   "file": "data/raw/jobs/000040455707.xlsx",
+   "bytes": 24574237,
+   "sha256": "0f2ce1388a319c36771e7e9115ab4562bf6d12d63f4289b0bc52a199c1381d55",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00450222 (職業安定業務統計)",
+   "script": "etl-jobs"
+  },
+  {
+   "file": "data/raw/land/L01-26_GML.zip",
+   "bytes": 20898568,
+   "sha256": "fad8bbe76d25b682ccf761a492ddc2de001e0345569e044481d62ea84233faf8",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L01-2026.html",
+   "script": "etl-muni"
+  },
+  {
+   "file": "data/raw/land/L02-26_GML.zip",
+   "bytes": 17753493,
+   "sha256": "eb4c27a1e103fa80894bf8d248632fd5bde889cda6cdca937ded282e075c6b60",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L02-2026.html",
+   "script": "etl-muni"
+  },
+  {
+   "file": "data/raw/land/toshikeikaku_R7.xls",
+   "bytes": 3514368,
+   "sha256": "35014c18e7cd1ba1df3b1f22ef716e734298d0818d83c33ffe7b84013ff1f094",
+   "source": "https://www.mlit.go.jp/toshi/tosiko/toshi_tosiko_tk_000217.html (都市計画現況調査)",
+   "script": "etl-muni"
+  },
+  {
+   "file": "data/raw/mesh/1km_mesh_2024_SHP.zip",
+   "bytes": 143288552,
+   "sha256": "f41230fa44196363ab41b67f5ac8340028e988d08e349cebf078a468c75f0d8d",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-mesh1000r6.html",
+   "script": "etl-mesh"
+  },
+  {
+   "file": "data/raw/multimodal/C02-14_GML.zip",
+   "bytes": 601717,
+   "sha256": "5dfda41a2b1b622f328312c437e0d3c4f9bda7bbf276572631e128af70d0af0b",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-C02-2014.html",
+   "script": "etl-multimodal"
+  },
+  {
+   "file": "data/raw/multimodal/C28-21_GML.zip",
+   "bytes": 713372,
+   "sha256": "07d69353a34558d7ebd21d4b5f62b685d4f9b9d0e55c6eed6ce05aefcc6b7b35",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-C28-2021.html",
+   "script": "etl-multimodal"
+  },
+  {
+   "file": "data/raw/multimodal/airport_R7.xlsx",
+   "bytes": 652689,
+   "sha256": "0cd693d9b7dcc8b4c279608f6bb21468ededc8013a62754a3530b46bd34e988e",
+   "source": "https://www.mlit.go.jp/koku/15_bf_000185.html (空港管理状況調書)",
+   "script": "etl-multimodal"
+  },
+  {
+   "file": "data/raw/multimodal/p31_all.geojson",
+   "bytes": 2363551,
+   "sha256": "b8a480f454aa53756e5a1cf69b40ac205210787b356ef45a4b4ad39fe94d309a",
+   "source": "https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-P31.html",
+   "script": "etl-multimodal"
+  },
+  {
+   "file": "data/raw/multimodal/port_2025.xlsx",
+   "bytes": 1132175,
+   "sha256": "0f98453886f9dc553e6311319d6eb357e83b61af34da20354ab40e63889567ec",
+   "source": "https://www.mlit.go.jp/k-toukei/kowan.html (港湾統計)",
+   "script": "etl-multimodal"
+  },
+  {
+   "file": "data/raw/ssw/001402078.xlsx",
+   "bytes": 180427,
+   "sha256": "81ac781345cf6e14098afa93e69677252e893b644794960178afe60bd893ba78",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001402084.xlsx",
+   "bytes": 16242,
+   "sha256": "44f52ea4ba961b8284dac2b837e22ece284030a743eb4dd9cf9d6820521e12a0",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001415124.xlsx",
+   "bytes": 144335,
+   "sha256": "112b3abe56c6819e3f35c109b69ec84623102e86d3f4552e48c389388cc20b68",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001415130.xlsx",
+   "bytes": 11104,
+   "sha256": "413a3d5c1a518b707fea8f93af16c08aeb2659b29dc9fccf9bad2223d857a4f1",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001424798.xlsx",
+   "bytes": 150923,
+   "sha256": "7907567d625075cc2571ccb87be5701fcc632ad9c940b701511d6a69beff5bc2",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001424805.xlsx",
+   "bytes": 19704,
+   "sha256": "464e48085119c6d9814381b5d25c9246abf8d31ab1e2a72855224a06bd054c00",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001434842.xlsx",
+   "bytes": 172787,
+   "sha256": "5238b697d61951d3bae8d2f47ab8890dda7455030947523717c4e02e23934519",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001434848.xlsx",
+   "bytes": 44880,
+   "sha256": "9f67ff04e8188e267f544ee5757462c6f443082df23b563af48dc717d491423c",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001447396.xlsx",
+   "bytes": 181251,
+   "sha256": "3c54e5b675d59d2eda5c92e1ab739fcc61266e0ec28644da286f6257eb6fc53b",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001447402.xlsx",
+   "bytes": 76451,
+   "sha256": "cb3d6c4fdcba5ecdca7570cc312c9ecae73beeda926abac79eb3a512ed7d5ad4",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001459475.xlsx",
+   "bytes": 182737,
+   "sha256": "6458bf268b9915b352df075552247d30621626ac6e47d6d64991f3631d94cfba",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/ssw/001459481.xlsx",
+   "bytes": 94856,
+   "sha256": "7c6a1de64d86764b70e6ec5710c762e076b1d2a7022663c26fdfe5cd34ab3f57",
+   "source": "https://www.moj.go.jp/isa/applications/ssw/nyuukokukanri07_00215.html",
+   "script": "etl-ssw"
+  },
+  {
+   "file": "data/raw/suigai/2014.xls",
+   "bytes": 62464,
+   "sha256": "24c9e4461f040b8b99605e944caa1d7d77a02eb7e2ed7d606f8fc1e6fde9dfe7",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2015.xls",
+   "bytes": 31774,
+   "sha256": "3d934aad08cf43688f49ec61b8a8620c7a5b8db6defa7b794df748e75e51da05",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2016.xls",
+   "bytes": 32068,
+   "sha256": "19132bc3286b425454d3de43e7ed2fe700b84eafaf7ba8abbc37151b9d8ae3fd",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2017.xls",
+   "bytes": 33006,
+   "sha256": "b8a09e068f06295da3ebb7bdf2c96c61ff21115b7424a86e16bbfb7fbc1cc139",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2018.xls",
+   "bytes": 33056,
+   "sha256": "d7c8af2e1b1e69e143c37289f87316297585a8e2888b6e91b25079e7d4f1ea08",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2019.xls",
+   "bytes": 32636,
+   "sha256": "6d0fbd0cb1c03b9446f1cacaf7b2483f1886c78ef6eecc7b81b12f3619f68cbd",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2020.xls",
+   "bytes": 31883,
+   "sha256": "a2b3a31b625209ee35ad847bb7cf2241ddb5a69a258755991a6ef47a8a2c511a",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2021.xls",
+   "bytes": 42690,
+   "sha256": "ec1c3d744dff934b028faa6674073df0d81915c3c9370a8e3798386322880fb9",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2022.xls",
+   "bytes": 43502,
+   "sha256": "87063859033e15593c5a6fedfeb8001c06cca2220165f9a3f397995838bbdda6",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  },
+  {
+   "file": "data/raw/suigai/2023.xls",
+   "bytes": 33585,
+   "sha256": "5351835d49eab0e3e05c345fbd061be0b431e75c687da0b98c4391921ea94052",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600590 (水害統計 表-2)",
+   "script": "etl-suigai"
+  }
+ ]
+}
