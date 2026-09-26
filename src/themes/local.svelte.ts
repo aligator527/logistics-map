@@ -331,6 +331,22 @@ export class LocalTheme implements ThemeView {
     hint: (this.metric.key === 'iso' || this.metric.key === 'shift') && !this.isoTimes ? this.ctx.tt('isoPick') : this.metric.hint[this.L],
     flows: null,
   }));
+  /** another metric's map (split view): values, classes and legend */
+  viewOf(key: string) {
+    const m = this.metrics.find((x) => x.key === key);
+    if (!m) return null;
+    const raw = this.d.codes.map((_, i) => m.get(i));
+    const classes: Classes = m.category ? { breaks: [2, 3], colors: this.tripColors, diverging: false }
+      : !m.time ? makeClasses(raw, !!m.diverging, this.ctx.dark)
+      : { breaks: [30, 60, 90, 120, 180, 240], colors: [...SEQ[this.ctx.dark ? 'dark' : 'light']].reverse(), diverging: false };
+    const fmt = (v: number) => {
+      if (m.diverging) return `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtNum(this.L, Math.abs(v), 0)}%`;
+      if (m.time) return fmtMinutes(this.L, v);
+      return /%$/.test(m.fmt(1)) ? `${fmtNum(this.L, v, 0)}%` : fmtCompact(this.L, v);
+    };
+    return { metric: m, values: new Map(this.d.codes.map((c, i) => [c, raw[i]])), classes, fmt,
+      categories: m.category ? [1, 2, 3].map((c) => ({ color: this.tripColors[c - 1], label: m.fmt(c) })) : null };
+  }
   readonly source = $derived.by(() => ({ text: this.metric.source || (this.L === 'ja' ? '読み込み中…' : 'loading…'), url: '#sources' }));
 
   readonly prefTip = (code: string): Tip => {

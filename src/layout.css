@@ -43,6 +43,10 @@
   .k-news { fill: currentColor; }
 .k-fac { fill: var(--clay); stroke: var(--surface); stroke-width: 1; }
   .mapwrap { position: relative; }
+  .mapwrap.split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+  .mapwrap .map-a, .mapwrap .map-b { position: relative; min-width: 0; }
+  .split-cap { margin: 6px 0 0; font-size: 12.5px; font-weight: 600; }
+  .split-cap .sel { max-width: 100%; margin-bottom: 6px; }
   .national { position: absolute; left: 8px; top: 8px; z-index: 6; min-height: 32px; font-size: 12.5px;
               background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }
   .national[aria-pressed='true'] { background: var(--ink); color: var(--bg); }

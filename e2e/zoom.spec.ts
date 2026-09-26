@@ -178,3 +178,14 @@ test('candidate status and note; back and forward between places', async ({ page
   await page.getByRole('button', { name: '次の表示' }).click();
   await expect(page).toHaveURL(/mu=13102/);
 });
+
+test('split view: a second map, zoomed together', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'wide layout');
+  const errors = await open(page, 't=local&lk2=land&mv=9.0/35.60/139.60');
+  await expect(page.locator('.mapwrap.split .map-b svg[role="application"]')).toBeAttached();
+  await page.getByRole('button', { name: '拡大' }).first().click();
+  await expect(page).toHaveURL(/mv=9\.8\//);
+  const tr = await page.evaluate(() => [...document.querySelectorAll('.mapwrap svg[role="application"] > g')].map((g) => g.getAttribute('transform')));
+  expect(tr[0]).toBe(tr[1]);
+  expect(errors).toEqual([]);
+});

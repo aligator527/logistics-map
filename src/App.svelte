@@ -489,7 +489,10 @@
     return null;
   });
   /** wide map: callout cards over the sea; narrow: a card strip under the map */
-  const newsCards = $derived(mapW >= 640);
+  // split view (市区町村): a second map with another metric, zoomed together
+  const split = $derived(app.view === 'map' && app.layer === 'local' && !!lt && !!app.lk2 && mapW >= 700);
+  const splitView = $derived(split && lt ? lt.viewOf(app.lk2) : null);
+  const newsCards = $derived(mapW >= 640 && !split);
   /** group key of a news item: its first municipality, else prefecture, else national */
   const newsKeyOf = (it: NewsItem) => (it.munis.length ? `m${it.munis[0]}` : it.prefs.length ? `p${pad2(it.prefs[0])}` : 'jp');
   /** news of the last 90 days grouped by place (an item naming two places is shown at both) */
@@ -1122,6 +1125,11 @@
           <button type="button" class="btn ghost" aria-label={tt('histBack')} title={`${tt('histBack')} (Alt+←)`} disabled={histIdx <= 0} onclick={() => history.back()}>←</button>
           <button type="button" class="btn ghost" aria-label={tt('histForward')} title={`${tt('histForward')} (Alt+→)`} disabled={histIdx >= histMax} onclick={() => history.forward()}>→</button>
         </span>
+        {#if app.layer === 'local' && app.view === 'map'}
+          <button type="button" class="btn" aria-pressed={!!app.lk2} onclick={() => (app.lk2 = app.lk2 ? '' : (app.lmet === 'land' ? 'pop30' : 'land'))} title={tt('splitHint')}>
+            <svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><rect x="1" y="1" width="6" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" /><rect x="9" y="1" width="6" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" /></svg>
+            {tt('splitView')}</button>
+        {/if}
         <ExportMenu />
         {#if sideHidden}
           <button type="button" class="btn show-side" onclick={() => (sideHidden = false)}>
@@ -1132,7 +1140,8 @@
       </div>
 
       {#if app.view === 'map'}
-        <div class="mapwrap">
+        <div class="mapwrap" class:split>
+        <div class="map-a">
         <MapView
           bind:this={mapView}
           {geo} values={view.values} classes={view.classes} lang={L} {highlight}
@@ -1155,6 +1164,29 @@
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
           showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
         />
+        {#if split}<p class="split-cap">{view.legend.title}</p>{/if}
+        </div>
+        {#if split && splitView && geo}
+          <div class="map-b">
+            <MapView
+              {geo} values={splitView.values} classes={splitView.classes} lang={L}
+              level="muni" selMuni={app.muni || null} focus={app.pref ? pad2(app.pref) : null}
+              {markers} site={app.site} roads={roadLayer} showRoads={app.showRoads} {pois} {tracks}
+              prefTip={view.prefTip} muniTip={(sh) => ({ title: muniLabel(sh.code), big: splitView.metric.fmt(splitView.values.get(sh.code) ?? NaN), sub: splitView.metric[L] })} {siteTip}
+              {onpick} onclear={clearFocus} {onsite}
+              tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
+              mv={app.mv} onmv={(v) => (app.mv = v)}
+              showBld={app.showBld} showFude={false} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
+            />
+            <div class="split-cap">
+              <select class="sel" value={app.lk2} aria-label={tt('splitMetric')} onchange={(e) => (app.lk2 = e.currentTarget.value)}>
+                {#each lt!.metrics as m (m.key)}<option value={m.key}>{m[L]}</option>{/each}
+              </select>
+              <Legend classes={splitView.classes} lang={L} title={splitView.metric[L]} fmt={splitView.fmt} hint={splitView.metric.hint[L]}
+                      showDpl={false} showRoads={false} compare={false} categories={splitView.categories} />
+            </div>
+          </div>
+        {/if}
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
             {tt('newsNational')} <strong class="tnum">{nationalNews.items.length}</strong>

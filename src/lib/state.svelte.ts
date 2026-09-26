@@ -110,6 +110,8 @@ class AppState {
   showFac = $state(false);
   /** industrial zoning (用途地域) of the focused prefecture */
   showZone = $state(false);
+  /** split view: the right map's municipal metric ('' = one map) */
+  lk2 = $state('');
   /** screening conditions (市区町村) */
   screen = $state<ScreenRule[]>([]);
   /** side panel tab */
@@ -194,6 +196,7 @@ class AppState {
       if (this.igrid) p.set('ig', '1');
       if (!this.ferries) p.set('nf', '1');
       if (this.peak) p.set('pk', '1');
+      if (this.lk2) p.set('lk2', this.lk2);
       if (this.closures.length) p.set('cl', this.closures.join('~'));
       if (this.screen.length) p.set('fx', this.screen.map((r) => `${r.key}.${r.op}.${+r.v.toPrecision(4)}`).join('~'));
     }
@@ -244,6 +247,7 @@ class AppState {
     this.igrid = p.get('ig') === '1';
     this.ferries = p.get('nf') !== '1';
     this.peak = p.get('pk') === '1';
+    this.lk2 = /^[A-Za-z0-9_]{1,20}$/.test(p.get('lk2') ?? '') ? p.get('lk2')! : '';
     this.closures = (p.get('cl') ?? '').split('~').filter((s) => /^-?\d+\.\d+,-?\d+\.\d+_-?\d+\.\d+,-?\d+\.\d+$/.test(s)).slice(0, 20);
     this.screen = (p.get('fx') ?? '').split('~').map((s) => s.match(/^([A-Za-z0-9_]{1,20})\.(ge|le)\.(-?[\d.e+-]+)$/)).filter((m): m is RegExpMatchArray => !!m && isFinite(Number(m[3])))
       .slice(0, 12).map((m) => ({ key: m[1], op: m[2] as 'ge' | 'le', v: Number(m[3]) }));

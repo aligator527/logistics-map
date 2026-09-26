@@ -131,6 +131,11 @@
   let svg: SVGSVGElement;
   let wrap: HTMLDivElement | undefined = $state();
   let transform = $state<ZoomTransform>(zoomIdentity);
+  // During a pan / zoom gesture the heavy layers (the area SVG, tile / raster / building canvases) are not redrawn:
+  // they keep the transform they were painted with (paint) and move as one composited layer by a CSS transform;
+  // they are redrawn once the gesture ends. Points, labels and cards follow the live transform.
+  let paint = $state<ZoomTransform>(zoomIdentity);
+  let moving = $state(false);
   let boxW = $state(1000), boxH = $state(800);
   // Overlay markers keep a constant screen size: 1 screen px in viewBox units.
   const px = $derived(1 / Math.max(1e-6, Math.min(boxW / geo.width, boxH / geo.height)));
@@ -143,7 +148,19 @@
   const focusShape = $derived(focus ? prefByCode.get(focus) ?? null : null);
   const focusMunis = $derived(level === 'pref' && focus && !compare && zoomFocus ? geo.munis.filter((m) => m.code.startsWith(focus)) : []);
   const muniByCode = $derived(new Map(geo.munis.map((s) => [s.code, s])));
-  const areaShapes = $derived(level === 'muni' ? geo.munis : geo.prefs);
+  const allAreas = $derived(level === 'muni' ? geo.munis : geo.prefs);
+  /** zoomed in: only the shapes on screen are drawn (a margin of half a screen, so panning seldom adds any);
+   *  the set is recomputed in steps of a quarter screen, not every frame */
+  const cullKey = $derived.by(() => {
+    if (paint.k < 3) return '';
+    const v = paintView, w = v.x1 - v.x0, h = v.y1 - v.y0, q = Math.max(w, h) / 4;
+    return `${Math.round(v.x0 / q)}|${Math.round(v.y0 / q)}|${Math.round(Math.log2(paint.k) * 2)}`;
+  });
+  const areaShapes = $derived.by(() => {
+    if (!cullKey) return allAreas;
+    const v = untrack(() => paintView), mx = (v.x1 - v.x0) * 0.75, my = (v.y1 - v.y0) * 0.75;
+    return allAreas.filter((s) => s.bbox[0][0] < v.x1 + mx && s.bbox[1][0] > v.x0 - mx && s.bbox[0][1] < v.y1 + my && s.bbox[1][1] > v.y0 - my);
+  });
   const shapeOf = (code: string) => (code.length === 5 ? muniByCode.get(code) : prefByCode.get(code)) ?? null;
   const pad2 = (n: number) => String(n).padStart(2, '0');
 
@@ -178,8 +195,9 @@
         if (e.type === 'dblclick') return false;
         return !(e as MouseEvent).button;
       })
+      .on('start', () => { moving = true; })
       .on('zoom', (e) => { transform = e.transform; hover = null; })
-      .on('end', () => emitMv());
+      .on('end', () => { moving = false; paint = transform; emitMv(); });
     select(svg).call(zb).on('dblclick.zoom', null);
     ready = true;
     return () => { select(svg).on('.zoom', null); };
@@ -195,16 +213,25 @@
   // down to single buildings (about z17.5); the zoom-out limit stays the whole map
   $effect(() => { if (ready && zb) zb.scaleExtent([1, Math.max(40, kOf(Z_MAX))]); });
   const zNow = $derived(zOf(transform.k));
+  /** zoom level the heavy layers are painted at */
+  const zPaint = $derived(zOf(paint.k));
+  /** screen = a · painted + b while a gesture runs (CSS, origin at the map box's corner) */
+  const cssT = $derived.by(() => {
+    if (!moving) return '';
+    const a = transform.k / paint.k;
+    const bx = fit.ox * (1 - a) + fit.s * (transform.x - a * paint.x), by = fit.oy * (1 - a) + fit.s * (transform.y - a * paint.y);
+    return `translate(${bx}px, ${by}px) scale(${a})`;
+  });
   /** 1 = full colour; fades to outlines between z11.5 and z14.5 */
-  const fade = $derived(Math.max(0, Math.min(1, (14.5 - zNow) / 3)));
+  const fade = $derived(Math.max(0, Math.min(1, (14.5 - zPaint) / 3)));
   /** detailed boundaries and roads from this zoom */
   const Z_DETAIL = 10.5;
-  const deep = $derived(zNow >= Z_DETAIL);
+  const deep = $derived(zPaint >= Z_DETAIL);
 
   let details = $state.raw(new Map<string, Detail>());
   const prefsInView = $derived.by(() => {
     if (!deep) return [] as string[];
-    const { x0, y0, x1, y1 } = view;
+    const { x0, y0, x1, y1 } = paintView;
     return geo.prefs.filter((p) => p.bbox[0][0] < x1 && p.bbox[1][0] > x0 && p.bbox[0][1] < y1 && p.bbox[1][1] > y0).map((p) => p.code);
   });
   $effect(() => {
@@ -386,6 +413,12 @@
   export function reset() { onclear(); go(zoomIdentity, 350); }
 
   // ------------------------------------------------------------ layers visible at the current zoom
+  /** the map rectangle the heavy layers are painted for */
+  const paintView = $derived.by(() => {
+    const [x0, y0] = paint.invert([0, 0]);
+    const [x1, y1] = paint.invert([geo.width, geo.height]);
+    return { x0, y0, x1, y1 };
+  });
   /** visible map rectangle (viewBox units), for culling interchange markers */
   const view = $derived.by(() => {
     const [x0, y0] = transform.invert([0, 0]);
@@ -665,7 +698,7 @@
     }
   }
   $effect(() => {
-    const layer = tileLayer, tr = transform, f = fit, W = boxW, H = boxH;
+    const layer = tileLayer, tr = paint, f = fit, W = boxW, H = boxH;
     void tileTick;
     cancelAnimationFrame(tileFrame);
     tileFrame = requestAnimationFrame(() => {
@@ -680,7 +713,7 @@
   let rasterCanvas: HTMLCanvasElement | undefined = $state();
   let rasterFrame = 0;
   $effect(() => {
-    const r = raster, cv = rasterCanvas, tr = transform, f = fit, W = boxW, H = boxH;
+    const r = raster, cv = rasterCanvas, tr = paint, f = fit, W = boxW, H = boxH;
     if (!r || !cv) return;
     void r.version;
     cancelAnimationFrame(rasterFrame);
@@ -721,7 +754,7 @@
   const vecOn = $derived((showBld && zNow >= Z_BLD) || (showFude && zNow >= Z_FUDE));
   const VT_LAYER = { key: 'vt', path: '', ext: '', minZ: VT_Z, maxZ: VT_Z, ja: '', en: '' } as unknown as TileLayer;
   $effect(() => {
-    const cv = vecCanvas, tr = transform, f = fit, W = boxW, H = boxH, bld = showBld && zNow >= Z_BLD, fu = showFude && zNow >= Z_FUDE, isDark = dark;
+    const cv = vecCanvas, tr = paint, f = fit, W = boxW, H = boxH, bld = showBld && zPaint >= Z_BLD, fu = showFude && zPaint >= Z_FUDE, isDark = dark;
     void vecTick;
     if (!cv || !geo.layout) return;
     cancelAnimationFrame(vecFrame);
@@ -776,7 +809,7 @@
       }
       fudeState = !fu || fudeAny ? 'ok' : fudePending ? 'loading' : 'none';
       // 地番 labels when there is room for them
-      if (fu && zNow >= 17) {
+      if (fu && zPaint >= 17) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         ctx.font = '11px system-ui, sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -946,14 +979,16 @@
 <div class="map" class:picking={pickPoint || measure.armed} class:tiled={!!tileLayer} bind:this={wrap}
      style:--fo={fillOpacity * (0.06 + 0.94 * fade)} style:--fade={fade}>
   {#if tileLayer}
-    <canvas class="tiles" class:inv={dark && (tileLayer.thematic ? TILE_LAYERS[0] : tileLayer).invertDark} bind:this={baseCanvas}
+    <canvas class="tiles" class:inv={dark && (tileLayer.thematic ? TILE_LAYERS[0] : tileLayer).invertDark} bind:this={baseCanvas} style:transform={cssT}
             style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
-    <canvas class="tiles" bind:this={themeCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+    <canvas class="tiles" bind:this={themeCanvas} style:transform={cssT} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
     {#if tilesTooFar}<p class="tiles-hint">{t(lang, 'tilesZoomIn')}</p>{/if}
   {/if}
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg
     bind:this={svg}
+    class="areas-svg"
+    style:transform={cssT}
     viewBox="0 0 {geo.width} {geo.height}"
     role="application"
     aria-roledescription={lang === 'ja' ? '地図' : 'map'}
@@ -970,20 +1005,20 @@
     onblur={() => { kbd = null; hover = null; }}
   >
     <defs>
-      <pattern id="pat-nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / transform.k})">
+      <pattern id="pat-nodata" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / paint.k})">
         <rect width="6" height="6" fill="var(--land)" />
         <line x1="0" y1="0" x2="0" y2="6" stroke="var(--hatch)" stroke-width="1.4" />
       </pattern>
       <!-- industrial zoning: sparse hatch / dense hatch / solid, all in clay -->
-      <pattern id="pz1" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / transform.k})">
+      <pattern id="pz1" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45) scale({1 / paint.k})">
         <line x1="0" y1="0" x2="0" y2="5" stroke="var(--clay)" stroke-width="1.2" />
       </pattern>
-      <pattern id="pz2" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45) scale({1 / transform.k})">
+      <pattern id="pz2" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(-45) scale({1 / paint.k})">
         <line x1="0" y1="0" x2="0" y2="3" stroke="var(--clay)" stroke-width="1.3" />
       </pattern>
     </defs>
 
-    <g transform={transform.toString()}>
+    <g transform={paint.toString()}>
       {#each geo.insets as f (f.key)}
         <rect class="inset" x={f.x} y={f.y} width={f.w} height={f.h} rx="4" />
       {/each}
@@ -1021,12 +1056,12 @@
       {#if bcp}
         <g class="bcp" aria-hidden="true">
           <path class="l1" d={bcp.l1} /><path class="l2" d={bcp.l2} />
-          {#if transform.k >= 2}<path class="e3" d={bcp.e3} />{/if}
+          {#if paint.k >= 2}<path class="e3" d={bcp.e3} />{/if}
           <path class="e2" d={bcp.e2} /><path class="e1" d={bcp.e1} />
         </g>
       {/if}
       {#if roads && showRoads}
-        <g class="roads" class:far={transform.k < 2} aria-hidden="true">
+        <g class="roads" class:far={paint.k < 2} aria-hidden="true">
           <path class="halo" d={(detailRoads ?? roads.d)[1] + (detailRoads ?? roads.d)[2] + (detailRoads ?? roads.d)[3]} />
           <path class="r3" d={(detailRoads ?? roads.d)[3]} />
           <path class="r2" d={(detailRoads ?? roads.d)[2]} />
@@ -1062,11 +1097,11 @@
   </svg>
 
   {#if raster}
-    <canvas class="raster" bind:this={rasterCanvas} style:width="{boxW}px" style:height="{boxH}px" style:opacity={0.35 + 0.65 * fade} aria-hidden="true"></canvas>
+    <canvas class="raster" bind:this={rasterCanvas} style:transform={cssT} style:width="{boxW}px" style:height="{boxH}px" style:opacity={0.35 + 0.65 * fade} aria-hidden="true"></canvas>
   {/if}
 
   {#if vecOn}
-    <canvas class="raster vec" bind:this={vecCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+    <canvas class="raster vec" bind:this={vecCanvas} style:transform={cssT} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
   {/if}
   {#if showFude && zNow >= Z_FUDE && fudeState === 'none'}
     <p class="tiles-hint">{t(lang, 'fudeNone')}</p>
@@ -1271,7 +1306,10 @@
 
 <style>
   .map { position: relative; }
-  .tiles { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+  .tiles { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; transform-origin: 0 0; }
+  .areas-svg, .raster { transform-origin: 0 0; }
+  /* own compositor layers, so moving them during a gesture does not re-rasterise them */
+  .areas-svg, .tiles, .raster { will-change: transform; }
   .tiles.inv { filter: invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
   .map.tiled > svg:first-of-type { position: relative; z-index: 1; }
   .areas path { fill-opacity: var(--fo); }
