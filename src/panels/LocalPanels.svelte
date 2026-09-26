@@ -8,6 +8,7 @@
   import ComparePanel from '../components/ComparePanel.svelte';
   import Segmented from '../components/Segmented.svelte';
   import { shortlist } from '../lib/shortlist.svelte';
+  import SimPanel from './SimPanel.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -36,6 +37,7 @@
             <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 13.5S1 8.6 1 5.4a5 5 0 0 1 10 0C11 8.6 6 13.5 6 13.5z" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="6" cy="5.4" r="1.7" fill="currentColor" /></svg>
             {tt('pickOnMap')}</button>
           <button type="button" class="btn chip" aria-pressed={app.igrid} onclick={() => (app.igrid = !app.igrid)}>{tt('gridView')}</button>
+          <button type="button" class="btn chip" aria-pressed={app.ferries} onclick={() => (app.ferries = !app.ferries)} title={tt('ferriesHint')}>{tt('ferries')}</button>
         </div>
         {#if s.pickArmed}<p class="src" role="status">{s.gridLoading ? tt('gridLoading') : tt('pickOnMapHint')}</p>
         {:else if app.igrid && s.gridLoading}<p class="src" role="status">{tt('gridLoading')}</p>{/if}
@@ -85,6 +87,7 @@
       <p class="src note">{tt('isoNote')} {#if app.lmet === 'shift'}{tt('tripNote')} {/if}<a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
     </section>
   {/if}
+  <SimPanel />
   {#if app.muni && lt.indexOf(app.muni) >= 0}
     <section class="panel">
       <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>

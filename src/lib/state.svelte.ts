@@ -90,6 +90,8 @@ class AppState {
   iso = $state('');
   /** reach map on the 1 km population grid instead of municipalities */
   igrid = $state(false);
+  /** reach and hub times use the long-distance ferries */
+  ferries = $state(true);
 
   showDpl = $state(true);
   showRoads = $state(true);
@@ -167,6 +169,7 @@ class AppState {
       if (this.ma || this.mb) p.set('mc', `${this.ma}-${this.mb}`);
       if (this.iso) p.set('io', this.iso);
       if (this.igrid) p.set('ig', '1');
+      if (!this.ferries) p.set('nf', '1');
     }
     if (this.layer === 'score') {
       if (this.slevel === 'muni') p.set('sl', 'muni');
@@ -206,8 +209,9 @@ class AppState {
     this.ma = /^\d{5}$/.test(ma ?? '') ? ma : '';
     this.mb = /^\d{5}$/.test(mb ?? '') ? mb : '';
     const io = p.get('io') ?? '';
-    this.iso = /^(muni:\d{5}|site:.{1,80}|pt:-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+|net:(dpl|short))$/.test(io) ? io : '';
+    this.iso = /^(muni:\d{5}|site:.{1,80}|pt:-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+|net:(dpl|short|sim))$/.test(io) ? io : '';
     this.igrid = p.get('ig') === '1';
+    this.ferries = p.get('nf') !== '1';
     // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"
     const sw = p.get('sw');
     this.weights = {};

@@ -101,7 +101,7 @@ class Store {
   srcName = (k: string) => this.news?.sources.find((s) => s.key === k)?.[app.lang] ?? k;
   /** a reach-map origin: 'muni:<code>' or 'site:<DPL name>' */
   originName = (k: string) => (k.startsWith('muni:') ? this.muniLabel(k.slice(5)) : k.startsWith('pt:') ? this.tt('pointOrigin')
-    : k === 'net:dpl' ? this.tt('originDpl') : k === 'net:short' ? this.tt('originShort') : k.slice(5));
+    : k === 'net:dpl' ? this.tt('originDpl') : k === 'net:short' ? this.tt('originShort') : k === 'net:sim' ? this.tt('simTitle') : k.slice(5));
 
   // ------------------------------------------------------------ picking
   onpick = (code: string) => {

@@ -10,6 +10,9 @@ export interface Network {
   edges: number[];
   munis: { ll: [number, number][]; comp: number[]; acc: number[][] };
   pois: Record<string, Place>;
+  /** ferry links [nodeA, nodeB, minutes×10, route index] */
+  ferries?: number[][];
+  ferryRoutes?: { a: string; b: string; hours: number }[];
   generated: string;
 }
 
@@ -26,19 +29,29 @@ export class Router {
   private next: Int32Array;
   private to: Int32Array;
   private w: Float32Array;
+  /** 1 on edges that are ferry crossings */
+  private ferry: Uint8Array;
+  /** use the long-distance ferries (on by default) */
+  ferries = true;
   constructor(net: Network) {
     this.net = net;
-    // adjacency as linked lists in typed arrays
-    const m = net.edges.length / 3;
+    // adjacency as linked lists in typed arrays; ferry links after the roads
+    const m = net.edges.length / 3, f = net.ferries?.length ?? 0;
     this.head = new Int32Array(net.nodes).fill(-1);
-    this.next = new Int32Array(2 * m);
-    this.to = new Int32Array(2 * m);
-    this.w = new Float32Array(2 * m);
+    this.next = new Int32Array(2 * (m + f));
+    this.to = new Int32Array(2 * (m + f));
+    this.w = new Float32Array(2 * (m + f));
+    this.ferry = new Uint8Array(2 * (m + f));
     for (let k = 0; k < m; k++) {
       const a = net.edges[3 * k], b = net.edges[3 * k + 1], t = net.edges[3 * k + 2] / 10;
       this.link(2 * k, a, b, t);
       this.link(2 * k + 1, b, a, t);
     }
+    (net.ferries ?? []).forEach(([a, b, t10], k) => {
+      const e = 2 * (m + k);
+      this.link(e, a, b, t10 / 10); this.link(e + 1, b, a, t10 / 10);
+      this.ferry[e] = 1; this.ferry[e + 1] = 1;
+    });
   }
   private link(e: number, a: number, b: number, t: number) {
     this.to[e] = b; this.w[e] = t; this.next[e] = this.head[a]; this.head[a] = e;
@@ -81,6 +94,7 @@ export class Router {
       const [d, n] = pop();
       if (d > dist[n]) continue;
       for (let e = this.head[n]; e !== -1; e = this.next[e]) {
+        if (!this.ferries && this.ferry[e]) continue;
         const nd = d + this.w[e];
         if (nd < dist[this.to[e]]) { dist[this.to[e]] = nd; push(nd, this.to[e]); }
       }

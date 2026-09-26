@@ -190,6 +190,48 @@ const GAP_KM = 60;
   console.log(`linked ${added} gaps between expressway pieces by ordinary roads; pieces now ${[...sizes.values()].sort((a, b) => b - a).slice(0, 5).join(', ')}`);
 }
 
+// ------------------------------------------------------------------ 2c. long-distance ferries
+// Main vehicle-ferry routes between the islands (sailing hours from the operators' timetables, plus
+// FERRY_BOARD minutes for check-in; waiting for a departure is not modelled). Terminals become graph
+// nodes and entries, linked to the nearest expressway entries by ordinary roads. Kept apart in
+// network.json (`ferries`) so the map can switch them off.
+const FERRY_BOARD = 90;
+const TERMINALS = {
+  苫小牧西: [141.62, 42.63], 苫小牧東: [141.83, 42.61], 小樽: [141.01, 43.20], 函館: [140.70, 41.82], 大洗: [140.58, 36.31],
+  八戸: [141.52, 40.54], 仙台: [141.02, 38.27], 名古屋: [136.85, 35.04], 新潟: [139.07, 37.93], 舞鶴: [135.39, 35.47],
+  敦賀: [136.07, 35.66], 青森: [140.70, 40.84], 大間: [140.91, 41.53], 東京: [139.79, 35.63], 徳島: [134.58, 34.06],
+  新門司: [131.00, 33.88], 大阪南港: [135.41, 34.63], 泉大津: [135.39, 34.52], 神戸: [135.28, 34.68], 別府: [131.51, 33.30],
+  大分: [131.60, 33.25], 志布志: [131.10, 31.47], 八幡浜: [132.42, 33.46], 臼杵: [131.81, 33.13], 三崎: [132.12, 33.39],
+  佐賀関: [131.87, 33.25], 鹿児島: [130.56, 31.59], 那覇: [127.67, 26.23], 両津: [138.43, 38.08],
+};
+const FERRY_ROUTES = [
+  ['苫小牧西', '大洗', 19.25], ['苫小牧西', '八戸', 8], ['苫小牧西', '仙台', 15.33], ['仙台', '名古屋', 21.67],
+  ['小樽', '新潟', 16], ['小樽', '舞鶴', 21], ['苫小牧東', '敦賀', 20], ['苫小牧東', '新潟', 17],
+  ['函館', '青森', 3.67], ['函館', '大間', 1.5], ['東京', '徳島', 18], ['徳島', '新門司', 15.5],
+  ['大阪南港', '新門司', 12.5], ['泉大津', '新門司', 12.5], ['神戸', '新門司', 12.5], ['大阪南港', '別府', 11.75],
+  ['神戸', '大分', 11], ['大阪南港', '志布志', 14.5], ['八幡浜', '臼杵', 2.4], ['三崎', '佐賀関', 1.17],
+  ['鹿児島', '那覇', 25], ['新潟', '両津', 2.5],
+];
+const terminalNode = {};
+{
+  const ents = graph.map((n, j) => ({ lat: n.lat, lon: n.lon, j })).filter((e) => graph[e.j].entry);
+  for (const e of ents) e.comp = compAt(e);
+  const idx = new GridIndex(ents, 0.1);
+  for (const [name, [lon, lat]] of Object.entries(TERMINALS)) {
+    const j = graph.length;
+    graph.push({ lon, lat, adj: [], entry: true, terminal: name });
+    terminalNode[name] = j;
+    const q = { lon, lat }, comp = compAt(q);
+    // ordinary-road links to the three nearest entries on the same land (none on 佐渡: the terminal is the entry)
+    for (const e of idx.within(q, ACCESS_KM).filter((e) => e.comp === comp && overLand(q, e)).sort((a, b) => km(q, a) - km(q, b)).slice(0, 3)) {
+      const min = (km(q, e) * DETOUR / (lat > 41.4 && lon > 139.3 ? LOCAL_HK : LOCAL)) * 60;
+      edges.push(j, e.j, Math.max(1, Math.round(min * 10)));
+    }
+  }
+}
+const ferries = FERRY_ROUTES.map(([a, b, h], k) => [terminalNode[a], terminalNode[b], Math.round((h * 60 + FERRY_BOARD) * 10), k]);
+console.log(`ferries: ${ferries.length} routes between ${Object.keys(TERMINALS).length} terminals`);
+
 // ------------------------------------------------------------------ 3. access legs
 const entries = graph.map((n, j) => ({ lat: n.lat, lon: n.lon, j })).filter((e) => graph[e.j].entry);
 for (const e of entries) e.comp = compAt(e);
@@ -243,6 +285,9 @@ writeJson(resolve(root, 'public/geo/network.json'), {
   edges,
   munis: { ll: munis.map((m) => m.ll), comp: muniComp, acc: munis.map((m) => m.acc) },
   pois,
+  /** ferry links [nodeA, nodeB, minutes×10, route] and their names (off-switchable in the map) */
+  ferries,
+  ferryRoutes: FERRY_ROUTES.map(([a, b, h]) => ({ a, b, hours: h })),
   /** entries for origins picked anywhere on the map: [node, lon, lat, land component] */
   entries: entries.map((e) => [e.j, r4(e.lon), r4(e.lat), e.comp]),
   generated: new Date().toISOString().slice(0, 10),

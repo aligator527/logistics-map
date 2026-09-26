@@ -466,6 +466,7 @@
     if (k.startsWith('muni:')) return mk('origin', muniXY(k.slice(5)), originName(k));
     if (k.startsWith('site:')) return mk('origin', siteXY(k.slice(5)), originName(k));
     if (k.startsWith('pt:')) { const [lon, lat] = k.slice(3).split(',').map(Number); return mk('origin', geo.P(projectLL(lon, lat, geo.layout).p), originName(k)); }
+    if (k === 'net:sim') return lt.simPicks.flatMap((i, n) => mk(`sim${n}`, muniXY(muni.codes[i]), `${n + 1}. ${muniLabel(muni.codes[i])}`));
     // every DPL site is already on the map; the shortlist gets small origin marks
     if (k === 'net:short') return shortlist.items.flatMap((it, i) => it.kind === 'muni' ? mk(`o${i}`, muniXY(it.code), muniLabel(it.code), false)
       : it.kind === 'site' ? mk(`o${i}`, sites[Number(it.code)] ? geo!.P(sites[Number(it.code)].p) : null, sites[Number(it.code)]?.name ?? '', false) : []);

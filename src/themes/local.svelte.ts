@@ -42,6 +42,8 @@ export class LocalTheme implements ThemeView {
   reach = $state.raw<Reach | null>(null);
   private groups = $state.raw<ReturnType<typeof hubGroups> | null>(null);
   setTravel(r: Router, hubs: HubItem[]) { this.groups = hubGroups(hubs); this.router = r; this.reach = new Reach(r); }
+  /** 立地シミュレーション: the municipalities picked (their reach is the origin 'net:sim') */
+  simPicks = $state.raw<number[]>([]);
   /** the 1 km grid, once loaded and prepared (App loads it when the grid view is asked for) */
   grid = $state.raw<Grid | null>(null);
   private places = (keys: string[]) => keys.map((k) => this.router!.poi(k)).filter((p): p is Place => !!p);
@@ -49,6 +51,7 @@ export class LocalTheme implements ThemeView {
   readonly hubTimes = $derived.by(() => {
     const r = this.router, g = this.groups;
     if (!r || !g) return null;
+    r.ferries = app.ferries;
     return { port: r.toMunis(this.places(g.port)), air: r.toMunis(this.places(g.air)), rail: r.toMunis(this.places(g.rail)) };
   });
   /** origin of the reach map: app.iso, else the selected municipality */
@@ -62,6 +65,7 @@ export class LocalTheme implements ThemeView {
       if (k.startsWith('pt:') && this.reach) { const [lon, lat, comp] = k.slice(3).split(',').map(Number); return this.reach.place(lon, lat, comp); }
       return r.poi(k);
     };
+    if (key === 'net:sim') return this.simPicks.map((i) => r.muni(i));
     if (key === 'net:dpl') return store.sites.map((s) => r.poi(`site:${s.name}`)).filter((p): p is Place => !!p);
     if (key === 'net:short') {
       return shortlist.items.map((it) => (it.kind === 'muni' ? one(`muni:${it.code}`) : it.kind === 'site' ? one(`site:${store.sites[Number(it.code)]?.name}`) : null))
@@ -74,19 +78,24 @@ export class LocalTheme implements ThemeView {
   readonly isNetwork = $derived.by(() => this.originKey.startsWith('net:'));
   readonly isoTimes = $derived.by(() => {
     const o = this.originPlaces(this.originKey);
-    return o.length ? this.router!.toMunis(o) : null;
+    if (!o.length) return null;
+    this.router!.ferries = app.ferries;
+    return this.router!.toMunis(o);
   });
   /** minutes per 1 km cell (grid view) */
   readonly gridTimes = $derived.by(() => {
     if (!app.igrid || !this.grid || !this.reach?.ready) return null;
     const o = this.originPlaces(this.originKey);
-    return o.length ? this.reach.toGrid(o, this.grid) : null;
+    if (!o.length) return null;
+    this.router!.ferries = app.ferries;
+    return this.reach.toGrid(o, this.grid);
   });
   /** hubs (ports / airports / rail stations) nearest the origin by time */
   hubsFrom(key: string, group: 'port' | 'air' | 'rail', n = 2) {
     const o = this.originPlace(key), g = this.groups;
     if (!o || !g) return [];
     const keys = g[group].filter((k) => this.router!.poi(k));
+    this.router!.ferries = app.ferries;
     const times = this.router!.toPlaces([o], this.places(keys));
     return keys.map((k, j) => ({ name: k.slice(k.indexOf(':') + 1), t: times[j] })).filter((x) => isFinite(x.t)).sort((a, b) => a.t - b.t).slice(0, n);
   }

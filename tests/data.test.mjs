@@ -140,8 +140,14 @@ test('hazard shares and road network', async () => {
   const h = (c) => t[ix(c)] / 60;
   assert.ok(h('23101') > 3.5 && h('23101') < 5.5, `千代田→名古屋 ${h('23101')} h`);
   assert.ok(h('27128') > 5.5 && h('27128') < 8, `千代田→大阪 ${h('27128')} h`);
-  assert.equal(t[ix('01101')], Infinity, 'no road to Hokkaido');
-  assert.equal(t[ix('15224')], Infinity, 'no road to 佐渡');
+  // with the long-distance ferries Hokkaido and 佐渡 are reachable; without them they are not
+  assert.ok(h('01101') > 15 && h('01101') < 24, `千代田→札幌 by ferry ${h('01101')} h`);
+  assert.ok(isFinite(t[ix('15224')]), '佐渡 by ferry');
+  r.ferries = false;
+  const nf = r.toMunis([r.muni(ix('13101'))]);
+  assert.equal(nf[ix('01101')], Infinity, 'no road to Hokkaido');
+  assert.equal(nf[ix('15224')], Infinity, 'no road to 佐渡');
+  r.ferries = true;
   const s = r.toMunis([r.muni(ix('01101'))]);
   assert.ok(s[ix('01202')] / 60 < 5, '札幌→函館 by road');
 });
