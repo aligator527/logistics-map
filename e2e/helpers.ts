@@ -10,6 +10,8 @@ export async function open(page: Page, hash = '', opts: { theme?: 'light' | 'dar
     if (m.type() === 'error' && !/Failed to load resource|net::ERR_FAILED/.test(m.text())) errors.push(m.text());
   });
   await page.route(/bosai|jma\.go\.jp|prcdn\.freetls\.fastly\.net|gsi\.go\.jp/, (r) => r.abort());
+  // web fonts may or may not arrive in time (display=optional): system fonts keep screenshots stable
+  await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.addInitScript((theme) => {
     try { localStorage.setItem('lang', 'ja'); if (theme) localStorage.setItem('theme', theme); } catch { /* ignore */ }
   }, opts.theme ?? 'light');
