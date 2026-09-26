@@ -83,6 +83,8 @@ class AppState {
   /** municipal comparison: two 5-digit codes ('' = empty slot) */
   ma = $state('');
   mb = $state('');
+  /** reach by road: origin as 'muni:<code>' or 'site:<DPL name>' ('' = the selected municipality) */
+  iso = $state('');
 
   showDpl = $state(true);
   showRoads = $state(true);
@@ -150,6 +152,7 @@ class AppState {
       if (this.lmet !== 'pop2050') p.set('lk', this.lmet);
       if (this.muni) p.set('mu', this.muni);
       if (this.ma || this.mb) p.set('mc', `${this.ma}-${this.mb}`);
+      if (this.iso) p.set('io', this.iso);
     }
     if (this.layer === 'score') {
       if (this.slevel === 'muni') p.set('sl', 'muni');
@@ -183,6 +186,8 @@ class AppState {
     const [ma, mb] = (p.get('mc') ?? '').split('-');
     this.ma = /^\d{5}$/.test(ma ?? '') ? ma : '';
     this.mb = /^\d{5}$/.test(mb ?? '') ? mb : '';
+    const io = p.get('io') ?? '';
+    this.iso = /^(muni:\d{5}|site:.{1,80})$/.test(io) ? io : '';
     // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"
     const sw = p.get('sw');
     this.weights = {};

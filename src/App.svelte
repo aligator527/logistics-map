@@ -5,7 +5,7 @@
   import { loadGeo, loadMunis, roadPaths, type GeoData, type Shape } from './lib/geo';
   import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme } from './lib/state.svelte';
   import { prefName, t, type Key } from './lib/i18n';
-  import { fmtCompact, fmtNum, fmtPct, fmtSqm } from './lib/scale';
+  import { fmtCompact, fmtMinutes, fmtNum, fmtPct, fmtSqm } from './lib/scale';
   import { WarehouseTheme } from './themes/warehouse.svelte';
   import { FlowsTheme, FLOW_METRICS } from './themes/flows.svelte';
   import { LabourTheme } from './themes/labour.svelte';
@@ -14,6 +14,7 @@
   import { LocalTheme } from './themes/local.svelte';
   import { NowTheme, type Diesel } from './themes/now.svelte';
   import { live, WARN } from './lib/live.svelte';
+  import { Router, type Network } from './lib/travel';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -176,10 +177,21 @@
   $effect(() => { document.documentElement.lang = L; document.title = `${tt('title')} · ${L === 'ja' ? 'Japan Logistics Map' : '総合物流マップ'}`; });
   // JMA live data: polled only while the live theme is open
   $effect(() => {
-    if (app.layer !== 'now') return;
+    if (app.layer !== 'now' && !shortlist.items.length) return;
     live.start();
     return () => live.stop();
   });
+  // road network (~300 KB) for travel times: loaded when a view needs it
+  let netLoading = $state(false);
+  $effect(() => {
+    if (!lt || !hubs || lt.router || netLoading) return;
+    if (!(app.layer === 'local' || muniLevel || app.site >= 0 || shortlist.items.length)) return;
+    netLoading = true;
+    fetch(`${import.meta.env.BASE_URL}geo/network.json`).then((r) => (r.ok ? r.json() : null)).then((n: Network | null) => {
+      if (n && lt && hubs) lt.setTravel(new Router(n), hubs.items);
+    }).catch((e) => console.warn('network', e)).finally(() => (netLoading = false));
+  });
+  $effect(() => { if (msc && lt?.hubTimes) msc.portTimes = lt.hubTimes.port; });
   // census tables (~70 KB each) are loaded when the flow theme (or the score, which uses them) is opened
   $effect(() => { if ((app.layer === 'flows' || app.layer === 'score') && fl) fl.load(); });
 
@@ -274,7 +286,19 @@
     }
     return out;
   });
-  const pois = $derived.by(() => [...hubPois, ...livePois, ...newsPois]);
+  const pois = $derived.by(() => [...hubPois, ...livePois, ...newsPois, ...originPois]);
+  /** origin of the reach map */
+  const originPois = $derived.by((): Poi[] => {
+    if (!geo || !localLevel || !lt?.isoTimes || !muni) return [];
+    const k = lt.originKey;
+    let xy: [number, number] | null = null;
+    if (k.startsWith('muni:')) { const c = (muni as unknown as { xy: ([number, number] | null)[] }).xy[muni.codes.indexOf(k.slice(5))]; if (c) xy = geo.P(c); }
+    else { const s = sites.find((x) => x.name === k.slice(5)); if (s) xy = geo.P(s.p); }
+    if (!xy) return [];
+    return [{ key: 'origin', kind: 'origin', xy, r: 7, label: originName(k), major: true, tip: { title: originName(k), sub: tt('isoOrigin') } }];
+  });
+  function originName(k: string) { return k.startsWith('muni:') ? muniLabel(k.slice(5)) : k.slice(5); }
+  function showReach(key: string) { app.stopCompare(); app.layer = 'local'; app.lmet = 'iso'; app.iso = key; }
   const hubPois = $derived.by((): Poi[] => {
     if (!geo || !hubs || !app.showHubs) return [];
     const maxT = { air: 0, port: 0, rail: 1 };
@@ -296,6 +320,13 @@
   function hubRows(name: string): [string, string][] {
     const hb = hubs?.sites[name];
     const out: [string, string][] = [];
+    if (lt?.router) {
+      for (const [g, key] of [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const) {
+        const h = lt.hubsFrom(`site:${name}`, g, 1)[0];
+        if (h) out.push([tt(key), `${h.name} · ${fmtMinutes(L, h.t)}`]);
+      }
+      if (out.length) return out;
+    }
     if (hb?.air) out.push([tt('nearestAir'), `${hb.air.n} ${fmtNum(L, hb.air.km, 0)} km`]);
     if (hb?.port) out.push([tt('nearestPort'), `${hb.port.n} ${fmtNum(L, hb.port.km, 0)} km`]);
     return out;
@@ -460,6 +491,8 @@
           [tt('pool30'), `${fmtCompact(L, num(mm.pool30[mi]))}${L === 'ja' ? '人' : ''}`],
           [tt('cluster20'), `${fmtCompact(L, num(mm.cluster20[mi]))}${L === 'ja' ? '人' : ''}`],
           [tt('hzQuake'), `${fmtNum(L, num(mm.quake[mi]), 0)}%`],
+          ...(lt ? lt.metrics.filter((m) => m.key.startsWith('hz_') || ['tPort', 'tAir', 'tRail'].includes(m.key))
+            .map((m) => [m[L], isFinite(m.get(mi)) ? m.fmt(m.get(mi)) : '–'] as [string, string]) : []),
         ], note: mm.landEst[mi] ? tt(mm.landEst[mi] === 1 ? 'landEst15' : 'landEstPref') : undefined });
       }
     }
@@ -492,6 +525,15 @@
     return sites[Number(it.code)]?.name ?? it.code;
   }
   const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : 'dplIn');
+  /** live warning level at a shortlisted place (prefecture: its highest municipal level) */
+  function shortAlert(it: ShortItem): { level: number; text: string } {
+    if (!muni || !live.warnTime) return { level: 0, text: '' };
+    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : muni.codes.filter((c) => Number(c.slice(0, 2)) === Number(it.code));
+    let level = 0, best = '';
+    for (const c of codes) { const l = live.level(c, true); if (l > level) { level = l; best = c; } }
+    const text = best ? (live.warnings.get(best) ?? []).filter((k) => (WARN[k]?.level ?? 0) >= 2).map((k) => WARN[k]?.[L] ?? k).join('・') : '';
+    return { level, text: it.kind === 'pref' && best ? `${muniLabel(best)}: ${text}` : text };
+  }
   function openShort(it: ShortItem) {
     app.stopCompare();
     if (it.kind === 'pref') { app.muni = ''; app.site = -1; app.pref = Number(it.code); }
@@ -827,6 +869,7 @@
               {#if localLevel}
                 <button type="button" class="btn" onclick={() => (app.ma = app.muni)} disabled={app.ma === app.muni}>{tt('setA')}</button>
                 <button type="button" class="btn" onclick={() => (app.mb = app.muni)} disabled={app.mb === app.muni}>{tt('setB')}</button>
+                <button type="button" class="btn" onclick={() => showReach(`muni:${app.muni}`)} disabled={app.iso === `muni:${app.muni}` && app.lmet === 'iso'}>{tt('isoFrom')}</button>
               {/if}
             </p>
           {:else}
@@ -834,10 +877,10 @@
           {#if mt}
             {#if p}
               <p class="kpi tnum">{view.fmt(view.value(p))}</p>
-              <p class="kpi-sub">{tt('medianOfMunis')}</p>
+              <p class="kpi-sub">{tt(muniLevel ? 'medianOfMunis' : 'medianOfMunisValue')}</p>
             {:else}
-              {@const best = [...mt.values].filter(([, v]) => isFinite(v)).sort((x, y) => y[1] - x[1])[0]}
-              <p class="kpi tnum">{best ? `${muniLabel(best[0])} ${view.fmt(best[1])}` : '–'}</p>
+              {@const bestCode = mt.ranks.keys().next().value}
+              <p class="kpi tnum">{bestCode ? `${muniLabel(bestCode)} ${view.fmt(mt.values.get(bestCode) ?? NaN)}` : '–'}</p>
             {/if}
           {:else if app.layer === 'score' && !p}
             {@const best = topBars(view)[0]}
@@ -951,6 +994,38 @@
         {/if}
 
         {#if localLevel && lt}
+          {#if app.lmet === 'iso' || app.iso}
+            <section class="panel">
+              <div class="head-row">
+                <p class="eyebrow">{tt('isoTitle')}{lt.originKey ? ` · ${originName(lt.originKey)}` : ''}</p>
+                {#if app.iso}<button type="button" class="linkish" onclick={() => (app.iso = '')}>{tt('isoClear')}</button>{/if}
+              </div>
+              {#if !lt.router}
+                <p class="src" role="status">{tt('loadingNetwork')}</p>
+              {:else if !lt.isoTimes}
+                <p class="src">{tt('isoPick')}</p>
+              {:else}
+                {@const ip = lt.isoPop ?? []}
+                {@const top = Math.max(...ip.map((x) => x.pop), 1)}
+                <p class="sub-eyebrow">{tt('isoPop')}</p>
+                <BarList ranked={false} bars={ip.map((x) => ({ key: String(x.lim), label: `${fmtMinutes(L, x.lim)}${L === 'ja' ? '' : ''} ${tt('isoWithin')}`,
+                                                             value: `${fmtCompact(L, x.pop)}${L === 'ja' ? '人' : ''}`, pct: (x.pop / top) * 100 }))} />
+                {@const st = lt.router.toPlaces([lt.originPlace(lt.originKey)!], sites.map((s) => lt!.router!.poi(`site:${s.name}`) ?? { ll: [0, 0] as [number, number], comp: -9, acc: [] }))}
+                <p class="sub-eyebrow">{tt('isoDpl')}</p>
+                <ul class="lvls">
+                  {#each [30, 60, 120] as lim (lim)}<li>{fmtMinutes(L, lim)} <strong class="tnum">{st.filter((x) => x <= lim).length}</strong></li>{/each}
+                </ul>
+                <p class="sub-eyebrow">{tt('isoHubs')}</p>
+                <ul class="plain">
+                  {#each [['port', 'tPortHub'], ['air', 'tAirHub'], ['rail', 'tRailHub']] as const as [g, key] (g)}
+                    {@const hs = lt.hubsFrom(lt.originKey, g, 2)}
+                    <li><span class="small">{tt(key)}</span> {hs.length ? hs.map((h) => `${h.name} ${fmtMinutes(L, h.t)}`).join('、') : tt('noRoad')}</li>
+                  {/each}
+                </ul>
+              {/if}
+              <p class="src note">{tt('isoNote')} <a href={lt.router?.net.source.url ?? '#sources'}>{lt.router?.net.source[L] ?? ''}</a></p>
+            </section>
+          {/if}
           {#if app.muni && lt.indexOf(app.muni) >= 0}
             <section class="panel">
               <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>
@@ -968,7 +1043,7 @@
           {/if}
           {@const met = lt.metric}
           {@const topM = lt.codes.map((c, i) => ({ c, v: lt!.raw[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
-            .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v)).slice(0, 10)}
+            .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v) || (muni?.m.pop[lt!.indexOf(b.c)] ?? 0) - (muni?.m.pop[lt!.indexOf(a.c)] ?? 0)).slice(0, 10)}
           <section class="panel">
             <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''} · {met[L]}</p>
             <BarList bars={topM.map((x) => ({ key: x.c, label: muniLabel(x.c), value: met.fmt(x.v),
@@ -1056,7 +1131,8 @@
           <section class="panel">
             <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L}
                       extra={hubRows(sites[app.site].name)} />
-            <p class="memo"><button type="button" class="btn" onclick={() => shortlist.toggle('site', String(app.site))}>{shortlist.has('site', String(app.site)) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button></p>
+            <p class="memo"><button type="button" class="btn" onclick={() => shortlist.toggle('site', String(app.site))}>{shortlist.has('site', String(app.site)) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button>
+              {#if lt}<button type="button" class="btn" onclick={() => showReach(`site:${sites[app.site].name}`)}>{tt('isoFrom')}</button>{/if}</p>
           </section>
         {/if}
         {#if p && (app.layer === 'warehouse' || app.showDpl)}
@@ -1082,10 +1158,20 @@
             {/if}
           </div>
           {#if shortlist.items.length}
+            {@const alerts = shortlist.items.map((it) => shortAlert(it)).filter((a) => a.level >= 2)}
+            {#if live.warnTime}
+              <p class="alert-line" class:hot={alerts.some((a) => a.level >= 3)} role="status">
+                {alerts.length ? `${tt('shortAlert')}：${alerts.length}` : tt('shortAlertNone')}
+                {#if alerts.length}<button type="button" class="linkish" onclick={() => { app.layer = 'now'; app.nmet = 'warn'; }}>{tt('layerNow')} →</button>{/if}
+              </p>
+            {/if}
             <ul class="short">
               {#each shortlist.items as it (it.kind + it.code)}
+                {@const al = shortAlert(it)}
                 <li>
-                  <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}</button>
+                  <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}
+                    {#if al.level >= 2}<span class="lv-chip" style:background={nt?.categories?.[al.level - 1]?.color} class:inv={al.level >= 3}
+                                            title={al.text}>{nt?.levelName(al.level) ?? ''}</span>{/if}</button>
                   <span class="kind">{shortKind(it)}</span>
                   <button type="button" class="btn ghost x" aria-label={tt('remove')} onclick={() => shortlist.toggle(it.kind, it.code)}>×</button>
                 </li>
@@ -1236,6 +1322,11 @@
   .short { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .short li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); }
   .short .kind { font-size: 11.5px; color: var(--muted); }
+  .lv-chip { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 600; color: #111; border: 1px solid var(--line-strong); vertical-align: 1px; }
+  .lv-chip.inv { color: #fff; }
+  .alert-line { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-2); display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .alert-line.hot { color: var(--ink); font-weight: 600; }
+  .sub-eyebrow { margin: 12px 0 6px; font-size: 12px; color: var(--muted); }
   .short .x { min-height: 32px; padding: 0 8px; }
   .note-card { border: 1px solid var(--line); border-left: 3px solid var(--mark); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); font-size: 13px; }
   .note-card p { margin: 0; }
@@ -1270,8 +1361,9 @@
     .top { padding-top: 12px; }
     h1 { font-size: 18px; }
     .sub { display: none; }
-    .subjects :global(.seg) { display: flex; width: 100%; }
-    .subjects :global(.seg button) { flex: 1; padding: 0 8px; }
+    /* six subjects: two rows of three rather than a row wider than the phone */
+    .subjects :global(.seg) { display: flex; flex-wrap: wrap; width: 100%; }
+    .subjects :global(.seg button) { flex: 1 1 30%; min-width: 0; padding: 0 6px; font-size: 13.5px; }
     .controls { position: static; gap: 10px 16px; }
     .controls :global(.seg) { max-width: 100%; flex-wrap: wrap; }
     .ctl.time { flex-basis: 100%; }

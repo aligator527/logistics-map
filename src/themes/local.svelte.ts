@@ -3,7 +3,8 @@
 
 import { app } from '../lib/state.svelte';
 import type { Label } from '../lib/data';
-import { fmtCompact, fmtNum, makeClasses } from '../lib/scale';
+import { SEQ, fmtCompact, fmtMinutes, fmtNum, makeClasses, type Classes } from '../lib/scale';
+import { hubGroups, type HubItem, type Place, type Router } from '../lib/travel';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { CompareRow } from '../components/ComparePanel.svelte';
 import type { MuniData } from './muniscore.svelte';
@@ -19,6 +20,8 @@ export interface LocalMetric extends Label {
   diverging?: boolean;
   /** −1: lower is better for logistics (only used to word the rank) */
   better?: 1 | -1;
+  /** travel time in minutes: fixed classes (30 min steps) */
+  time?: boolean;
   hint: Label;
   source: string;
 }
@@ -28,6 +31,44 @@ export class LocalTheme implements ThemeView {
   private d: MuniData & { m: Record<string, (number | null)[]> };
   private ctx: Ctx;
   constructor(d: MuniData, ctx: Ctx) { this.d = d as never; this.ctx = ctx; }
+
+  // ------------------------------------------------------------ travel times (road network loads lazily)
+  router = $state.raw<Router | null>(null);
+  private groups = $state.raw<ReturnType<typeof hubGroups> | null>(null);
+  setTravel(r: Router, hubs: HubItem[]) { this.groups = hubGroups(hubs); this.router = r; }
+  private places = (keys: string[]) => keys.map((k) => this.router!.poi(k)).filter((p): p is Place => !!p);
+  /** minutes from every municipality to the nearest hub of each group */
+  readonly hubTimes = $derived.by(() => {
+    const r = this.router, g = this.groups;
+    if (!r || !g) return null;
+    return { port: r.toMunis(this.places(g.port)), air: r.toMunis(this.places(g.air)), rail: r.toMunis(this.places(g.rail)) };
+  });
+  /** origin of the reach map: app.iso, else the selected municipality */
+  readonly originKey = $derived.by(() => app.iso || (app.muni ? `muni:${app.muni}` : ''));
+  originPlace(key: string): Place | null {
+    const r = this.router;
+    if (!r || !key) return null;
+    if (key.startsWith('muni:')) { const i = this.indexOf(key.slice(5)); return i >= 0 ? r.muni(i) : null; }
+    return r.poi(key);
+  }
+  readonly isoTimes = $derived.by(() => {
+    const o = this.originPlace(this.originKey);
+    return o ? this.router!.toMunis([o]) : null;
+  });
+  /** hubs (ports / airports / rail stations) nearest the origin by time */
+  hubsFrom(key: string, group: 'port' | 'air' | 'rail', n = 2) {
+    const o = this.originPlace(key), g = this.groups;
+    if (!o || !g) return [];
+    const keys = g[group].filter((k) => this.router!.poi(k));
+    const times = this.router!.toPlaces([o], this.places(keys));
+    return keys.map((k, j) => ({ name: k.slice(k.indexOf(':') + 1), t: times[j] })).filter((x) => isFinite(x.t)).sort((a, b) => a.t - b.t).slice(0, n);
+  }
+  /** people within 30 / 60 / 90 / 120 / 180 min of the origin (by municipality population centre) */
+  readonly isoPop = $derived.by(() => {
+    const t = this.isoTimes, pop = this.d.m.pop;
+    if (!t) return null;
+    return [30, 60, 90, 120, 180].map((lim) => ({ lim, pop: t.reduce((s, x, i) => s + (x <= lim ? pop[i] ?? 0 : 0), 0) }));
+  });
 
   readonly flows = [];
   readonly trend = null;
@@ -46,6 +87,12 @@ export class LocalTheme implements ThemeView {
     const ha = (x: number) => `${fmtCompact(L, x)} ha`;
     const src = (k: string) => S[k]?.[L] ?? '';
     const share = (k: string) => (i: number) => { const a = m.area?.[i], x = m[k]?.[i]; return a && x !== null && x !== undefined ? (x / (a * 100)) * 100 : NaN; };
+    const mins = (x: number) => fmtMinutes(L, x);
+    const arr = (a: Float32Array | null | undefined) => (i: number) => { const x = a?.[i]; return x === undefined || !isFinite(x) ? NaN : x; };
+    const net = this.router?.net.source[L] ?? '';
+    const hz = (k: string, ja: string, en: string, hja: string, hen: string): LocalMetric => ({
+      key: `hz_${k}`, ja, en, group: 'risk', get: v(`hz_${k}`), fmt: pct(1), better: -1, hint: { ja: hja, en: hen }, source: src('hazard') });
+    const hasHz = 'hz_flood' in m;
     return [
       { key: 'pop2050', ja: '人口の増減（2020→2050）', en: 'Population change 2020→2050', group: 'people', get: v('pop2050'), fmt: signed, diverging: true, better: 1,
         hint: { ja: '将来の消費需要の変化', en: 'Future demand trend' }, source: src('proj') },
@@ -57,6 +104,14 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '市区町村の人口', en: 'Residents of the municipality' }, source: src('mesh') },
       { key: 'ic', ja: '最寄りICまでの距離', en: 'Distance to an interchange', group: 'access', get: v('ic'), fmt: (x) => `${fmtNum(L, x, 1)} km`, better: -1,
         hint: { ja: '人口重心から最寄りのIC・スマートICまで', en: 'From the population centre to the nearest IC' }, source: src('ic') },
+      { key: 'iso', ja: '到達時間（起点から）', en: 'Travel time from the origin', group: 'access', get: arr(this.isoTimes), fmt: mins, better: -1, time: true,
+        hint: { ja: '選んだ市区町村・DPL物件からトラックで何分か（推計）', en: 'Minutes by truck from the chosen municipality or DPL site (estimate)' }, source: net },
+      { key: 'tPort', ja: '主要コンテナ港までの時間', en: 'Time to a main container port', group: 'access', get: arr(this.hubTimes?.port), fmt: mins, better: -1, time: true,
+        hint: { ja: '年10万TEU以上の港まで（推計）', en: 'To a port handling ≥ 100k TEU a year (estimate)' }, source: net },
+      { key: 'tAir', ja: '主要貨物空港までの時間', en: 'Time to a main cargo airport', group: 'access', get: arr(this.hubTimes?.air), fmt: mins, better: -1, time: true,
+        hint: { ja: '貨物取扱量が年1万トン以上の空港まで（推計）', en: 'To an airport handling ≥ 10,000 t of cargo a year (estimate)' }, source: net },
+      { key: 'tRail', ja: '貨物駅までの時間', en: 'Time to a rail freight station', group: 'access', get: arr(this.hubTimes?.rail), fmt: mins, better: -1, time: true,
+        hint: { ja: 'JR貨物の駅・オフレールステーションまで（推計）', en: 'To a JR Freight station or off-rail station (estimate)' }, source: net },
       { key: 'land', ja: '工業地の地価', en: 'Industrial land price', group: 'land', get: v('land'), fmt: (x) => `${fmtCompact(L, x)}${L === 'ja' ? '円/㎡' : ' ¥/m²'}`, better: -1,
         hint: { ja: '地価公示・地価調査2026（地点がない市町村は周辺・県の中央値）', en: 'Official land prices 2026 (nearby / prefecture median where no point)' }, source: src('land') },
       { key: 'landChg', ja: '工業地地価の変動率', en: 'Industrial land price change', group: 'land', get: v('landChg'), fmt: signed, diverging: true, better: -1,
@@ -83,6 +138,13 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '65歳以上の割合', en: 'Share of residents aged 65+' }, source: src('proj') },
       { key: 'quake', ja: '地震リスク', en: 'Earthquake risk', group: 'risk', get: v('quake'), fmt: pct(0), better: -1,
         hint: { ja: '人口重心で今後30年に震度6弱以上の確率', en: 'Chance of intensity 6-lower+ within 30 years' }, source: src('jshis') },
+      ...(hasHz ? [
+        hz('flood', '洪水浸水想定区域の人口割合', 'Residents in flood zones', '想定最大規模の降雨で0.5m以上浸水する区域に住む人の割合', 'Share living where the maximum-scenario flood reaches 0.5 m or more'),
+        hz('flood3', '深い浸水（3m以上）の人口割合', 'Residents in deep-flood zones (3 m+)', '1階が水没する深さ。倉庫の床・荷物への影響が大きい', 'Deep enough to submerge a ground floor — cargo and floors at risk'),
+        hz('surge', '高潮浸水想定区域の人口割合', 'Residents in storm-surge zones', '想定最大規模の高潮で0.5m以上浸水する区域', 'Maximum-scenario storm surge, 0.5 m or more'),
+        hz('tsunami', '津波浸水想定区域の人口割合', 'Residents in tsunami zones', '津波浸水想定（都道府県）の区域', 'Prefectural tsunami inundation scenarios'),
+        hz('sabo', '土砂災害警戒区域の人口割合', 'Residents in landslide-warning zones', '土石流・急傾斜地の崩壊・地すべりの警戒区域', 'Debris-flow, steep-slope and landslide warning zones'),
+      ] : []),
     ];
   });
   readonly metric = $derived.by(() => this.metrics.find((x) => x.key === app.lmet) ?? this.metrics[0]);
@@ -97,9 +159,15 @@ export class LocalTheme implements ThemeView {
   };
   readonly muniValue = (code: string) => this.raw[this.indexOf(code)] ?? NaN;
   readonly values = $derived.by(() => new Map(this.d.codes.map((c, i) => [c, this.raw[i]])));
-  readonly classes = $derived.by(() => makeClasses(this.raw, !!this.metric.diverging, this.ctx.dark));
+  readonly classes = $derived.by((): Classes => {
+    if (!this.metric.time) return makeClasses(this.raw, !!this.metric.diverging, this.ctx.dark);
+    // near = strong: the reachable area stands out
+    return { breaks: [30, 60, 90, 120, 180, 240], colors: [...SEQ[this.ctx.dark ? 'dark' : 'light']].reverse(), diverging: false };
+  });
   readonly ranks = $derived.by(() => {
-    const arr = this.raw.map((v, i) => ({ v, c: this.d.codes[i] })).filter((x) => isFinite(x.v)).sort((a, b) => b.v - a.v);
+    // rank 1 = best for logistics where that is defined (shortest time, cheapest land …), else largest
+    const dir = this.metric.better === -1 ? -1 : 1;
+    const arr = this.raw.map((v, i) => ({ v, c: this.d.codes[i] })).filter((x) => isFinite(x.v)).sort((a, b) => dir * (b.v - a.v));
     return new Map(arr.map((x, i) => [x.c, i + 1]));
   });
   readonly fmt = (v: number) => (isFinite(v) ? this.metric.fmt(v) : '–');
@@ -108,12 +176,13 @@ export class LocalTheme implements ThemeView {
     fmt: (v: number) => {
       const m = this.metric;
       if (m.diverging) return `${v > 0 ? '+' : v < 0 ? '−' : ''}${fmtNum(this.L, Math.abs(v), 0)}%`;
+      if (m.time) return fmtMinutes(this.L, v);
       return /%$/.test(m.fmt(1)) ? `${fmtNum(this.L, v, 0)}%` : fmtCompact(this.L, v);
     },
-    hint: this.metric.hint[this.L],
+    hint: this.metric.key === 'iso' && !this.isoTimes ? this.ctx.tt('isoPick') : this.metric.hint[this.L],
     flows: null,
   }));
-  readonly source = $derived.by(() => ({ text: this.metric.source, url: '#sources' }));
+  readonly source = $derived.by(() => ({ text: this.metric.source || (this.L === 'ja' ? '読み込み中…' : 'loading…'), url: '#sources' }));
 
   readonly prefTip = (code: string): Tip => {
     const i = this.indexOf(code);

@@ -5,7 +5,7 @@
 
 import { app } from '../lib/state.svelte';
 import type { Jobs, Label } from '../lib/data';
-import { fmtCompact, fmtNum, makeClasses } from '../lib/scale';
+import { fmtCompact, fmtMinutes, fmtNum, makeClasses } from '../lib/scale';
 import { score, type Criterion, type Preset } from '../lib/score';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { ExtraCriteria } from './score.svelte';
@@ -21,7 +21,7 @@ export interface MuniData {
 export const MUNI_PRESETS: Preset[] = [
   { key: 'balanced', ja: 'バランス', en: 'Balanced', weights: {} },
   { key: 'consumer', ja: '大消費地に近い', en: 'Near consumers', weights: { pop30: 4, pop60: 3, ic: 2, land: 1, zone: 1, cluster: 1, pool: 1, drivers: 0, handlers: 0 } },
-  { key: 'hub', ja: '広域配送ハブ', en: 'Wide-area hub', weights: { ic: 4, pop60: 3, cluster: 2, zone: 2, land: 2, pop30: 1, pool: 1 } },
+  { key: 'hub', ja: '広域配送ハブ', en: 'Wide-area hub', weights: { ic: 4, pop60: 3, cluster: 2, zone: 2, land: 2, port: 2, pop30: 1, pool: 1 } },
   { key: 'cost', ja: 'コスト重視', en: 'Low cost', weights: { land: 5, zone: 3, ic: 2, pop30: 1, pop60: 1, cluster: 0, pool: 1 } },
   { key: 'labour', ja: '人手を確保しやすい', en: 'Easier hiring', weights: { pool: 5, drivers: 2, handlers: 2, pop30: 1, ic: 1, land: 1, zone: 1, cluster: 0 } },
   { key: 'safe', ja: '災害リスクを避ける', en: 'Low hazard', weights: {} },
@@ -37,6 +37,8 @@ export class MuniScoreTheme implements ThemeView {
 
   readonly flows = [];
   readonly trend = null;
+  /** minutes to the nearest main container port (from the road network, once loaded) */
+  portTimes = $state.raw<Float32Array | null>(null);
   private get L() { return this.ctx.L; }
   readonly codes = $derived.by(() => this.d.codes);
   readonly prefIdx = $derived.by(() => this.d.codes.map((c) => Number(c.slice(0, 2)) - 1));
@@ -77,7 +79,21 @@ export class MuniScoreTheme implements ThemeView {
         hint: { ja: '運搬の職業の有効求人倍率（都道府県の値）', en: 'Cargo-handling job openings ratio (prefecture value)' }, source: jbSrc },
       { key: 'quake', ja: '地震リスク', en: 'Earthquake risk', group: 'risk', dir: -1, raw: num(m.quake), fmt: (v) => `${fmtNum(L, v, 0)}%`,
         hint: { ja: '人口重心で今後30年に震度6弱以上の確率', en: 'Chance of intensity 6-lower+ within 30 years at the population centre' }, source: src('jshis') },
-      ...this.risk.filter((r) => r.key !== 'quake').map((r) => ({
+      ...(this.portTimes ? [{ key: 'port', ja: '主要コンテナ港までの時間', en: 'Time to a container port', group: 'access' as const, dir: -1 as const,
+        raw: Array.from(this.portTimes, (v) => (isFinite(v) ? v : NaN)), fmt: (v: number) => fmtMinutes(L, v),
+        hint: { ja: '年10万TEU以上の港までのトラック推計時間', en: 'Truck-time estimate to a port handling ≥ 100k TEU a year' },
+        source: { ja: '国土数値情報 N06・港湾統計から推計', en: 'Estimated from MLIT N06 and port statistics' } }] : []),
+      ...('hz_flood' in m ? [
+        { key: 'mflood', ja: '洪水浸水想定区域', en: 'Flood zones', group: 'risk', dir: -1 as const, raw: num(m.hz_flood), fmt: (v: number) => `${fmtNum(L, v, 0)}%`,
+          hint: { ja: '0.5m以上の浸水想定区域に住む人の割合（想定最大規模）', en: 'Residents where the maximum-scenario flood reaches 0.5 m+' }, source: src('hazard') },
+        { key: 'mcoast', ja: '高潮・津波浸水想定区域', en: 'Storm-surge & tsunami zones', group: 'risk', dir: -1 as const,
+          raw: m.hz_surge.map((v, i) => Math.max(v ?? NaN, m.hz_tsunami[i] ?? NaN)), fmt: (v: number) => `${fmtNum(L, v, 0)}%`,
+          hint: { ja: '高潮・津波の浸水想定区域に住む人の割合（大きい方）', en: 'Residents in storm-surge or tsunami zones (the larger share)' }, source: src('hazard') },
+        { key: 'msabo', ja: '土砂災害警戒区域', en: 'Landslide-warning zones', group: 'risk', dir: -1 as const, raw: num(m.hz_sabo), fmt: (v: number) => `${fmtNum(L, v, 1)}%`,
+          hint: { ja: '土砂災害警戒区域に住む人の割合', en: 'Residents in landslide-warning zones' }, source: src('hazard') },
+      ] as Criterion[] : []),
+      // prefecture-level hazards only where no municipal figure replaces them
+      ...this.risk.filter((r) => r.key !== 'quake' && !('hz_flood' in m && (r.key === 'flood' || r.key === 'sediment'))).map((r) => ({
         ...r, inherited: true, raw: inherit(r.raw),
         hint: { ja: `${r.hint.ja}（都道府県の値）`, en: `${r.hint.en} (prefecture value)` },
         fmt: (v: number) => `${fmtNum(L, v, r.digits)}${r.unit[L]}`,

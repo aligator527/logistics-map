@@ -86,3 +86,11 @@ export const fmtSignedPt = (lang: Lang, v: number) =>
 /** m² with 坪 in Japanese (the unit the property market uses) */
 export const fmtSqm = (lang: Lang, v: number) =>
   lang === 'ja' ? `${fmtInt(lang, v)}㎡（${fmtInt(lang, v / 3.305785)}坪）` : `${fmtInt(lang, v)} m²`;
+
+/** travel time in minutes, rounded to 5 min: 「1時間25分」 / "1 h 25 min" */
+export const fmtMinutes = (lang: Lang, m: number) => {
+  if (!isFinite(m)) return '–';
+  const r = Math.max(5, Math.round(m / 5) * 5), h = Math.floor(r / 60), mm = r % 60;
+  if (lang === 'ja') return h ? `${h}時間${mm ? `${mm}分` : ''}` : `${mm}分`;
+  return h ? `${h} h${mm ? ` ${mm} min` : ''}` : `${mm} min`;
+};

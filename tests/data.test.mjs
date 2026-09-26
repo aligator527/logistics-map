@@ -121,6 +121,31 @@ test('municipal explorer fields and diesel', () => {
   assert.ok(a['0110000'].length === 10, '札幌市 → 10 wards');
 });
 
+test('hazard shares and road network', async () => {
+  const m = load('data/muni.json');
+  const ix = (c) => m.codes.indexOf(c);
+  for (const k of ['hz_flood', 'hz_flood3', 'hz_surge', 'hz_tsunami', 'hz_sabo']) {
+    assert.equal(m.m[k].length, 1898, k);
+    assert.ok(m.m[k].every((v) => v === null || (v >= 0 && v <= 100)), `${k} in 0..100`);
+  }
+  assert.ok(m.m.hz_flood[ix('13122')] > 80, '葛飾区: mostly inside flood zones');
+  assert.ok(m.m.hz_surge[ix('27128')] > 30, '大阪市中央区: storm surge');
+  assert.ok(m.m.hz_sabo[ix('13122')] < 1, '葛飾区: flat');
+
+  const { Router } = await import('../src/lib/travel.ts');
+  const net = JSON.parse(readFileSync(new URL('../public/geo/network.json', import.meta.url), 'utf8'));
+  assert.deepEqual(net.munis.ll.length, 1898);
+  const r = new Router(net);
+  const t = r.toMunis([r.muni(ix('13101'))]);
+  const h = (c) => t[ix(c)] / 60;
+  assert.ok(h('23101') > 3.5 && h('23101') < 5.5, `千代田→名古屋 ${h('23101')} h`);
+  assert.ok(h('27128') > 5.5 && h('27128') < 8, `千代田→大阪 ${h('27128')} h`);
+  assert.equal(t[ix('01101')], Infinity, 'no road to Hokkaido');
+  assert.equal(t[ix('15224')], Infinity, 'no road to 佐渡');
+  const s = r.toMunis([r.muni(ix('01101'))]);
+  assert.ok(s[ix('01202')] / 60 < 5, '札幌→函館 by road');
+});
+
 test('news: headlines and links only', { skip: !existsSync(new URL('../public/data/news.json', import.meta.url)) }, () => {
   const n = load('data/news.json');
   for (const it of n.items) {

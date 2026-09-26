@@ -10,6 +10,7 @@
 //   census2020/000032214569.xlsx  国勢調査2020 従業地・通学地集計 第12表 (occupation × residence)
 //   census2020/000040067885.xlsx  経済センサス‐活動調査2021 第9-1B表 (employees by industry)
 //   geo/N06-25/N06-25_GML/UTF-8/N06-25_Joint.geojson  expressway interchanges
+//   mesh/hazard.json           hazard-zone share of each grid cell (scripts/etl-hazard.mjs, optional)
 // Every municipality gets a population-weighted centre from the 1 km grid; distances and radius
 // sums are measured from there (a big ward's "interior point" can sit in the mountains).
 import { execFileSync } from 'node:child_process';
@@ -50,6 +51,11 @@ const areaKm2 = new Map(feature(topo, topo.objects.muni).features.map((f) => {
 // rows: [lat, lon, pop2020, pop2025, pop2035, pop2050, work2025, work2050, old2025, codes…] (scripts/etl-mesh.mjs)
 const mesh = JSON.parse(readFileSync(resolve(RAW, 'mesh/pop2020.json'), 'utf8'))
   .map(([lat, lon, pop, p25, p35, p50, w25, w50, o25, ...codes]) => ({ lat, lon, pop, proj: [p25, p35, p50, w25, w50, o25], codes }));
+// hazard zones: per cell, 0–16 samples inside each zone (same row order as pop2020.json)
+const hazardFile = resolve(RAW, 'mesh/hazard.json');
+const hazard = existsSync(hazardFile) ? JSON.parse(readFileSync(hazardFile, 'utf8')) : null;
+if (hazard) hazard.rows.forEach((r, k) => { mesh[k].hz = r; });
+else console.warn('mesh/hazard.json missing: run scripts/etl-hazard.mjs for the hazard-zone shares');
 // Meshes whose code is not a 2025 municipality — 福島県 浜通り pooled as 「07999」 in this dataset,
 // 浜松市's pre-2024 wards — are placed by point-in-polygon on the current boundaries.
 // Mesh centres on the sea (coast of 浜通り) fall outside every polygon: nearest municipality.
@@ -66,8 +72,10 @@ const meshIdx = new GridIndex(mesh, 0.1);
 const pop = Array(N).fill(0), sx = Array(N).fill(0), sy = Array(N).fill(0);
 /** [pop2025, pop2035, pop2050, work2025 (15–64), work2050, old2025 (65+)] per municipality */
 const proj = Array.from({ length: N }, () => [0, 0, 0, 0, 0, 0]);
+/** people living inside each hazard zone (layers of hazard.json) */
+const hzPop = Array.from({ length: N }, () => Array(hazard?.layers.length ?? 0).fill(0));
 function accumulate() {
-  pop.fill(0); sx.fill(0); sy.fill(0); proj.forEach((a) => a.fill(0));
+  pop.fill(0); sx.fill(0); sy.fill(0); proj.forEach((a) => a.fill(0)); hzPop.forEach((a) => a.fill(0));
   for (const m of mesh) {
     const k = m.codes.length || 1;
     for (const c of m.codes) {
@@ -76,6 +84,7 @@ function accumulate() {
       const share = m.pop / k;
       pop[i] += share; sx[i] += share * m.lon; sy[i] += share * m.lat;
       m.proj.forEach((v, j) => { proj[i][j] += v / k; });
+      m.hz?.forEach((v, j) => { hzPop[i][j] += (share * v) / 16; });
     }
   }
 }
@@ -360,6 +369,8 @@ const out = {
     landChg: landChg.map((v) => round(v, 1)),
     urban: urbanHa.map((v) => round(v, 0)), control: controlHa.map((v) => round(v, 0)),
     area: MUNIS.map((m) => round(areaKm2.get(m.code), 1)),
+    // share of residents inside hazard zones (%), from the 1 km grid sampled on the hazard tiles
+    ...Object.fromEntries((hazard?.layers ?? []).map((key, j) => [`hz_${key}`, hzPop.map((a, i) => (pop[i] > 0 ? round((a[j] / pop[i]) * 100, 1) : null))])),
   },
   /** population centre in map coordinates (metres, insets laid out) — news markers etc. */
   xy: centre.map((q) => (q ? r10(project([q.lon, q.lat])) : null)),
@@ -374,6 +385,7 @@ const out = {
     workers: { ja: '令和2年国勢調査 従業地・通学地集計 第12表（常住地、輸送・機械運転従事者＋運搬・清掃・包装等従事者）', en: '2020 Census, occupation by residence (transport/machine operators + carrying/cleaning/packaging)', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200521' },
     logi: { ja: '令和3年経済センサス‐活動調査 第9-1B表（道路貨物運送業＋倉庫業の従業者）', en: '2021 Economic Census, employees in road freight + warehousing', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553' },
     jshis: { ja: 'J-SHIS 確率論的地震動予測地図（防災科研、2024年版）', en: 'J-SHIS (NIED, 2024)', url: 'https://www.j-shis.bosai.go.jp/' },
+    ...(hazard ? { hazard: { ja: `ハザードマップポータルサイト オープンデータ（洪水・高潮・津波・土砂災害、${hazard.generated}取得）を1kmメッシュ人口で集計`, en: `Hazard Map Portal open data (flood, storm surge, tsunami, landslide zones; fetched ${hazard.generated}), weighted by the 1 km population grid`, url: 'https://disaportal.gsi.go.jp/hazardmap/copyright/opendata.html' } } : {}),
     ic: { ja: '国土数値情報 高速道路時系列データ（N06, 2025年度）', en: 'MLIT N06 expressways (FY2025)', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html' },
   },
 };

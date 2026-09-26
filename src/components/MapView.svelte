@@ -12,7 +12,7 @@
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
   export interface Poi {
-    key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
+    key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news' | 'origin'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
     /** fill (earthquake intensity) and text inside the marker (intensity, news count) */
     color?: string; badge?: string; ink?: string;
     /** click: select this prefecture / municipality */
@@ -419,11 +419,14 @@
         {:else if h.kind === 'typhoon'}
           <circle class="ty" r={h.r} />
           <path class="ty-g" transform="scale({h.r / 8})" d="M0-5A5 5 0 0 1 5 0 M0 5A5 5 0 0 1-5 0 M-1.8 0a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0" />
+        {:else if h.kind === 'origin'}
+          <circle class="org" r={h.r} />
+          <circle class="org-c" r={h.r * 0.38} />
         {:else}
           <rect class="nw" x={-h.r - 3} y={-h.r} width={2 * h.r + 6} height={2 * h.r} rx={h.r} />
           <text class="nw-t" text-anchor="middle" dy="0.35em">{h.badge}</text>
         {/if}
-        {#if h.major && (transform.k >= 2.5 || h.kind === 'typhoon' || h.kind === 'quake')}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
+        {#if h.major && (transform.k >= 2.5 || h.kind === 'typhoon' || h.kind === 'quake' || h.kind === 'origin')}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
       </g>
     {/each}
     {#each rings as g (g.label)}
@@ -542,6 +545,9 @@
   .site.sel .dot, .site.sel .ring-out { stroke: var(--accent); stroke-width: 3; }
   .site:hover .dot, .site:hover .ring-out { stroke-width: 2.4; }
   .poi .pm { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
+  .poi .org { fill: var(--surface); stroke: var(--ink); stroke-width: 2.4; }
+  .poi .org-c { fill: var(--ink); }
+  .poi.origin text { fill: var(--ink); font-weight: 600; }
   .poi .glyph { fill: var(--hub); }
   .poi .glyph.line { fill: none; stroke: var(--hub); stroke-width: 1.3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
   .poi:hover .pm { stroke-width: 2.6; }
