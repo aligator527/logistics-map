@@ -353,7 +353,28 @@
   }
   function onnewsplace(code: string) { onpick(code); }
   $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
-  const pois = $derived.by(() => [...hubPois, ...livePois, ...newsPois, ...originPois]);
+  const pois = $derived.by(() => [...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois]);
+  // ------------------------------------------------------------ other developers' facilities (from the news)
+  interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; events: { stage: string; date: string; link: string; t: string }[] }
+  let facilities = $state.raw<Facility[] | null>(null);
+  $effect(() => {
+    if (!app.showFac || facilities) return;
+    fetch(`${import.meta.env.BASE_URL}data/facilities.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (facilities = d?.items ?? [])).catch(() => (facilities = []));
+  });
+  const facPois = $derived.by((): Poi[] => {
+    if (!geo || !muni || !facilities || !app.showFac) return [];
+    return facilities.filter((f) => f.muni).flatMap((f, i) => {
+      const c = (muni as unknown as { xy?: ([number, number] | null)[] }).xy?.[muni.codes.indexOf(f.muni)];
+      if (!c) return [];
+      const last = f.events.at(-1)!;
+      const done = f.events.some((e) => ['done', 'viewing', 'open'].includes(e.stage));
+      const rows: [string, string][] = f.events.map((e) => [e.date, tt(`stg_${e.stage}` as Key)]);
+      if (f.floor) rows.unshift([tt('floor'), fmtSqm(L, f.floor)]);
+      return [{ key: `f${i}`, kind: 'fac' as const, xy: geo!.P(c), r: 5, label: f.name, major: !!f.floor && f.floor > 50_000, filled: done,
+                tip: { title: f.name, sub: `${srcName(f.src)} · ${done ? tt('facDone') : tt('facPipeline')}`, rows, note: tt('facNote'),
+                       link: { href: last.link, label: tt('readArticle') } } }];
+    });
+  });
   /** origin of the reach map */
   const originPois = $derived.by((): Poi[] => {
     if (!geo || !localLevel || !lt?.isoTimes || !muni) return [];
@@ -764,6 +785,9 @@
             <svg width="16" height="12" aria-hidden="true"><rect x="1" y="1.5" width="14" height="9" rx="4.5" class="k-news" /></svg>{tt('layerNews')}
           </button>
         {/if}
+        <button type="button" class="btn chip" aria-pressed={app.showFac} onclick={() => (app.showFac = !app.showFac)}>
+          <svg width="12" height="12" aria-hidden="true"><rect x="3" y="3" width="6" height="6" transform="rotate(45 6 6)" class="k-fac" /></svg>{tt('layerFac')}
+        </button>
         {#if hubs}
           <button type="button" class="btn chip" aria-pressed={app.showHubs} onclick={() => (app.showHubs = !app.showHubs)}>
             <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="3" class="k-hub" /></svg>{tt('layerHubs')}

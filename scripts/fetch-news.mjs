@@ -12,6 +12,7 @@
 // Sources are chosen by their terms of use (see SOURCES[].terms). Trade media reserve reuse and
 // ask commercial sites for permission, so they are listed but disabled until permission is given.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { facilityOf, stageOf } from '../src/lib/related.ts';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -209,6 +210,15 @@ function leadOf(html, title) {
   const start = Math.max(0, lines.findIndex((l) => l.includes(norm(title).slice(0, 12))));
   return lines.slice(start + 1).find((l) => l.length > 40 && /。/.test(l) && !/Copyright|JavaScript|Cookie/.test(l)) ?? '';
 }
+/** 延床面積 in m² from a release page (「延床面積：約120,512.35㎡（36,454坪）」), null when not given */
+function floorOf(html) {
+  const s = norm(decode(html.replace(/<[^>]+>/g, ' ')));
+  const m = s.match(/延(床|べ)面積[^0-9約]{0,12}約?\s*([\d,.]+)\s*(万)?\s*(㎡|m2|m²|平方メートル|坪)/);
+  if (!m) return null;
+  let v = Number(m[2].replace(/,/g, '')) * (m[3] ? 1e4 : 1);
+  if (m[4] === '坪') v *= 3.305785;
+  return v > 500 && v < 2e6 ? Math.round(v) : null;
+}
 let pageFetches = 0;
 async function preview(it, srcKey, desc) {
   const out = {};
@@ -222,6 +232,7 @@ async function preview(it, srcKey, desc) {
       const html = new TextDecoder('utf-8').decode(Buffer.from(await r.arrayBuffer()));
       // img: null = looked, none; missing = not looked yet (retried on the next run)
       if (isPr) out.img = prtimesImage(html);
+      out.floor = floorOf(html);
       if (!out.ex) out.ex = excerpt(leadOf(html, it.t));
     }
     await sleep(400);
@@ -247,8 +258,9 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
       const base = { t: it.title, link: it.link, date: it.date.toISOString().slice(0, 10), src: src.key };
       // previews are fetched once per item and kept in the archive
       const done = old && 'ex' in old && (!/prtimes\.jp/.test(it.link) || 'img' in old);
-      const pv = done ? { ex: old.ex, img: old.img } : await preview(base, src.key, it.desc || '');
-      byLink.set(it.link, { ...base, ex: pv.ex || old?.ex || '', ...(pv.img !== undefined ? { img: pv.img } : old && 'img' in old ? { img: old.img } : {}) });
+      const pv = done ? { ex: old.ex, img: old.img, floor: old.floor } : await preview(base, src.key, it.desc || '');
+      byLink.set(it.link, { ...base, ex: pv.ex || old?.ex || '', ...(pv.img !== undefined ? { img: pv.img } : old && 'img' in old ? { img: old.img } : {}),
+                            ...(pv.floor !== undefined ? { floor: pv.floor } : old && 'floor' in old ? { floor: old.floor } : {}) });
     }
     report.push(`${src.key}: ${kept.length}/${items.length}`);
   } catch (e) {
@@ -258,11 +270,13 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
 // tags are recomputed for the whole archive, so improvements to the rules apply to old items too
 for (const [k, it] of byLink) {
   // archive items from before previews existed get one now (limited per run)
-  const done = 'ex' in it && (!/prtimes\.jp/.test(it.link) || 'img' in it);
+  // facility releases also want the floor area (read from the page once)
+  const done = 'ex' in it && (!/prtimes\.jp/.test(it.link) || 'img' in it) && (!facilityOf(it.t) || 'floor' in it);
   const pv = done ? {} : await preview(it, it.src, '');
   const ex = pv.ex || it.ex || '';
   const img = pv.img !== undefined ? pv.img : it.img;
-  byLink.set(k, { ...it, ex, ...(img !== undefined ? { img } : {}), ...tagsOf(it.t, ex) });
+  const floor = pv.floor !== undefined ? pv.floor : it.floor;
+  byLink.set(k, { ...it, ex, ...(img !== undefined ? { img } : {}), ...(floor !== undefined ? { floor } : {}), ...tagsOf(it.t, ex) });
 }
 
 const items = [...byLink.values()].filter((it) => it.date >= cutoff)
@@ -273,4 +287,45 @@ writeFileSync(OUT, JSON.stringify({
   topics: TOPICS.map(({ key, ja, en }) => ({ key, ja, en })),
   items,
 }));
+// ------------------------------------------------------------------ facility registry
+// Logistics facilities of other developers named in the releases (DPL has its own layer), with the
+// stages seen so far. Cumulative: entries are never dropped when their news leaves the archive.
+{
+  const FAC = resolve(root, 'public/data/facilities.json');
+  // 「プロロジスパーク北本」「ロジスクエア朝霞B」: the place is in the name without 市・町・村 — an
+  // unambiguous stripped name (in the item's prefecture when it names one) places the facility
+  const stripped = new Map();
+  const topoNames = new Map(JSON.parse(readFileSync(resolve(root, 'public/geo/japan.topo.json'), 'utf8')).objects.muni.geometries.map((g) => [String(g.id), g.properties.n]));
+  for (const { name, codes } of munis) {
+    const s = name.replace(/(市|町|村|区)$/, '');
+    if (s.length < 2 || /^(中央|東|西|南|北|港|緑|青葉)$/.test(s) || PREFS.includes(s)) continue;
+    // a designated city stands for one of its wards: no single place (「千葉ニュータウン」 is not in 千葉市)
+    if (name.endsWith('市') && codes.some((c) => topoNames.get(c) !== name)) continue;
+    stripped.set(s, [...(stripped.get(s) ?? []), ...codes]);
+  }
+  const placeFromName = (fname, brand, prefs) => {
+    const rest = fname.replace(brand, '');
+    const hits = [];
+    for (const [s, codes] of stripped) if (rest.includes(s)) hits.push(...codes.filter((c) => !prefs.length || prefs.includes(Number(c.slice(0, 2)))));
+    const uniq = [...new Set(hits)];
+    return uniq.length === 1 ? uniq[0] : '';
+  };
+  const reg = new Map((existsSync(FAC) ? JSON.parse(readFileSync(FAC, 'utf8')).items : []).map((f) => [f.name, f]));
+  for (const it of items) {
+    const f = facilityOf(it.t);
+    if (!f || f.brand === 'DPL') continue;
+    const cur = reg.get(f.name) ?? { name: f.name, brand: f.brand, src: it.src, muni: '', pref: 0, floor: null, events: [] };
+    if (!cur.muni && it.munis.length) cur.muni = it.munis[0];
+    if (!cur.muni) cur.muni = placeFromName(f.name, f.brand, it.prefs);
+    if (cur.muni && !cur.pref) cur.pref = Number(cur.muni.slice(0, 2));
+    if (!cur.pref && it.prefs.length) cur.pref = it.prefs[0];
+    if (!cur.floor && it.floor) cur.floor = it.floor;
+    if (!cur.events.some((e) => e.link === it.link)) cur.events.push({ stage: stageOf(it.t) ?? 'other', date: it.date, link: it.link, t: it.t });
+    cur.events.sort((a, b) => a.date.localeCompare(b.date));
+    reg.set(f.name, cur);
+  }
+  const list = [...reg.values()].sort((a, b) => b.events.at(-1).date.localeCompare(a.events.at(-1).date));
+  writeFileSync(FAC, JSON.stringify({ generated: new Date().toISOString(), note: 'facilities named in developer releases (fetch-news.mjs); cumulative', items: list }));
+  console.log(`facilities.json: ${list.length} facilities, ${list.filter((f) => f.muni).length} placed, ${list.filter((f) => f.floor).length} with floor area`);
+}
 console.log(`news.json: ${items.length} items, ${items.filter((i) => i.munis.length).length} with a municipality, ${items.filter((i) => i.img).length} with an image (${report.join(', ')})`);

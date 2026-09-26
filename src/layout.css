@@ -41,6 +41,7 @@
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
   .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
   .k-news { fill: currentColor; }
+.k-fac { fill: var(--clay); stroke: var(--surface); stroke-width: 1; }
   .mapwrap { position: relative; }
   .national { position: absolute; left: 8px; top: 8px; z-index: 6; min-height: 32px; font-size: 12.5px;
               background: color-mix(in oklab, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }

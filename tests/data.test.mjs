@@ -150,7 +150,7 @@ test('news: headlines and links only', { skip: !existsSync(new URL('../public/da
   const n = load('data/news.json');
   for (const it of n.items) {
     // headline, link, tags and a short preview — never an article body
-    const keys = Object.keys(it).filter((k) => k !== 'img').sort();
+    const keys = Object.keys(it).filter((k) => k !== 'img' && k !== 'floor').sort();
     assert.deepEqual(keys, ['date', 'ex', 'link', 'munis', 'prefs', 'src', 't', 'topics']);
     assert.ok(it.ex.length <= 110, `excerpt too long: ${it.ex.length}`);
     if (it.img) assert.match(it.img, /^https:\/\/prcdn\.freetls\.fastly\.net\//, 'preview images only from the PR TIMES CDN');
@@ -174,4 +174,19 @@ test('related news: facility names, stages, ranking', async () => {
     it('オンラインセミナー開催', '2026-09-07', { prefs: [], munis: [] })];
   assert.deepEqual(relatedOf(a, all).map((r) => r.reason), ['facility', 'series', 'company']);
   assert.deepEqual(timelineOf(a, all).map((x) => x.date), ['2026-08-31', '2026-09-07']);
+});
+
+test('facility registry from the news', () => {
+  const f = load('data/facilities.json');
+  assert.ok(f.items.length > 0);
+  for (const x of f.items) {
+    assert.ok(x.name && x.brand && x.events.length, x.name);
+    assert.ok(!/^DPL/.test(x.name), 'DPL has its own layer');
+    if (x.muni) assert.match(x.muni, /^\d{5}$/);
+    if (x.floor !== null) assert.ok(x.floor > 500 && x.floor < 2e6, `${x.name} floor ${x.floor}`);
+    for (const e of x.events) assert.match(e.link, /^https:\/\//);
+  }
+  const kitamoto = f.items.find((x) => x.name === 'プロロジスパーク北本');
+  if (kitamoto) assert.equal(kitamoto.muni, '11233', '北本市 from the facility name');
+  assert.ok(!f.items.some((x) => x.name.includes('千葉ニュータウン') && x.muni === '12101'), 'not 千葉市中央区');
 });
