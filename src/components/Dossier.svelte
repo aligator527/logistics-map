@@ -5,16 +5,22 @@
     list?: { label: string; value?: string; href?: string }[];
     note?: string;
   }
+  /** side-by-side comparison: one column per place, rows grouped; best = column indexes to mark */
+  export interface DossierTable {
+    head: string[];
+    groups: { title: string; rows: { label: string; cells: string[]; best?: number[] }[] }[];
+  }
 </script>
 
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { t, type Lang } from '../lib/i18n';
 
-  let { title, subtitle, sections, sources, lang, onclose }: {
+  let { title, subtitle, sections, sources, lang, onclose, table = null }: {
     title: string;
     subtitle: string;
     sections: DossierSection[];
+    table?: DossierTable | null;
     sources: string[];
     lang: Lang;
     onclose: () => void;
@@ -37,13 +43,18 @@
     if (e.shiftKey && document.activeElement === first) { last.focus(); e.preventDefault(); }
     else if (!e.shiftKey && document.activeElement === last) { first.focus(); e.preventDefault(); }
   }
+  /** rendered at the end of <body>, so that printing can hide everything else */
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return { destroy() { node.remove(); } };
+  }
   const url = typeof location !== 'undefined' ? location.href : '';
   const today = new Date().toISOString().slice(0, 10);
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-<div class="overlay dossier-root" role="dialog" aria-modal="true" aria-labelledby="dossier-title" tabindex="-1" bind:this={box} {onkeydown}>
-  <div class="paper">
+<div class="overlay dossier-root" role="dialog" aria-modal="true" aria-labelledby="dossier-title" tabindex="-1" bind:this={box} {onkeydown} use:portal>
+  <div class="paper" class:wide={!!table}>
     <div class="bar no-print">
       <button type="button" class="btn" onclick={() => window.print()}>{t(lang, 'print')}</button>
       <button type="button" class="btn ghost" onclick={onclose}>{t(lang, 'close')}</button>
@@ -54,6 +65,25 @@
       <p class="sub">{subtitle}</p>
       <p class="meta">{today} · <span class="url">{url}</span></p>
     </header>
+    {#if table}
+      <div class="tbl-wrap">
+        <table class="cmp">
+          <thead><tr><th scope="col"></th>{#each table.head as h, i (i)}<th scope="col">{h}</th>{/each}</tr></thead>
+          {#each table.groups as g (g.title)}
+            <tbody>
+              <tr class="grp"><th colspan={table.head.length + 1} scope="colgroup">{g.title}</th></tr>
+              {#each g.rows as r (r.label)}
+                <tr>
+                  <th scope="row">{r.label}</th>
+                  {#each r.cells as c, i (i)}<td class="tnum" class:best={r.best?.includes(i)}>{c}</td>{/each}
+                </tr>
+              {/each}
+            </tbody>
+          {/each}
+        </table>
+      </div>
+      <p class="note">{t(lang, 'compareBestNote')}</p>
+    {/if}
     <div class="cols">
       {#each sections as s (s.title)}
         <section>
@@ -92,6 +122,15 @@
     max-width: 900px; margin: 0 auto; background: var(--surface); color: var(--ink);
     border-radius: var(--radius); box-shadow: var(--shadow); padding: clamp(16px, 4vw, 40px);
   }
+  .paper.wide { max-width: 1240px; }
+  .tbl-wrap { overflow-x: auto; margin-top: 16px; }
+  .cmp { border-collapse: collapse; width: 100%; font-size: 12px; table-layout: fixed; }
+  .cmp thead th:first-child { width: 210px; }
+  .cmp th, .cmp td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+  .cmp thead th { position: sticky; top: 0; background: var(--surface); font-size: 12px; text-align: right; border-bottom: 2px solid var(--ink); min-width: 110px; overflow-wrap: anywhere; }
+  .cmp tbody th[scope='row'] { text-align: left; font-weight: 500; color: var(--ink-2); min-width: 180px; }
+  .cmp .grp th { text-align: left; font-size: 11px; letter-spacing: 0.04em; color: var(--muted); padding-top: 12px; border-bottom: 1px solid var(--line-strong); }
+  .cmp td.best { font-weight: 700; background: color-mix(in oklab, var(--blue) 14%, transparent); }
   .bar { display: flex; gap: 8px; justify-content: flex-end; margin-bottom: 8px; }
   .kicker { margin: 0; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
   h2 { margin: 4px 0 0; font-size: 24px; }
@@ -114,6 +153,8 @@
     .paper { box-shadow: none; max-width: none; padding: 0; background: #fff; color: #000; }
     .no-print { display: none; }
     h3 { border-color: #000; }
+    .cmp td.best { background: #e6eef7; }
+    .tbl-wrap { overflow: visible; }
     a { color: #000; text-decoration: none; }
   }
 </style>

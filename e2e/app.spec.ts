@@ -115,3 +115,16 @@ test('network reach on the 1 km grid, 2024 trip types', async ({ page }) => {
   await expect(page.locator('canvas.raster')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('shortlist comparison table and rank stability', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('shortlist', JSON.stringify([{ kind: 'muni', code: '23206' }, { kind: 'muni', code: '11203' }, { kind: 'pref', code: '13' }])));
+  await open(page, 't=score&sl=muni&mu=11229&r=11');
+  await expect(page.locator('.stab')).toContainText('%');
+  await page.locator('aside button', { hasText: '候補を比較' }).click();
+  const table = page.locator('table.cmp');
+  await expect(table).toBeVisible();
+  await expect(table.locator('thead th')).toHaveCount(4);
+  await expect(table.locator('td.best').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(table).toHaveCount(0);
+});

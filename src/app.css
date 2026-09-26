@@ -177,7 +177,7 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
 
 /* print: when the site memo is open, only the memo goes to paper */
 @media print {
-  #app:has(.dossier-root) > :not(.dossier-root) { display: none !important; }
+  body:has(> .dossier-root) > :not(.dossier-root) { display: none !important; }
   body { background: #fff; }
 }
 

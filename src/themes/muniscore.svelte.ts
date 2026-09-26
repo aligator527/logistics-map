@@ -6,7 +6,7 @@
 import { app } from '../lib/state.svelte';
 import type { Jobs, Label } from '../lib/data';
 import { fmtCompact, fmtMinutes, fmtNum, makeClasses } from '../lib/scale';
-import { score, type Criterion, type Preset } from '../lib/score';
+import { score, sensitivity, type Criterion, type Preset } from '../lib/score';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { ExtraCriteria } from './score.svelte';
 import type { Ctx, ThemeView } from './types';
@@ -120,6 +120,8 @@ export class MuniScoreTheme implements ThemeView {
     app.preset = '';
   }
   readonly result = $derived.by(() => score(this.criteria, this.weights));
+  /** rank stability under ±50% changes of every weight (computed when the panel shows it) */
+  readonly sens = $derived.by(() => sensitivity(this.result.parts, this.weights));
   indexOf = (code: string) => this.d.codes.indexOf(code);
 
   // ------------------------------------------------------------ ThemeView

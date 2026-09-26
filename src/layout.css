@@ -134,3 +134,8 @@
 .trips li { display: flex; align-items: center; gap: 8px; }
 .trips .sw { width: 14px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); }
 .trips strong { margin-left: auto; }
+
+.stab { margin-top: 12px; }
+.stab-bar { position: relative; height: 8px; background: var(--surface-2); border-radius: 4px; }
+.stab-bar .range { position: absolute; top: 0; bottom: 0; background: var(--blue); border-radius: 4px; }
+.stab-txt { margin: 6px 0 2px; font-size: 13px; }

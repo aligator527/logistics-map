@@ -5,6 +5,9 @@
   import { live, WARN } from '../lib/live.svelte';
   import { shortlist, type ShortItem } from '../lib/shortlist.svelte';
   import { downloadCsv } from '../lib/csv';
+  import { fmtNum, fmtCompact } from '../lib/scale';
+  import { WARN_COLORS } from '../themes/now.svelte';
+  import Dossier, { type DossierTable } from '../components/Dossier.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -48,6 +51,58 @@
     });
     downloadCsv(`shortlist-${new Date().toISOString().slice(0, 10)}.csv`, [head, ...rows]);
   }
+
+  // ------------------------------------------------------------ side-by-side comparison (printable)
+  let compareOpen = $state(false);
+  const median = (a: number[]) => { const v = a.filter(isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : NaN; };
+  /** best column(s) of a row: highest (dir 1) or lowest (dir −1) finite value */
+  const bestOf = (vals: number[], dir: 1 | -1 | undefined) => {
+    if (!dir) return [];
+    const f = vals.map((v, i) => ({ v, i })).filter((x) => isFinite(x.v));
+    if (f.length < 2) return [];
+    const b = dir === 1 ? Math.max(...f.map((x) => x.v)) : Math.min(...f.map((x) => x.v));
+    return f.filter((x) => x.v === b).map((x) => x.i);
+  };
+  const compareTable = $derived.by((): DossierTable | null => {
+    if (!compareOpen || !lt) return null;
+    const items = shortlist.items;
+    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : '');
+    const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0);
+    /** a local metric for an item: its municipality, or the median over a prefecture's municipalities */
+    const metricOf = (it: ShortItem, get: (i: number) => number) => {
+      if (it.kind === 'pref') return median(lt!.codes.map((c, i) => (Number(c.slice(0, 2)) === Number(it.code) ? get(i) : NaN)));
+      const i = lt!.indexOf(muniOf(it));
+      return i >= 0 ? get(i) : NaN;
+    };
+    const row = (label: string, vals: number[], fmt: (v: number) => string, dir?: 1 | -1) =>
+      ({ label, cells: vals.map((v) => (isFinite(v) ? fmt(v) : '–')), best: bestOf(vals, dir) });
+    const groups: DossierTable['groups'] = [];
+    groups.push({ title: tt('cmpBasics'), rows: [
+      { label: tt('cmpKind'), cells: items.map((it) => shortKind(it)) },
+      { label: L === 'ja' ? '都道府県' : 'Prefecture', cells: items.map((it) => pname(prefOf(it))) },
+      { label: L === 'ja' ? '市区町村' : 'Municipality', cells: items.map((it) => (muniOf(it) ? muniLabel(muniOf(it)) : '–')) },
+      ...(sc ? [row(`${tt('layerScore')}（${tt('byPref')}）`, items.map((it) => sc!.result.total[prefOf(it) - 1] ?? NaN), (v) => fmtNum(L, v, 0), 1)] : []),
+      ...(msc ? [row(`${tt('layerScore')}（${tt('byMuni')}）`, items.map((it) => metricOf(it, (i) => msc!.result.total[i])), (v) => fmtNum(L, v, 0), 1)] : []),
+    ] });
+    for (const g of ['people', 'access', 'land', 'industry', 'labour', 'risk'] as const) {
+      const ms = lt.metrics.filter((m) => m.group === g && m.key !== 'iso' && m.key !== 'shift');
+      groups.push({ title: tt(`lg_${g}` as Key), rows: ms.map((m) => row(m[L], items.map((it) => metricOf(it, m.get)), m.fmt, m.better)) });
+    }
+    if (items.some((it) => it.kind === 'site')) {
+      const ct = (it: ShortItem) => (it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined);
+      const hubsOf = (it: ShortItem) => (it.kind === 'site' ? Object.fromEntries(s.hubRows(sites[Number(it.code)]?.name ?? '')) : {});
+      const hk = [...new Set(items.flatMap((it) => Object.keys(hubsOf(it))))];
+      groups.push({ title: tt('cmpSite'), rows: [
+        row(tt('pop30'), items.map((it) => ct(it)?.pop30 ?? NaN), (v) => `${fmtCompact(L, v)}${L === 'ja' ? '人' : ''}`, 1),
+        row(tt('nearestIc'), items.map((it) => ct(it)?.ic ?? NaN), (v) => `${fmtNum(L, v, 1)} km`, -1),
+        ...hk.map((k) => ({ label: k, cells: items.map((it) => hubsOf(it)[k] ?? '–') })),
+      ] });
+    }
+    if (live.warnTime) groups.push({ title: tt('cmpLive'), rows: [{ label: tt('liveWarn'), cells: items.map((it) => { const a = shortAlert(it); return a.level >= 2 ? `${nt?.levelName(a.level) ?? a.level}：${a.text}` : '–'; }) }] });
+    return { head: items.map((it) => shortLabel(it)), groups };
+  });
+  const compareSources = $derived(muni ? [...new Set(Object.values(muni.sources).map((x) => x[L]))] : []);
+
 </script>
 
 <section class="panel">
@@ -55,6 +110,7 @@
     <p class="eyebrow">{tt('shortlist')}{shortlist.items.length ? `（${shortlist.items.length}）` : ''}</p>
     {#if shortlist.items.length}
       <span class="acts">
+        <button type="button" class="linkish" onclick={() => (compareOpen = true)}>{tt('compareShort')}</button>
         <button type="button" class="linkish" onclick={exportShortlist}>{tt('exportCsv')}</button>
         <button type="button" class="linkish" onclick={() => shortlist.clear()}>{tt('clearAll')}</button>
       </span>
@@ -73,7 +129,7 @@
         {@const al = shortAlert(it)}
         <li>
           <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}
-            {#if al.level >= 2}<span class="lv-chip" style:background={nt?.categories?.[al.level - 1]?.color} class:inv={al.level >= 3}
+            {#if al.level >= 2}<span class="lv-chip" style:background={WARN_COLORS[app.dark ? 'dark' : 'light'][al.level - 1]} class:inv={al.level >= 3}
                                     title={al.text}>{nt?.levelName(al.level) ?? ''}</span>{/if}</button>
           <span class="kind">{shortKind(it)}</span>
           <button type="button" class="btn ghost x" aria-label={tt('remove')} onclick={() => shortlist.toggle(it.kind, it.code)}>×</button>
@@ -84,3 +140,7 @@
     <p class="src">{tt('shortEmpty')}</p>
   {/if}
 </section>
+{#if compareOpen && compareTable}
+  <Dossier title={tt('compareShortTitle')} subtitle={tt('compareShortSub')} sections={[]} table={compareTable}
+           sources={compareSources} lang={L} onclose={() => (compareOpen = false)} />
+{/if}

@@ -61,3 +61,47 @@ export function score(criteria: Criterion[], weights: number[]): ScoreResult {
 }
 
 export interface Preset extends Label { key: string; weights: Record<string, number> }
+
+/** deterministic PRNG (mulberry32), so the sensitivity check gives the same answer every time */
+function rng(seed: number) {
+  return () => {
+    seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export interface Sensitivity {
+  /** rank range (10th–90th percentile of the draws), 1 = best; 0 = no score */
+  lo: number[];
+  hi: number[];
+  /** share of draws (0..1) in which the area is in the top 10 */
+  top10: number[];
+  draws: number;
+  spread: number;
+}
+/** How much the ranking depends on the exact weights: every weight in use is scaled by a random
+ *  factor within ±spread, `draws` times, and each area's rank is recorded. */
+export function sensitivity(parts: number[][], weights: number[], draws = 200, spread = 0.5): Sensitivity {
+  const n = parts[0]?.length ?? 0, rand = rng(20240401);
+  const ranks = Array.from({ length: n }, () => new Uint16Array(draws));
+  const top = new Uint16Array(n);
+  const total = new Float64Array(n);
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let d = 0; d < draws; d++) {
+    const w = weights.map((x) => (x > 0 ? x * (1 + spread * (2 * rand() - 1)) : 0));
+    for (let i = 0; i < n; i++) {
+      let s = 0, ws = 0;
+      for (let k = 0; k < parts.length; k++) { const v = parts[k][i]; if (w[k] > 0 && isFinite(v)) { s += v * w[k]; ws += w[k]; } }
+      total[i] = ws > 0 ? s / ws : -Infinity;
+    }
+    idx.sort((a, b) => total[b] - total[a]);
+    idx.forEach((i, r) => { ranks[i][d] = r + 1; if (r < 10 && isFinite(total[i])) top[i]++; });
+  }
+  const lo: number[] = [], hi: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = Array.from(ranks[i]).sort((a, b) => a - b);
+    lo.push(r[Math.floor(draws * 0.1)]); hi.push(r[Math.floor(draws * 0.9)]);
+  }
+  return { lo, hi, top10: Array.from(top, (v) => v / draws), draws, spread };
+}

@@ -4,7 +4,7 @@
 import { app } from '../lib/state.svelte';
 import { valueOf, type Jobs, type Label, type Ssw, type Warehouse } from '../lib/data';
 import { fmtCompact, fmtNum, fmtPct, makeClasses } from '../lib/scale';
-import { score, type Criterion, type Preset } from '../lib/score';
+import { score, sensitivity, type Criterion, type Preset } from '../lib/score';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { CompareRow } from '../components/ComparePanel.svelte';
 import { FlowsTheme } from './flows.svelte';
@@ -114,6 +114,8 @@ export class ScoreTheme implements ThemeView {
   }
 
   readonly result = $derived.by(() => score(this.criteria, this.weights));
+  /** rank stability under ±50% changes of every weight (computed when the panel shows it) */
+  readonly sens = $derived.by(() => sensitivity(this.result.parts, this.weights));
 
   // ------------------------------------------------------------ ThemeView
   readonly periodLabel = $derived.by(() => (this.L === 'ja' ? '各指標の最新値' : 'latest figure of each criterion'));
