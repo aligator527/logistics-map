@@ -166,3 +166,5 @@
   .minibar { display: flex; }
   .foot { padding-bottom: 80px; }
 }
+.k-bld { fill: color-mix(in oklab, var(--ink) 25%, transparent); stroke: var(--ink-2); stroke-width: 1; }
+.k-fude { fill: none; stroke: var(--clay); stroke-width: 1.3; }

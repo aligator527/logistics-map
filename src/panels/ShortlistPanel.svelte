@@ -3,13 +3,15 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { live, WARN } from '../lib/live.svelte';
-  import { shortlist, shared, shareLink, resolveShared, type ShortItem } from '../lib/shortlist.svelte';
+  import { shortlist, shared, shareLink, resolveShared, ptOf, plotRing, type ShortItem } from '../lib/shortlist.svelte';
+  import { area as ringArea } from '../lib/measure.svelte';
   import { downloadCsv } from '../lib/csv';
   import { fmtNum, fmtCompact } from '../lib/scale';
   import { WARN_COLORS } from '../lib/warncolors';
   import type { DossierTable } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
-  import { estimate } from '../lib/costs.svelte';
+  import { estimate, costs } from '../lib/costs.svelte';
+  const plotArea = (it: ShortItem) => (it.kind === 'plot' ? ringArea(plotRing(it.code)) : NaN);
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -20,22 +22,24 @@
   let pointMuni = $state.raw(new Map<string, string>());
   $effect(() => {
     for (const it of shortlist.items) {
-      if (it.kind !== 'point' || pointMuni.has(it.code)) continue;
-      const [lon, lat] = it.code.split(',').map(Number);
-      addressAt(lon, lat).then((a) => (pointMuni = new Map(pointMuni).set(it.code, a?.muni ?? ''))).catch(() => {});
+      const pt = ptOf(it);
+      if (!pt || pointMuni.has(pt)) continue;
+      const [lon, lat] = pt.split(',').map(Number);
+      addressAt(lon, lat).then((a) => (pointMuni = new Map(pointMuni).set(pt, a?.muni ?? ''))).catch(() => {});
     }
   });
   function shortLabel(it: ShortItem) {
+    if (it.kind === 'plot') { const m = pointMuni.get(ptOf(it)!); return `${tt('plotKind')} ${fmtNum(L, plotArea(it) / 1e4, 2)} ha${m ? ` ${muniLabel(m)}` : ''}`; }
     if (it.kind === 'point') { const m = pointMuni.get(it.code); const [lon, lat] = it.code.split(','); return `${tt('pointKind')} ${m ? muniLabel(m) : ''} (${Number(lat).toFixed(3)}, ${Number(lon).toFixed(3)})`; }
     if (it.kind === 'pref') return pname(Number(it.code));
     if (it.kind === 'muni') return muniLabel(it.code);
     return sites[Number(it.code)]?.name ?? it.code;
   }
-  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : it.kind === 'point' ? 'pointKind' : 'dplIn');
+  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : it.kind === 'point' ? 'pointKind' : it.kind === 'plot' ? 'plotKind' : 'dplIn');
   /** live warning level at a shortlisted place (prefecture: its highest municipal level) */
   function shortAlert(it: ShortItem): { level: number; text: string } {
     if (!muni || !live.warnTime) return { level: 0, text: '' };
-    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : it.kind === 'point' ? [pointMuni.get(it.code) ?? '']
+    const codes = it.kind === 'muni' ? [it.code] : it.kind === 'site' ? [sites[Number(it.code)]?.muni ?? ''] : ptOf(it) ? [pointMuni.get(ptOf(it)!) ?? '']
       : muni.codes.filter((c) => Number(c.slice(0, 2)) === Number(it.code));
     let level = 0, best = '';
     for (const c of codes) { const l = live.level(c, true); if (l > level) { level = l; best = c; } }
@@ -46,11 +50,17 @@
     app.stopCompare();
     if (it.kind === 'pref') { app.muni = ''; app.site = -1; app.pref = Number(it.code); }
     else if (it.kind === 'muni') { app.site = -1; app.pref = Number(it.code.slice(0, 2)); app.muni = it.code; }
-    else if (it.kind === 'point') {
-      const [lon, lat] = it.code.split(',').map(Number);
+    else if (it.kind === 'point' || it.kind === 'plot') {
+      const [lon, lat] = ptOf(it)!.split(',').map(Number);
+      if (it.kind === 'plot') {
+        // frame the plot: a zoom level where it is a few hundred pixels across
+        const r = plotRing(it.code), ext = Math.max(...r.map((q) => q[0])) - Math.min(...r.map((q) => q[0]));
+        const metres = Math.max(30, ext * 111_000 * Math.cos((lat * Math.PI) / 180));
+        app.mv = `${Math.max(12, Math.min(17.5, 17 - Math.log2(metres / 150))).toFixed(1)}/${lat.toFixed(5)}/${lon.toFixed(5)}`;
+      }
       s.inspectLoading = true;
       pointInfo(lon, lat).then((x) => (s.inspect = x)).finally(() => (s.inspectLoading = false));
-      const m = pointMuni.get(it.code); if (m) { app.site = -1; app.pref = Number(m.slice(0, 2)); }
+      const m = pointMuni.get(ptOf(it)!); if (m) { app.site = -1; app.pref = Number(m.slice(0, 2)); }
     }
     else { const i = Number(it.code); if (sites[i]) { app.site = i; app.pref = sites[i].pref; } }
   }
@@ -60,7 +70,7 @@
       ...(msc ? [tt('layerScore') + '（' + tt('byMuni') + '）'] : []), ...lm.map((m) => m[L]), tt('pop30'), tt('nearestIc'), tt('nearestAir')];
     const rows = shortlist.items.map((it) => {
       const pc = it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0;
-      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : it.kind === 'point' ? pointMuni.get(it.code) ?? '' : '';
+      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : ptOf(it) ? pointMuni.get(ptOf(it)!) ?? '' : '';
       const mi = mc && lt ? lt.indexOf(mc) : -1;
       const ct = it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined;
       const hb = it.kind === 'site' ? hubs?.sites[sites[Number(it.code)]?.name ?? '']?.air : undefined;
@@ -114,8 +124,8 @@
   $effect(() => {
     if (!compareOpen) return;
     for (const it of shortlist.items) {
-      if (it.kind === 'point') {
-        const k = `pt:${it.code}`, [lon, lat] = it.code.split(',').map(Number);
+      if (ptOf(it)) {
+        const k = `pt:${ptOf(it)}`, [lon, lat] = ptOf(it)!.split(',').map(Number);
         if (!siteInfos.has(k)) pointInfo(lon, lat).then((i) => (siteInfos = new Map(siteInfos).set(k, i))).catch(() => {});
         continue;
       }
@@ -136,7 +146,7 @@
   const compareTable = $derived.by((): DossierTable | null => {
     if (!compareOpen || !lt) return null;
     const items = shortlist.items;
-    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : it.kind === 'point' ? pointMuni.get(it.code) ?? '' : '');
+    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : ptOf(it) ? pointMuni.get(ptOf(it)!) ?? '' : '');
     const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'site' ? sites[Number(it.code)]?.pref ?? 0 : Number((muniOf(it) || '0').slice(0, 2)));
     /** a local metric for an item: its municipality, or the median over a prefecture's municipalities */
     const metricOf = (it: ShortItem, get: (i: number) => number) => {
@@ -158,21 +168,22 @@
       const ms = lt.metrics.filter((m) => m.group === g && m.key !== 'iso' && m.key !== 'shift');
       groups.push({ title: tt(`lg_${g}` as Key), rows: ms.map((m) => row(m[L], items.map((it) => metricOf(it, m.get)), m.fmt, m.better)) });
     }
-    if (items.some((it) => it.kind === 'site' || it.kind === 'point')) {
+    if (items.some((it) => it.kind === 'site' || !!ptOf(it))) {
       const ct = (it: ShortItem) => (it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined);
       const hubsOf = (it: ShortItem) => (it.kind === 'site' ? Object.fromEntries(s.hubRows(sites[Number(it.code)]?.name ?? '')) : {});
       const hk = [...new Set(items.flatMap((it) => Object.keys(hubsOf(it))))];
       groups.push({ title: tt('cmpSite'), rows: [
+        ...(items.some((it) => it.kind === 'plot') ? [row(tt('plotArea'), items.map(plotArea), (v) => `${fmtNum(L, v, 0)} m²（${fmtNum(L, v / (400 / 121), 0)}坪）`)] : []),
         row(tt('pop30'), items.map((it) => ct(it)?.pop30 ?? NaN), (v) => `${fmtCompact(L, v)}${L === 'ja' ? '人' : ''}`, 1),
         row(tt('nearestIc'), items.map((it) => ct(it)?.ic ?? NaN), (v) => `${fmtNum(L, v, 1)} km`, -1),
         ...hk.map((k) => ({ label: k, cells: items.map((it) => hubsOf(it)[k] ?? '–') })),
         ...(() => {
-          const info = (it: ShortItem) => (it.kind === 'site' ? siteInfos.get(sites[Number(it.code)]?.name ?? '') : it.kind === 'point' ? siteInfos.get(`pt:${it.code}`) : undefined);
+          const info = (it: ShortItem) => (it.kind === 'site' ? siteInfos.get(sites[Number(it.code)]?.name ?? '') : ptOf(it) ? siteInfos.get(`pt:${ptOf(it)}`) : undefined);
           const rank = { low: 1, mid: 2, high: 3 } as const;
           return [
             row(tt('elevation'), items.map((it) => info(it)?.elev ?? NaN), (v) => `${fmtNum(L, v, 1)} m`, 1),
-            { label: tt('landformNatural'), cells: items.map((it) => (it.kind === 'site' || it.kind === 'point' ? info(it)?.natural?.[L] ?? '…' : '–')) },
-            { label: tt('landformArtificial'), cells: items.map((it) => (it.kind === 'site' || it.kind === 'point' ? (info(it) ? info(it)!.artificial?.[L] ?? '–' : '…') : '–')) },
+            { label: tt('landformNatural'), cells: items.map((it) => (it.kind === 'site' || ptOf(it) ? info(it)?.natural?.[L] ?? '…' : '–')) },
+            { label: tt('landformArtificial'), cells: items.map((it) => (it.kind === 'site' || ptOf(it) ? (info(it) ? info(it)!.artificial?.[L] ?? '–' : '…') : '–')) },
             { ...row(tt('groundRisk'), items.map((it) => { const i = info(it); const r = i ? groundRisk(i) : null; return r ? rank[r] : NaN; }),
                 (v) => tt(v === 1 ? 'risk_low' : v === 2 ? 'risk_mid' : 'risk_high'), -1) },
           ];
@@ -181,7 +192,8 @@
     }
     {
       // コスト試算 with the assumptions set in the cost panel
-      const est = items.map((it) => { const mc = muniOf(it); return mc ? estimate(lt!.indexOf(mc)) : null; });
+      // a plot's own area replaces the assumed plot size
+      const est = items.map((it) => { const mc = muniOf(it); return mc ? estimate(lt!.indexOf(mc), it.kind === 'plot' ? { ...costs.inputs, plot: plotArea(it) } : costs.inputs) : null; });
       const oku = (y: number) => (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`);
       groups.push({ title: tt('costTitle'), rows: [
         row(tt('costLand'), est.map((e) => e?.land ?? NaN), oku, -1),

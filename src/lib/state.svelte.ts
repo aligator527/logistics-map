@@ -101,6 +101,9 @@ class AppState {
   showFac = $state(false);
   /** industrial zoning (用途地域) of the focused prefecture */
   showZone = $state(false);
+  /** buildings / land parcels at street level (on unless turned off) */
+  showBld = $state(true);
+  showFude = $state(true);
   /** 地理院タイル under the map ('' = none) and the opacity of the area fills over it */
   base = $state('');
   fillOp = $state(0.5);
@@ -190,6 +193,8 @@ class AppState {
     if (this.showHubs) p.set('hb', '1');
     if (this.showFac) p.set('fc', '1');
     if (this.showZone) p.set('zn', '1');
+    if (!this.showBld) p.set('bd', '0');
+    if (!this.showFude) p.set('fd', '0');
     if (this.base) p.set('bm', this.base);
     if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
     if (this.view !== 'map') p.set('v', this.view);
@@ -261,6 +266,8 @@ class AppState {
     this.showHubs = p.get('hb') === '1';
     this.showFac = p.get('fc') === '1';
     this.showZone = p.get('zn') === '1';
+    this.showBld = p.get('bd') !== '0';
+    this.showFude = p.get('fd') !== '0';
     this.base = /^[a-z]{2,12}$/.test(p.get('bm') ?? '') ? p.get('bm')! : '';
     const fo = Number(p.get('fo'));
     this.fillOp = p.has('fo') && fo >= 0 && fo <= 1 ? fo : 0.5;

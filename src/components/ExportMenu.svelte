@@ -4,7 +4,8 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { views } from '../lib/views.svelte';
-  import { shortlist } from '../lib/shortlist.svelte';
+  import { shortlist, plotRing, ptOf } from '../lib/shortlist.svelte';
+  import { area as ringArea } from '../lib/measure.svelte';
   import { saveGeo, savePng, type ExportPoint } from '../lib/exporters';
 
   const L = $derived(app.lang);
@@ -37,6 +38,10 @@
     props: { developer: s.srcName(f.src), address: f.addr ?? '', floor_m2: f.floor, stages: f.events.map((e) => `${e.date} ${e.stage}`).join('; '), source: f.events.at(-1)?.link ?? '' } })));
   const shortPoints = $derived.by((): ExportPoint[] => shortlist.items.flatMap((it): ExportPoint[] => {
     if (it.kind === 'point') { const [lon, lat] = it.code.split(',').map(Number); return [{ name: `${tt('pointKind')} ${lat.toFixed(4)},${lon.toFixed(4)}`, lon, lat, props: { kind: 'point' } }]; }
+    if (it.kind === 'plot') {
+      const ring = plotRing(it.code), [lon, lat] = ptOf(it)!.split(',').map(Number), a = ringArea(ring);
+      return [{ name: `${tt('plotKind')} ${(a / 1e4).toFixed(2)} ha`, lon, lat, ring, props: { kind: 'plot', area_m2: Math.round(a), tsubo: Math.round(a / (400 / 121)) } }];
+    }
     if (it.kind === 'site') { const st = s.sites[Number(it.code)]; return st ? [{ name: st.name, lon: st.lon, lat: st.lat, props: { kind: 'DPL', address: st.address } }] : []; }
     if (it.kind === 'muni') { const ll = s.muniLonLat(it.code); return ll ? [{ name: s.muniLabel(it.code), lon: ll[0], lat: ll[1], props: { kind: 'municipality', code: it.code } }] : []; }
     return [];

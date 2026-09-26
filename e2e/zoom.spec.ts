@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { open } from './helpers';
 
 test('street-level view from the URL: detail boundaries, auto background map, scale bar', async ({ page }) => {
@@ -53,4 +54,63 @@ test('double tap zooms in on a phone', async ({ page }, info) => {
   await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
   await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
   await expect(page).toHaveURL(/mv=\d/);
+});
+
+// parcels: one real tile from the registry-map tiles (春日井市 瑞穂通), the others empty
+const fudeFixture = async (page: import('@playwright/test').Page) => {
+  const tile = readFileSync(new URL('./fixtures/fude-16-57702-25903.mvt', import.meta.url));
+  await page.route(/tiles\.kmproj\.com\/mojxml/, (r) => r.request().url().includes('/16/57702/25903.')
+    ? r.fulfill({ body: tile, contentType: 'application/vnd.mapbox-vector-tile' }) : r.fulfill({ status: 204, body: '' }));
+};
+
+test('land parcels with their lot number under the pointer', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'hover');
+  const errors = await open(page, 't=local&mv=17.0/35.2490/136.9710', { before: fudeFixture });
+  await expect(page.locator('canvas.vec')).toBeAttached();
+  await expect(page.locator('.mapcol')).toContainText('登記所備付地図データ');
+  const b = (await page.locator('div.map').first().boundingBox())!;
+  let found = '';
+  for (let i = 1; i < 8 && !found; i++) for (let j = 1; j < 6 && !found; j++) {
+    await page.mouse.move(b.x + (b.width * i) / 8, b.y + (b.height * j) / 6);
+    const tip = page.locator('.tip').filter({ hasText: '地番' });
+    if (await tip.count()) found = await tip.first().innerText();
+  }
+  expect(found).toMatch(/地番 \S+/);
+  expect(found).toContain('春日井市');
+  expect(errors).toEqual([]);
+});
+
+test('no parcel data here: said so on the map', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  await open(page, 't=local&mv=16.5/35.7925/139.6130', { before: fudeFixture });
+  await expect(page.locator('.tiles-hint')).toContainText('筆界データがありません');
+});
+
+test('a measured plot goes into the shortlist and onto the map', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'mouse');
+  const errors = await open(page, 't=local&mv=16.5/35.2500/136.9700');
+  await page.evaluate(() => localStorage.removeItem('shortlist'));
+  await page.getByRole('button', { name: '距離・面積を測る' }).click();
+  const b = (await page.locator('div.map').first().boundingBox())!;
+  for (const [fx, fy] of [[0.4, 0.35], [0.6, 0.35], [0.6, 0.6], [0.4, 0.6]]) await page.mouse.click(b.x + b.width * fx, b.y + b.height * fy);
+  const box = page.locator('.measure-box');
+  await box.getByRole('button', { name: '閉じて面積' }).click();
+  await box.getByRole('button', { name: /候補に追加/ }).click();
+  await box.getByRole('button', { name: '完了' }).click();
+  await expect(page.locator('aside ul.short li').filter({ hasText: '区画' })).toContainText(/\d+\.\d\d ha/);
+  await expect(page.locator('path.plot')).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test('1 km cell under the pointer on a reach map', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'hover');
+  await open(page, 't=local&lk=iso&mu=23206&io=muni:23206&ig=1&mv=11.5/35.30/137.05');
+  await expect(page.locator('canvas.raster:not(.vec)')).toBeAttached({ timeout: 20_000 });
+  const b = (await page.locator('div.map').first().boundingBox())!;
+  await expect(async () => {
+    await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.3);
+    await page.mouse.move(b.x + b.width * 0.31, b.y + b.height * 0.31);
+    await expect(page.locator('.tip').filter({ hasText: '1kmメッシュ' })).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 20_000 });
+  await expect(page.locator('.tip').filter({ hasText: '1kmメッシュ' })).toContainText('人口');
 });

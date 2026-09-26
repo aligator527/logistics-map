@@ -15,6 +15,8 @@
   import { loadDetail, type Detail } from '../lib/detail';
   import { project as projectLL, unproject } from '../lib/project';
   import { measure, TSUBO } from '../lib/measure.svelte';
+  import { vtile, VT_Z, type Parcel } from '../lib/vtiles';
+  import { shortlist, plotCode } from '../lib/shortlist.svelte';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
@@ -36,7 +38,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
-        zoomZ = $bindable(0), mv = '', onmv,
+        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [],
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -93,7 +95,7 @@
     locateNews?: (link: string) => [number, number] | null;
     /** 1 km cells drawn on a canvas: centres in viewBox units (x0, y0, x1, y1 …), a colour per cell
      *  (null = not drawn) and the cell size in viewBox units */
-    raster?: { xy: Float32Array; color: (i: number) => string | null; size: number; version: unknown } | null;
+    raster?: { xy: Float32Array; w?: Float32Array; h?: number; color: (i: number) => string | null; size: number; version: unknown; tip?: (i: number) => Tip | null } | null;
     /** 地理院タイル under the map (thematic layers come with the pale map beneath them) */
     tileLayer?: TileLayer | null;
     /** opacity of the area fills (lowered when map tiles are shown) */
@@ -109,6 +111,11 @@
     /** map view for the URL: "z/lat/lon" ('' = whole of Japan / framed automatically) */
     mv?: string;
     onmv?: (mv: string) => void;
+    /** buildings (国土地理院 vector tiles) from z15, land parcels (登記所備付地図) from z16 */
+    showBld?: boolean;
+    showFude?: boolean;
+    /** plots saved in the shortlist: rings in lon/lat */
+    plots?: { key: string; ring: [number, number][]; label: string }[];
     prefTip: (code: string) => Tip;
     muniTip: (s: Shape) => Tip;
     siteTip: (i: number) => Tip;
@@ -318,6 +325,12 @@
     const s = measureXY.map((p) => transform.apply(p));
     return s.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)},${y.toFixed(2)}`).join('') + (measure.closed ? 'Z' : '');
   });
+  const plotPaths = $derived.by(() => plots.flatMap((pl) => {
+    const s = pl.ring.map(([lon, lat]) => viewBoxAt(lon, lat)).filter((p): p is [number, number] => !!p).map((p) => transform.apply(p));
+    if (s.length < 3) return [];
+    const x = s.reduce((a, p) => a + p[0], 0) / s.length, y = s.reduce((a, p) => a + p[1], 0) / s.length;
+    return [{ key: pl.key, label: pl.label, x, y, d: s.map(([px_, py], i) => `${i ? 'L' : 'M'}${px_.toFixed(2)},${py.toFixed(2)}`).join('') + 'Z' }];
+  }));
   const fmtLen = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10_000 ? 1 : 2)} km` : `${Math.round(m)} m`);
   const fmtArea = (a: number) => (a >= 1e6 ? `${(a / 1e6).toFixed(2)} km²` : `${Math.round(a).toLocaleString()} m²`);
 
@@ -457,10 +470,48 @@
     if (tg.code) return { tip: prefTip(tg.code), code: tg.code };
     return null;
   }
+  // ------------------------------------------------------------ what is under the pointer at street level
+  /** 1 km cells bucketed by position, for finding the one under the pointer */
+  const cellIndex = $derived.by(() => {
+    const r = raster;
+    if (!r?.tip) return null;
+    const m = new Map<string, number[]>();
+    for (let i = 0, n = r.xy.length / 2; i < n; i++) {
+      const key = `${Math.floor(r.xy[2 * i] / r.size)},${Math.floor(r.xy[2 * i + 1] / r.size)}`;
+      const b = m.get(key); if (b) b.push(i); else m.set(key, [i]);
+    }
+    return m;
+  });
+  function cellAt(vx: number, vy: number): number {
+    const r = raster, idx = cellIndex;
+    if (!r || !idx) return -1;
+    const bx = Math.floor(vx / r.size), by = Math.floor(vy / r.size);
+    let best = -1, bd = (r.size * 0.75) ** 2;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const i of idx.get(`${bx + dx},${by + dy}`) ?? []) {
+      const d = (r.xy[2 * i] - vx) ** 2 + (r.xy[2 * i + 1] - vy) ** 2;
+      if (d < bd && r.color(i)) { bd = d; best = i; }
+    }
+    return best;
+  }
+  /** a land parcel (z16+) or a 1 km cell (zoomed in on a reach map) under a point in the map box */
+  function detailTip({ x, y }: { x: number; y: number }): Tip | null {
+    if (showFude && zNow >= Z_FUDE) {
+      const p = parcelAt(x, y);
+      if (p) return { title: `${t(lang, 'chiban')} ${p.chiban}`, sub: `${p.muni} ${p.place}`, rows: p.accuracy ? [[t(lang, 'fudeAccuracy'), p.accuracy]] : [], note: t(lang, 'fudeNote') };
+    }
+    if (raster?.tip && transform.k * fit.s * raster.size >= 6) {
+      const [vx, vy] = transform.invert([(x - fit.ox) / fit.s, (y - fit.oy) / fit.s]);
+      const i = cellAt(vx, vy);
+      if (i >= 0) return raster.tip(i);
+    }
+    return null;
+  }
+  const areaOnly = (tg: ReturnType<typeof target>) => !tg || (tg.site === null && tg.poi === null && tg.joint === null && tg.flow === null);
   function onpointermove(e: PointerEvent) {
     if (e.pointerType === 'touch' || !wrap) return;
     const tg = target(e);
-    const res = tg && tipFor(tg);
+    let res = tg && tipFor(tg);
+    if (areaOnly(tg)) { const d = detailTip(local(e)); if (d) res = { ...(res ?? {}), tip: d }; }
     hover = res ? { ...res, ...local(e) } : null;
     hoverFlow = tg?.flow ?? null;
   }
@@ -498,8 +549,9 @@
       return;
     }
     if (tg.joint !== null) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
-    if (tg.muni) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
-    if (tg.code) { onpick(tg.code); pinned = touch ? prefTip(tg.code) : null; }
+    const dt = touch ? detailTip(local(e)) : null;
+    if (tg.muni) { const r = tipFor(tg); pinned = touch ? dt ?? r?.tip ?? null : null; return; }
+    if (tg.code) { onpick(tg.code); pinned = touch ? dt ?? prefTip(tg.code) : null; }
   }
 
   // Roving focus over prefectures (arrow keys), Enter selects, Escape goes back to Japan.
@@ -634,6 +686,8 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
       const k = tr.k * f.s, size = Math.max(1.1, r.size * k) + 0.4, half = size / 2;
+      // true cell shape (45″ × 30″) once the cells are big enough to tell
+      const exact = !!r.w && !!r.h && r.size * k > 4, hh = exact ? r.h! * k + 0.5 : size;
       const ox = f.ox + tr.x * f.s, oy = f.oy + tr.y * f.s;
       let last = '';
       for (let i = 0, n = r.xy.length / 2; i < n; i++) {
@@ -642,11 +696,113 @@
         const c = r.color(i);
         if (!c) continue;
         if (c !== last) { ctx.fillStyle = c; last = c; }
-        ctx.fillRect(x - half, y - half, size, size);
+        if (exact) { const ww = r.w![i] * k + 0.5; ctx.fillRect(x - ww / 2, y - hh / 2, ww, hh); }
+        else ctx.fillRect(x - half, y - half, size, size);
       }
     });
     return () => cancelAnimationFrame(rasterFrame);
   });
+
+  // ------------------------------------------------------------ buildings and parcels (vector tiles)
+  const Z_BLD = 15, Z_FUDE = 16;
+  let vecCanvas: HTMLCanvasElement | undefined = $state();
+  let vecTick = $state(0);
+  let vecFrame = 0;
+  /** parcels drawn in the last frame, with their tile's clip (for hover) */
+  let parcelsDrawn: { p: Parcel; clip: Path2D }[] = [];
+  /** 'none' when every parcel tile on screen came back without data (not covered by the public data) */
+  let fudeState = $state<'ok' | 'none' | 'loading'>('ok');
+  const vecOn = $derived((showBld && zNow >= Z_BLD) || (showFude && zNow >= Z_FUDE));
+  const VT_LAYER = { key: 'vt', path: '', ext: '', minZ: VT_Z, maxZ: VT_Z, ja: '', en: '' } as unknown as TileLayer;
+  $effect(() => {
+    const cv = vecCanvas, tr = transform, f = fit, W = boxW, H = boxH, bld = showBld && zNow >= Z_BLD, fu = showFude && zNow >= Z_FUDE, isDark = dark;
+    void vecTick;
+    if (!cv || !geo.layout) return;
+    cancelAnimationFrame(vecFrame);
+    vecFrame = requestAnimationFrame(() => {
+      const dpr = Math.min(2, devicePixelRatio || 1);
+      cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+      const ctx = cv.getContext('2d');
+      if (!ctx) return;
+      parcelsDrawn = [];
+      if (!bld && !fu) { fudeState = 'ok'; return; }
+      const [vx0, vy0] = tr.invert([(0 - f.ox) / f.s, (0 - f.oy) / f.s]), [vx1, vy1] = tr.invert([(W - f.ox) / f.s, (H - f.oy) / f.s]);
+      const [x0, y1] = toPlanar(vx0, vy0), [x1, y0] = toPlanar(vx1, vy1);
+      const insetKeys = geo.insets.filter((r) => r.x < vx1 && r.x + r.w > vx0 && r.y < vy1 && r.y + r.h > vy0).map((r) => r.key as 'okinawa' | 'ogasawara');
+      const { tiles } = visibleTiles(VT_LAYER, geo.layout!, { x0, y0, x1, y1 }, insetKeys, 1, 200);
+      const k = tr.k * f.s, ox = f.ox + tr.x * f.s, oy = f.oy + tr.y * f.s;
+      const redraw = () => vecTick++;
+      const ink = isDark ? '230 230 225' : '40 44 48';
+      let fudeAny = false, fudePending = false;
+      for (const tl of tiles) {
+        // the tile's own square: features are cut with a margin, which must not show as extra lines
+        const clip = new Path2D();
+        const c = [tl.grid[0], tl.grid[1], tl.grid[3], tl.grid[2]].map((q) => geo.P(q));
+        c.forEach(([x, y], i) => (i ? clip.lineTo(x, y) : clip.moveTo(x, y)));
+        clip.closePath();
+        ctx.save();
+        ctx.setTransform(dpr * k, 0, 0, dpr * k, dpr * ox, dpr * oy);
+        ctx.clip(clip);
+        ctx.lineWidth = 1 / k;
+        if (bld) {
+          const b = vtile('bld', tl.x, tl.y, viewBoxAt, redraw);
+          if (b) {
+            ctx.fillStyle = `rgb(${ink} / ${tileLayer ? 0.16 : 0.22})`;
+            ctx.fill(b.paths[0], 'evenodd');
+            ctx.fillStyle = `rgb(${ink} / ${tileLayer ? 0.26 : 0.34})`;
+            ctx.fill(b.paths[1], 'evenodd');
+            ctx.strokeStyle = `rgb(${ink} / 0.55)`;
+            ctx.stroke(b.paths[0]); ctx.stroke(b.paths[1]);
+          }
+        }
+        if (fu) {
+          const pt = vtile('fude', tl.x, tl.y, viewBoxAt, redraw);
+          if (pt === undefined) fudePending = true;
+          else if (pt && !pt.empty) {
+            fudeAny = true;
+            ctx.strokeStyle = isDark ? 'rgb(240 170 120 / 0.9)' : 'rgb(178 90 40 / 0.85)';
+            ctx.lineWidth = 1.2 / k;
+            ctx.stroke(pt.paths[0]);
+            for (const p of pt.parcels) parcelsDrawn.push({ p, clip });
+          }
+        }
+        ctx.restore();
+      }
+      fudeState = !fu || fudeAny ? 'ok' : fudePending ? 'loading' : 'none';
+      // 地番 labels when there is room for them
+      if (fu && zNow >= 17) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.font = '11px system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3; ctx.strokeStyle = isDark ? 'rgb(20 20 20 / 0.8)' : 'rgb(255 255 255 / 0.85)';
+        ctx.fillStyle = isDark ? '#f2c9a8' : '#7a3a14';
+        let n = 0;
+        for (const { p } of parcelsDrawn) {
+          const w = (p.box[2] - p.box[0]) * k;
+          if (w < 36 || n > 400) continue;
+          const sx = ox + p.c[0] * k, sy = oy + p.c[1] * k;
+          if (sx < 0 || sy < 0 || sx > W || sy > H) continue;
+          ctx.strokeText(p.chiban, sx, sy); ctx.fillText(p.chiban, sx, sy); n++;
+        }
+      }
+    });
+    return () => cancelAnimationFrame(vecFrame);
+  });
+  /** the parcel under a screen point */
+  function parcelAt(sx: number, sy: number): Parcel | null {
+    if (!parcelsDrawn.length || !vecCanvas) return null;
+    const [vx, vy] = transform.invert([(sx - fit.ox) / fit.s, (sy - fit.oy) / fit.s]);
+    const ctx = vecCanvas.getContext('2d')!;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    try {
+      for (const { p, clip } of parcelsDrawn) {
+        if (vx < p.box[0] || vx > p.box[2] || vy < p.box[1] || vy > p.box[3]) continue;
+        if (ctx.isPointInPath(clip, vx, vy) && ctx.isPointInPath(p.path, vx, vy, 'evenodd')) return p;
+      }
+    } finally { ctx.restore(); }
+    return null;
+  }
 
   // ------------------------------------------------------------ news callouts
   /** viewBox -> pixels in the map box (the SVG is letterboxed when its height is capped) */
@@ -896,6 +1052,15 @@
     <canvas class="raster" bind:this={rasterCanvas} style:width="{boxW}px" style:height="{boxH}px" style:opacity={0.35 + 0.65 * fade} aria-hidden="true"></canvas>
   {/if}
 
+  {#if vecOn}
+    <canvas class="raster vec" bind:this={vecCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+  {/if}
+  {#if showFude && zNow >= Z_FUDE && fudeState === 'none'}
+    <p class="tiles-hint">{t(lang, 'fudeNone')}</p>
+  {:else if (showBld || showFude) && zNow >= 14 && zNow < Z_FUDE && !measure.armed}
+    <p class="tiles-hint">{t(lang, zNow < Z_BLD ? 'zoomForBld' : 'zoomForFude')}</p>
+  {/if}
+
   <!-- Point layers live outside the zoom group so they keep their size on screen.
        Keyboard access to DPL sites is through the site list in the side panel. -->
   <svg class="overlay" viewBox="0 0 {geo.width} {geo.height}" aria-hidden="true"
@@ -976,6 +1141,10 @@
         {/if}
         {#if labelled.has(`s${m.i}`)}<text x={siteR + 5} dy="0.35em">{m.label}</text>{/if}
       </g>
+    {/each}
+    {#each plotPaths as pl (pl.key)}
+      <path class="plot" d={pl.d} />
+      <g transform="translate({pl.x},{pl.y}) scale({px})"><text class="plot-label" text-anchor="middle" dy="0.35em">{pl.label}</text></g>
     {/each}
     {#if measure.armed && measureXY.length}
       <g class="measure">
@@ -1061,6 +1230,11 @@
       {/if}
       <p class="mb-acts">
         {#if measure.pts.length > 2 && !measure.closed}<button type="button" class="btn" onclick={() => (measure.closed = true)}>{t(lang, 'measureArea')}</button>{/if}
+        {#if measure.closed}
+          {@const code = plotCode(measure.pts)}
+          <button type="button" class="btn" disabled={shortlist.has('plot', code)} onclick={() => shortlist.toggle('plot', code)}>
+            {shortlist.has('plot', code) ? `★ ${t(lang, 'inShort')}` : `☆ ${t(lang, 'addPlot')}`}</button>
+        {/if}
         <button type="button" class="btn" disabled={!measure.pts.length} onclick={() => measure.undo()}>{t(lang, 'undo')}</button>
         <button type="button" class="btn" disabled={!measure.pts.length} onclick={() => measure.clear()}>{t(lang, 'clearAll')}</button>
         <button type="button" class="btn" onclick={() => measure.stop()}>{t(lang, 'finish')}</button>
@@ -1103,6 +1277,9 @@
   .measure .ms-fill { fill: var(--accent); fill-opacity: 0.15; stroke: none; }
   .measure .ms-pt { fill: var(--bg); stroke: var(--accent); vector-effect: non-scaling-stroke; }
   .measure .ms-pt.first { fill: var(--accent); }
+  .plot { fill: var(--mark); fill-opacity: 0.18; stroke: var(--mark-ring); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .plot-label { font-size: 11.5px; font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; pointer-events: none; }
+  .map.tiled .vec, .vec { z-index: 2; opacity: 1; }
   .measure-box { position: absolute; left: 8px; top: 8px; z-index: 6; max-width: min(280px, calc(100% - 70px)); padding: 10px 12px;
                  background: var(--surface); border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 8px;
                  box-shadow: 0 4px 14px rgb(0 0 0 / 0.12); font-size: 13px; }

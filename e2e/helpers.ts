@@ -2,14 +2,16 @@ import { expect, type Page } from '@playwright/test';
 
 /** Offline third parties (JMA live data, PR TIMES images, GSI tiles and APIs) — the site must cope with both failing —
  *  and collect console errors. */
-export async function open(page: Page, hash = '', opts: { theme?: 'light' | 'dark' } = {}) {
+export async function open(page: Page, hash = '', opts: { theme?: 'light' | 'dark'; before?: (page: Page) => Promise<void> } = {}) {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => {
     // failed third-party requests are expected here (blocked on purpose)
     if (m.type() === 'error' && !/Failed to load resource|net::ERR_FAILED/.test(m.text())) errors.push(m.text());
   });
-  await page.route(/bosai|jma\.go\.jp|prcdn\.freetls\.fastly\.net|gsi\.go\.jp/, (r) => r.abort());
+  await page.route(/bosai|jma\.go\.jp|prcdn\.freetls\.fastly\.net|gsi\.go\.jp|kmproj\.com/, (r) => r.abort());
+  // a test's own stand-ins for third parties (registered later, so they win)
+  if (opts.before) await opts.before(page);
   // web fonts may or may not arrive in time (display=optional): system fonts keep screenshots stable
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.addInitScript((theme) => {

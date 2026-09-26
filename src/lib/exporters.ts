@@ -1,5 +1,6 @@
 // Exports: GeoJSON and KML (lon/lat, for GIS and Google Earth) and a PNG of the map.
-export interface ExportPoint { name: string; lon: number; lat: number; props?: Record<string, string | number | null> }
+/** a point, or a polygon when `ring` is given (lon/lat, not closed); lon/lat is then its centre */
+export interface ExportPoint { name: string; lon: number; lat: number; props?: Record<string, string | number | null>; ring?: [number, number][] }
 
 function download(name: string, type: string, body: BlobPart) {
   const url = URL.createObjectURL(new Blob([body], { type }));
@@ -8,12 +9,13 @@ function download(name: string, type: string, body: BlobPart) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 export function geojson(points: ExportPoint[]) {
-  return JSON.stringify({ type: 'FeatureCollection', features: points.map((p) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { name: p.name, ...p.props } })) });
+  return JSON.stringify({ type: 'FeatureCollection', features: points.map((p) => ({ type: 'Feature',
+    geometry: p.ring ? { type: 'Polygon', coordinates: [[...p.ring, p.ring[0]]] } : { type: 'Point', coordinates: [p.lon, p.lat] }, properties: { name: p.name, ...p.props } })) });
 }
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 export function kml(title: string, points: ExportPoint[]) {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(title)}</name>${points.map((p) =>
-    `<Placemark><name>${esc(p.name)}</name>${p.props ? `<ExtendedData>${Object.entries(p.props).map(([k, v]) => `<Data name="${esc(k)}"><value>${esc(String(v ?? ''))}</value></Data>`).join('')}</ExtendedData>` : ''}<Point><coordinates>${p.lon},${p.lat}</coordinates></Point></Placemark>`).join('')}</Document></kml>`;
+    `<Placemark><name>${esc(p.name)}</name>${p.props ? `<ExtendedData>${Object.entries(p.props).map(([k, v]) => `<Data name="${esc(k)}"><value>${esc(String(v ?? ''))}</value></Data>`).join('')}</ExtendedData>` : ''}${p.ring ? `<Polygon><outerBoundaryIs><LinearRing><coordinates>${[...p.ring, p.ring[0]].map((q) => q.join(',')).join(' ')}</coordinates></LinearRing></outerBoundaryIs></Polygon>` : `<Point><coordinates>${p.lon},${p.lat}</coordinates></Point>`}</Placemark>`).join('')}</Document></kml>`;
 }
 export function saveGeo(base: string, title: string, points: ExportPoint[], fmt: 'geojson' | 'kml') {
   if (fmt === 'geojson') download(`${base}.geojson`, 'application/geo+json', geojson(points));

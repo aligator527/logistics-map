@@ -26,6 +26,10 @@ test('site, data and live sources load', async ({ page, request, baseURL }, info
   expect((await request.get('https://cyberjapandata.gsi.go.jp/xyz/pale/12/3638/1612.png')).ok(), 'GSI tile').toBe(true);
   const elev = await (await request.get('https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=139.8&lat=35.7&outtype=JSON')).json();
   expect(typeof elev.elevation, 'GSI elevation API').toBe('number');
+  // street level: buildings (GSI vector tiles) and land parcels (registry-map tiles by KotobaMedia)
+  expect((await request.get('https://cyberjapandata.gsi.go.jp/xyz/optimal_bvmap-v1/16/58210/25803.pbf')).ok(), 'GSI vector tile').toBe(true);
+  const fude = await request.get('https://tiles.kmproj.com/mojxml/2025/16/57702/25903.mvt');
+  expect(fude.ok() && (await fude.body()).length > 1000, 'registry-map parcel tile').toBe(true);
 
   // news: fresh enough, and preview images actually load
   const news = await (await request.get(new URL('data/news.json', baseURL).toString())).json();

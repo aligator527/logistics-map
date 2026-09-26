@@ -31,10 +31,10 @@
   import PointPanel from './panels/PointPanel.svelte';
   import ExportMenu from './components/ExportMenu.svelte';
   import Tour from './components/Tour.svelte';
-  import { measure } from './lib/measure.svelte';
+  import { measure, area as areaOf } from './lib/measure.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
-  import { shortlist, type ShortItem } from './lib/shortlist.svelte';
+  import { shortlist, plotRing, type ShortItem } from './lib/shortlist.svelte';
   import { downloadCsv } from './lib/csv';
   import { pad2, type Ctx, type ThemeView } from './themes/types';
   import MapView, { type Marker, type Poi } from './components/MapView.svelte';
@@ -205,12 +205,19 @@
   const gridXY = $derived.by(() => {
     const g = lt?.grid;
     if (!g || !geo) return null;
-    const xy = new Float32Array(2 * g.n);
-    for (let i = 0; i < g.n; i++) { const [x, y] = geo.P(projectLL(g.lon[i], g.lat[i], geo.layout).p); xy[2 * i] = x; xy[2 * i + 1] = y; }
-    return xy;
+    const xy = new Float32Array(2 * g.n), w = new Float32Array(g.n);
+    // 3rd-order mesh cells are 45″ × 30″: about 1.13 × 0.93 km, narrower towards the north
+    const upm = geo.unitsPerMetre;
+    for (let i = 0; i < g.n; i++) {
+      const { p, space } = projectLL(g.lon[i], g.lat[i], geo.layout);
+      const [x, y] = geo.P(p); xy[2 * i] = x; xy[2 * i + 1] = y;
+      const ks = space === 'okinawa' ? geo.insetScale.okinawa : space === 'ogasawara' ? geo.insetScale.ogasawara : 1;
+      w[i] = (45 / 3600) * 111_320 * Math.cos((g.lat[i] * Math.PI) / 180) * upm * ks;
+    }
+    return { xy, w, h: (30 / 3600) * 110_950 * upm };
   });
   const raster = $derived.by(() => {
-    const l = lt, g = l?.gridTimes, xy = gridXY;
+    const l = lt, g = l?.gridTimes, gx = gridXY, xy = gx?.xy;
     if (!localLevel || !l || !g || !xy || !app.igrid || !(app.lmet === 'iso' || app.lmet === 'shift')) return null;
     const trip = app.lmet === 'shift', cls = l.classes, colors = l.tripColors;
     const color = (i: number) => {
@@ -221,7 +228,15 @@
       while (k < cls.breaks.length && v >= cls.breaks[k]) k++;
       return cls.colors[k];
     };
-    return { xy, color, size: 1000 * geo!.unitsPerMetre, version: [g, app.lmet, app.dark] };
+    const tip = (i: number) => {
+      const v = g[i], gr = l.grid!;
+      return { title: tt('cellTitle'), sub: `${gr.lat[i].toFixed(3)}, ${gr.lon[i].toFixed(3)}`, rows: [
+        [tt('cellPop'), `${fmtNum(L, gr.pop[i], 0)}${L === 'ja' ? '人' : ''}`],
+        [tt('isoTitle'), isFinite(v) ? fmtMinutes(L, v) : '–'],
+        ...(isFinite(v) ? [[tt('trip2024'), tt(`trip${tripClass(v)}` as Key)] as [string, string]] : []),
+      ] as [string, string][] };
+    };
+    return { xy, w: gx!.w, h: gx!.h, color, size: 1000 * geo!.unitsPerMetre, version: [g, app.lmet, app.dark], tip };
   });
   /** a map point (viewBox units) -> lon/lat, insets undone */
   function toLonLat([x, y]: [number, number]): [number, number] | null {
@@ -258,7 +273,7 @@
   }
   /** a click on the map while picking: the nearest populated 1 km cell becomes the origin */
   function onpoint([x, y]: [number, number]) {
-    const g = lt?.grid, xy = gridXY;
+    const g = lt?.grid, xy = gridXY?.xy;
     if (!g || !xy) return;
     let best = -1, bd = Infinity;
     for (let i = 0; i < g.n; i++) { const d = (xy[2 * i] - x) ** 2 + (xy[2 * i + 1] - y) ** 2; if (d < bd) { bd = d; best = i; } }
@@ -435,6 +450,11 @@
   const tileLayer = $derived(TILE_LAYERS.find((l) => l.key === app.base) ?? null);
   // zoomed in close without a background map: the pale map comes in on its own (the choice itself is unchanged)
   let mapZ = $state(0);
+  /** measured plots in the shortlist, outlined on the map */
+  const plots = $derived(shortlist.items.filter((it) => it.kind === 'plot').map((it) => {
+    const ring = plotRing(it.code);
+    return { key: it.code, ring, label: `${fmtNum(L, areaOf(ring) / 1e4, 2)} ha` };
+  }));
   const mapTile = $derived(tileLayer ?? (mapZ >= 11.5 ? TILE_LAYERS[0] : null));
   // ------------------------------------------------------------ industrial zoning (A29) of the focused prefecture
   let zoningIndex = $state.raw<{ source: { ja: string; en: string; url: string } } | null>(null);
@@ -941,6 +961,12 @@
         <button type="button" class="btn chip" aria-pressed={app.showZone} onclick={() => (app.showZone = !app.showZone)}>
           <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" class="k-zone" /></svg>{tt('layerZone')}
         </button>
+        <button type="button" class="btn chip" aria-pressed={app.showBld} onclick={() => (app.showBld = !app.showBld)} title={tt('zoomForBld')}>
+          <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="3" width="5" height="7.5" class="k-bld" /><rect x="7" y="1.5" width="3.5" height="9" class="k-bld" /></svg>{tt('layerBld')}
+        </button>
+        <button type="button" class="btn chip" aria-pressed={app.showFude} onclick={() => (app.showFude = !app.showFude)} title={tt('zoomForFude')}>
+          <svg width="12" height="12" aria-hidden="true"><path d="M1.5 1.5h9v9h-9zM6 1.5v5l4.5 1M1.5 6.5H6" class="k-fude" /></svg>{tt('layerFude')}
+        </button>
         <button type="button" class="btn chip" aria-pressed={app.showFac} onclick={() => (app.showFac = !app.showFac)}>
           <svg width="12" height="12" aria-hidden="true"><rect x="3" y="3" width="6" height="6" transform="rotate(45 6 6)" class="k-fac" /></svg>{tt('layerFac')}
         </button>
@@ -994,6 +1020,7 @@
           {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed} onpoint={onpointAny} {zoning}
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
+          showBld={app.showBld} showFude={app.showFude} {plots}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -1041,7 +1068,9 @@
           </p>
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
-          {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}</p>
+          {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}
+          {#if app.showBld && mapZ >= 15} · <a href="https://github.com/gsi-cyberjapan/optimal_bvmap">{tt('bldSource')}</a>{/if}
+          {#if app.showFude && mapZ >= 16} · <a href="https://www.moj.go.jp/MINJI/minji05_00494.html">{tt('fudeSource')}</a>（<a href="https://tiles.kmproj.com">KotobaMedia</a>）{/if}</p>
       </div>
     </div>
 
