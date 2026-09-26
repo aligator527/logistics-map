@@ -314,6 +314,23 @@
   // Roving focus over prefectures (arrow keys), Enter selects, Escape goes back to Japan.
   let kbd = $state<string | null>(null);
   function onkeydown(e: KeyboardEvent) {
+    // inside a focused prefecture the arrows walk its municipalities (when they are on the map)
+    const munisHere = focus && !compare && geo.munis.length ? geo.munis.filter((m) => m.code.startsWith(focus)) : [];
+    if (munisHere.length && ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End', 'Enter', ' '].includes(e.key)) {
+      const mc = munisHere.map((m) => m.code);
+      let j = mc.indexOf(kbd && kbd.length === 5 ? kbd : selMuni ?? '');
+      if (e.key === 'Enter' || e.key === ' ') { if (j >= 0) onpick(mc[j]); e.preventDefault(); return; }
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = Math.min(mc.length - 1, j + 1);
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = Math.max(0, j < 0 ? 0 : j - 1);
+      else if (e.key === 'Home') j = 0;
+      else j = mc.length - 1;
+      e.preventDefault();
+      kbd = mc[j];
+      const m = munisHere[j], [cx, cy] = transform.apply(m.centroid);
+      const r = svg.getBoundingClientRect(), sc = r.width / geo.width;
+      hover = { tip: level === 'muni' ? prefTip(m.code) : muniTip(m), muni: level === 'muni' ? undefined : m.code, code: level === 'muni' ? m.code : focus ?? undefined, x: cx * sc, y: cy * sc };
+      return;
+    }
     const codes = geo.prefs.map((s) => s.code);
     const cur = kbd ?? focus ?? codes[0];
     let i = codes.indexOf(cur);
@@ -663,8 +680,8 @@
         {#if b && prefByCode.get(pad2(b))}<path class="sel-b" d={prefByCode.get(pad2(b))!.d} />{/if}
         {#if a && prefByCode.get(pad2(a))}<path class="sel-a" d={prefByCode.get(pad2(a))!.d} />{/if}
       {/if}
-      {#if kbd && prefByCode.get(kbd)}
-        <path class="kbd" d={prefByCode.get(kbd)!.d} />
+      {#if kbd && shapeOf(kbd)}
+        <path class="kbd" d={shapeOf(kbd)!.d} />
       {/if}
     </g>
   </svg>

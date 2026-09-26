@@ -43,3 +43,26 @@ jobs:
           name: playwright-report
           path: playwright-report
           retention-days: 14
+
+  visual:
+    # screenshot comparison, in the same container as the baselines (skipped until they exist)
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm ci --no-audit --no-fund
+      - run: |
+          if [ -d e2e/visual.spec.ts-snapshots ]; then npx playwright test e2e/visual.spec.ts
+          else echo "no baselines yet: run the 'Update visual baselines' workflow"; fi
+        env:
+          CI: '1'
+          VISUAL: '1'
+          HOME: /root
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: visual-diff
+          path: test-results
+          retention-days: 14

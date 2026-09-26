@@ -57,6 +57,9 @@ for (const [name, have, url] of [
   ['地価調査 L02', 2026, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/L02/L02-${String(n).slice(2)}/L02-${String(n).slice(2)}_GML.zip`],
   ['高速道路 N06', 2025, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/N06/N06-${String(n).slice(2)}/N06-${String(n).slice(2)}_GML.zip`],
   ['行政区域 N03', 2026, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/N03/N03-${n}/N03-${n}0101_GML.zip`],
+  // 用途地域 (npm run zoning), the 1 km population grid (etl:mesh → etl:hazard, etl:muni, network)
+  ['用途地域 A29', 2019, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/A29/A29-${String(n).slice(2)}/A29-${String(n).slice(2)}_13_GML.zip`],
+  ['1kmメッシュ将来推計人口', 2024, (n) => `https://nlftp.mlit.go.jp/ksj/gml/data/m1kr6/m1kr6-${String(n).slice(2)}/1km_mesh_${n}_SHP.zip`],
 ]) {
   let newest = null, unknown = false;
   for (let n = have + 1; n <= y + 1; n++) {
@@ -65,6 +68,15 @@ for (const [name, have, url] of [
     if (ok) newest = n;
   }
   add(name, unknown && !newest ? 'unknown' : newest ? 'NEW' : 'ok', `have ${have}${newest ? `; ${newest} is published` : ''}`);
+}
+
+// hazard-zone shares (ハザードマップポータル tiles, updated continuously): re-sample once a year
+{
+  const m = read('public/data/muni.json');
+  const when = m.sources?.hazard?.ja?.match(/(\d{4}-\d{2}-\d{2})取得/)?.[1];
+  const age = when ? Math.round((Date.now() - Date.parse(when)) / 864e5) : null;
+  add('浸水・土砂 想定区域の人口割合', age === null ? 'unknown' : age > 365 ? 'CHECK' : 'ok',
+    age === null ? 'no date' : `tiles sampled ${when} (${age} days ago)${age > 365 ? ' — npm run etl:hazard && npm run etl:muni' : ''}`);
 }
 
 // J-SHIS: a newer hazard-map version than Y2024

@@ -324,8 +324,41 @@ writeFileSync(OUT, JSON.stringify({
     cur.events.sort((a, b) => a.date.localeCompare(b.date));
     reg.set(f.name, cur);
   }
+  // exact position: the facility's 所在地 from its latest release, geocoded with the GSI address search
+  // (once per facility; `geo: false` = tried, not found). The company's own head office — the
+  // address followed by 電話番号, or on a floor (…階) — is skipped.
+  let geocoded = 0;
+  for (const f of reg.values()) {
+    if (f.ll || f.geo === false || geocoded >= 20) continue;
+    geocoded++;
+    try {
+      const html = await (await fetch(f.events.at(-1).link, { headers: { 'User-Agent': UA } })).text();
+      const text = norm(decode(html.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, ' ')));
+      const addrs = [...text.matchAll(/(?:所在地|建設地|計画地)\s*[:：]?\s*((?:北海道|東京都|京都府|大阪府|.{2,3}県).{2,40}?)(?=\s+(?:https?:|敷地|延床|用途|構造|電話|代表|竣工|着工|規模|交通|アクセス|最寄)|[、。（(・]|$)/g)]
+        .map((m) => m[1].trim()).filter((a) => !/階|ビル|タワー|Tower/.test(a));
+      const pick = addrs.find((a) => !f.pref || a.startsWith(PREFS[f.pref - 1])) ?? addrs[0];
+      if (!pick) { f.geo = false; continue; }
+      const res = await (await fetch(`https://msearch.gsi.go.jp/address-search/AddressSearch?q=${encodeURIComponent(pick)}`)).json();
+      const c = res?.[0]?.geometry?.coordinates;
+      if (!c) { f.geo = false; continue; }
+      const rev = await (await fetch(`https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress?lat=${c[1]}&lon=${c[0]}`)).json();
+      const mc = String(rev?.results?.muniCd ?? '').padStart(5, '0');
+      // a release can name several facilities: the address must agree with a place in the facility's own name
+      const fromName = placeFromName(f.name, f.brand, []);
+      if (fromName && /^\d{5}$/.test(mc) && fromName !== mc) { f.geo = false; f.muni = fromName; f.pref = Number(fromName.slice(0, 2)); continue; }
+      f.ll = [Math.round(c[0] * 1e5) / 1e5, Math.round(c[1] * 1e5) / 1e5];
+      f.addr = pick;
+      if (/^\d{5}$/.test(mc) && mc !== '00000') { f.muni = mc; f.pref = Number(mc.slice(0, 2)); }
+      await sleep(400);
+    } catch { /* next run */ }
+  }
+  // hand corrections (data/facilities-overrides.json: { "<name>": { "ll": [lon, lat], "muni": "…", "floor": …, "hide": true } })
+  const OVR = resolve(root, 'data/facilities-overrides.json');
+  const overrides = existsSync(OVR) ? JSON.parse(readFileSync(OVR, 'utf8')) : {};
+  for (const [name, o] of Object.entries(overrides)) if (reg.has(name)) Object.assign(reg.get(name), o);
+  for (const [name, f] of reg) if (f.hide) reg.delete(name);
   const list = [...reg.values()].sort((a, b) => b.events.at(-1).date.localeCompare(a.events.at(-1).date));
   writeFileSync(FAC, JSON.stringify({ generated: new Date().toISOString(), note: 'facilities named in developer releases (fetch-news.mjs); cumulative', items: list }));
-  console.log(`facilities.json: ${list.length} facilities, ${list.filter((f) => f.muni).length} placed, ${list.filter((f) => f.floor).length} with floor area`);
+  console.log(`facilities.json: ${list.length} facilities, ${list.filter((f) => f.ll).length} geocoded, ${list.filter((f) => f.muni).length} with a municipality, ${list.filter((f) => f.floor).length} with floor area`);
 }
 console.log(`news.json: ${items.length} items, ${items.filter((i) => i.munis.length).length} with a municipality, ${items.filter((i) => i.img).length} with an image (${report.join(', ')})`);

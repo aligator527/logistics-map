@@ -1,0 +1,30 @@
+# Recreate the screenshot baselines (e2e/visual.spec.ts) in the Playwright container and commit them.
+# Run by hand after an intended visual change; CI compares against these.
+name: Update visual baselines
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  baselines:
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright test e2e/visual.spec.ts --project=desktop --project=phone --update-snapshots
+        env:
+          CI: '1'
+          VISUAL: '1'
+          HOME: /root
+      - run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add e2e/visual.spec.ts-snapshots
+          git diff --cached --quiet || { git commit -m "Update visual baselines"; git push; }

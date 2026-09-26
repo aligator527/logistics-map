@@ -20,6 +20,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - run: node --test 'tests-live/*.test.mjs'   # landform names at well-known places (GSI tiles)
       - run: npx playwright install --with-deps chromium
       - run: npx playwright test --project=desktop
         env:

@@ -33,7 +33,9 @@
     "e2e": "playwright test",
     "raw:verify": "node scripts/raw-manifest.mjs",
     "raw:update": "node scripts/raw-manifest.mjs --update",
-    "zoning": "node scripts/build-zoning.mjs"
+    "zoning": "node scripts/build-zoning.mjs",
+    "visual": "docker run --rm --ipc=host -v \"$PWD\":/work -v /work/node_modules -w /work mcr.microsoft.com/playwright:v1.63.0-noble bash -c 'npm ci --no-audit --no-fund >/dev/null && VISUAL=1 CI=1 npx playwright test e2e/visual.spec.ts'",
+    "visual:update": "docker run --rm --ipc=host -v \"$PWD\":/work -v /work/node_modules -w /work mcr.microsoft.com/playwright:v1.63.0-noble bash -c 'npm ci --no-audit --no-fund >/dev/null && VISUAL=1 CI=1 npx playwright test e2e/visual.spec.ts --update-snapshots'"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

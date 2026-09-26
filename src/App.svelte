@@ -434,7 +434,7 @@
     return out;
   });
   // ------------------------------------------------------------ other developers' facilities (from the news)
-  interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; events: { stage: string; date: string; link: string; t: string }[] }
+  interface Facility { name: string; brand: string; src: string; muni: string; pref: number; floor: number | null; ll?: [number, number]; addr?: string; events: { stage: string; date: string; link: string; t: string }[] }
   let facilities = $state.raw<Facility[] | null>(null);
   $effect(() => {
     if (!app.showFac || facilities) return;
@@ -442,15 +442,17 @@
   });
   const facPois = $derived.by((): Poi[] => {
     if (!geo || !muni || !facilities || !app.showFac) return [];
-    return facilities.filter((f) => f.muni).flatMap((f, i) => {
-      const c = (muni as unknown as { xy?: ([number, number] | null)[] }).xy?.[muni.codes.indexOf(f.muni)];
+    return facilities.filter((f) => f.muni || f.ll).flatMap((f, i) => {
+      // the geocoded 所在地 when there is one, else the municipality's population centre
+      const c = f.ll && geo!.layout ? projectLL(f.ll[0], f.ll[1], geo!.layout).p : (muni as unknown as { xy?: ([number, number] | null)[] }).xy?.[muni.codes.indexOf(f.muni)];
       if (!c) return [];
       const last = f.events.at(-1)!;
       const done = f.events.some((e) => ['done', 'viewing', 'open'].includes(e.stage));
       const rows: [string, string][] = f.events.map((e) => [e.date, tt(`stg_${e.stage}` as Key)]);
       if (f.floor) rows.unshift([tt('floor'), fmtSqm(L, f.floor)]);
       return [{ key: `f${i}`, kind: 'fac' as const, xy: geo!.P(c), r: 5, label: f.name, major: !!f.floor && f.floor > 50_000, filled: done,
-                tip: { title: f.name, sub: `${srcName(f.src)} · ${done ? tt('facDone') : tt('facPipeline')}`, rows, note: tt('facNote'),
+                tip: { title: f.name, sub: `${srcName(f.src)} · ${done ? tt('facDone') : tt('facPipeline')}`, rows: f.addr ? [[tt('address'), f.addr], ...rows] : rows,
+                       note: f.ll ? tt('facNoteAddr') : tt('facNote'),
                        link: { href: last.link, label: tt('readArticle') } } }];
     });
   });

@@ -144,3 +144,13 @@ test('background map layer and fill strength', async ({ page }) => {
   await expect(page.locator('.base-row input[type=range]')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('keyboard: prefectures, then municipalities inside one', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'keyboard');
+  await open(page, 't=local&r=11');
+  const map = page.locator('svg[role="application"]');
+  await map.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Enter');
+  await expect(page).toHaveURL(/mu=11\d{3}/);
+});
