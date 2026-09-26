@@ -272,6 +272,7 @@
     return unproject(planar, geo.layout, inset ? (inset.key as 'okinawa' | 'ogasawara') : 'main');
   }
   function onpointAny(xy: [number, number]) {
+    if (s.closeArmed) return toggleClosureAt(xy);
     if (!s.inspectArmed) return onpoint(xy);
     const ll = toLonLat(xy);
     s.inspectArmed = false;
@@ -354,9 +355,40 @@
     return out;
   });
   /** typhoon tracks (past solid, forecast dashed), split where they jump into / out of an inset */
+  /** closed expressway stretches (straight between their graph nodes) */
+  const closureTracks = $derived.by(() => {
+    const ll = lt?.router?.net.nodeLL;
+    if (!geo || !ll || app.layer !== 'local') return [];
+    return app.closures.map((c) => {
+      const pts = c.split('_').map((s) => s.split(',').map(Number) as [number, number]);
+      const [a, b] = pts.map(([lon, lat]) => geo!.P(projectLL(lon, lat, geo!.layout).p));
+      return { key: `cl${c}`, d: `M${a[0].toFixed(4)},${a[1].toFixed(4)}L${b[0].toFixed(4)},${b[1].toFixed(4)}`, kind: 'closed' as const };
+    });
+  });
+  /** a click while closing roads: the expressway stretch nearest the point (within 8 km) opens or closes */
+  function toggleClosureAt(xy: [number, number]) {
+    const ll = toLonLat(xy), net = lt?.router?.net, r = lt?.router;
+    if (!ll || !net?.nodeLL || !r) return;
+    const kx = Math.cos((ll[1] * Math.PI) / 180) * 111, ky = 111;
+    let best = -1, bd = 8;
+    for (let k = 0; k < net.edges.length / 3; k++) {
+      const a = net.nodeLL[net.edges[3 * k]], b = net.nodeLL[net.edges[3 * k + 1]];
+      if (!a || !b || !net.edgeKm?.[k]) continue; // ordinary-road links are not closable
+      const ax = (a[0] - ll[0]) * kx, ay = (a[1] - ll[1]) * ky, bx = (b[0] - ll[0]) * kx, by = (b[1] - ll[1]) * ky;
+      const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+      const u = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+      const d = Math.hypot(ax + u * dx, ay + u * dy);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (best < 0) return;
+    const a = net.nodeLL[net.edges[3 * best]], b = net.nodeLL[net.edges[3 * best + 1]];
+    const key = `${a[0]},${a[1]}_${b[0]},${b[1]}`;
+    app.closures = app.closures.includes(key) ? app.closures.filter((c) => c !== key) : [...app.closures, key].slice(-20);
+    if (app.lmet !== 'iso' && app.lmet !== 'shift' && app.lmet !== 'delay') app.lmet = 'delay';
+  }
   const tracks = $derived.by(() => {
-    if (!geo || app.layer !== 'now') return [];
-    const out: { key: string; d: string; kind: 'past' | 'forecast' }[] = [];
+    if (!geo || app.layer !== 'now') return closureTracks;
+    const out: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' }[] = [];
     for (const t of live.typhoons) {
       // only the part of the track in the same map space as the storm now (the Okinawa inset is
       // enlarged and moved, so points outside it would be drawn somewhere misleading)
@@ -1109,7 +1141,7 @@
           onnewshover={(k) => (newsFocus = k)}
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
           {relatedFor} {timelineFor} {locateNews} bind:newsOpen={app.newsOpen}
-          {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed} onpoint={onpointAny} {zoning}
+          {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed || s.closeArmed} onpoint={onpointAny} {zoning}
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
           showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null}

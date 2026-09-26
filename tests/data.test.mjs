@@ -148,6 +148,15 @@ test('hazard shares and road network', async () => {
   assert.equal(nf[ix('01101')], Infinity, 'no road to Hokkaido');
   assert.equal(nf[ix('15224')], Infinity, 'no road to 佐渡');
   r.ferries = true;
+  // road km along the quickest path (for distance-based fares): 東京→名古屋 ~350 km, →大阪 ~500 km
+  const dk = r.toMunisKm([r.muni(ix('13101'))]);
+  assert.ok(dk.km[ix('23101')] > 300 && dk.km[ix('23101')] < 420, `千代田→名古屋 ${dk.km[ix('23101')]} km`);
+  assert.ok(dk.km[ix('27128')] > 450 && dk.km[ix('27128')] < 600, `千代田→大阪 ${dk.km[ix('27128')]} km`);
+  // rush hour is slower; closing the stretch the quickest path uses makes it longer
+  r.peak = true;
+  assert.ok(r.toMunis([r.muni(ix('13101'))])[ix('23101')] > t[ix('23101')], 'rush hour slower');
+  r.peak = false;
+  assert.ok(net.speedSource.measuredShare > 0.6, 'census speeds on most expressway km');
   const s = r.toMunis([r.muni(ix('01101'))]);
   assert.ok(s[ix('01202')] / 60 < 5, '札幌→函館 by road');
 });

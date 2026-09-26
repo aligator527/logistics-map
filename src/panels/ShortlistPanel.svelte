@@ -10,7 +10,7 @@
   import { WARN_COLORS } from '../lib/warncolors';
   import type { DossierTable } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
-  import { estimate, costs } from '../lib/costs.svelte';
+  import { estimate, costs, transport } from '../lib/costs.svelte';
   const statusName = (st: Status | undefined) => tt(`st_${st ?? 'cand'}` as Key);
   let noteOpen = $state<string | null>(null);
   let hideDropped = $state(false);
@@ -205,6 +205,14 @@
         row(tt('costLand'), est.map((e) => e?.land ?? NaN), oku, -1),
         row(tt('costStaffYear'), est.map((e) => e?.staff ?? NaN), oku, -1),
         row(tt('costFuelYear'), est.map((e) => e?.fuel ?? NaN), oku, -1),
+        ...(() => {
+          const trs = items.map((it) => { const mc = muniOf(it); return mc ? transport(lt!.indexOf(mc)) : null; });
+          return trs.some((x) => x) ? [
+            row(tt('trYearly'), trs.map((x) => x?.yearly ?? NaN), oku, -1),
+            row(tt('trPerRun'), trs.map((x) => x?.km ?? NaN), (v) => `${fmtNum(L, v, 0)} km`, -1),
+            row(tt('trCo2'), trs.map((x) => (x ? x.co2 / 1000 : NaN)), (v) => `${fmtNum(L, v, 0)} t`, -1),
+          ] : [];
+        })(),
       ] });
     }
     if (live.warnTime) groups.push({ title: tt('cmpLive'), rows: [{ label: tt('liveWarn'), cells: items.map((it) => { const a = shortAlert(it); return a.level >= 2 ? `${nt?.levelName(a.level) ?? a.level}：${a.text}` : '–'; }) }] });

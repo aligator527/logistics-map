@@ -97,6 +97,10 @@ class AppState {
   igrid = $state(false);
   /** reach and hub times use the long-distance ferries */
   ferries = $state(true);
+  /** rush-hour truck speeds (道路交通センサス 7–9, 17–19 h) */
+  peak = $state(false);
+  /** closed expressway stretches: "lon,lat_lon,lat" of the two graph nodes */
+  closures = $state<string[]>([]);
 
   showDpl = $state(true);
   showRoads = $state(true);
@@ -187,6 +191,8 @@ class AppState {
       if (this.iso) p.set('io', this.iso);
       if (this.igrid) p.set('ig', '1');
       if (!this.ferries) p.set('nf', '1');
+      if (this.peak) p.set('pk', '1');
+      if (this.closures.length) p.set('cl', this.closures.join('~'));
       if (this.screen.length) p.set('fx', this.screen.map((r) => `${r.key}.${r.op}.${+r.v.toPrecision(4)}`).join('~'));
     }
     if (this.layer === 'score') {
@@ -213,7 +219,7 @@ class AppState {
     if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
     if (this.view !== 'map') p.set('v', this.view);
     if (this.mv) p.set('mv', this.mv);
-    return p.toString().replace(/%2F/g, '/').replace(/%7E/g, '~');
+    return p.toString().replace(/%2F/g, '/').replace(/%7E/g, '~').replace(/%2C/g, ',').replace(/%3A/g, ':');
   }
 
   fromHash(hash: string, lists: HashLists) {
@@ -234,6 +240,8 @@ class AppState {
     this.iso = /^(muni:\d{5}|site:.{1,80}|pt:-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+|net:(dpl|short|sim))$/.test(io) ? io : '';
     this.igrid = p.get('ig') === '1';
     this.ferries = p.get('nf') !== '1';
+    this.peak = p.get('pk') === '1';
+    this.closures = (p.get('cl') ?? '').split('~').filter((s) => /^-?\d+\.\d+,-?\d+\.\d+_-?\d+\.\d+,-?\d+\.\d+$/.test(s)).slice(0, 20);
     this.screen = (p.get('fx') ?? '').split('~').map((s) => s.match(/^([A-Za-z0-9_]{1,20})\.(ge|le)\.(-?[\d.e+-]+)$/)).filter((m): m is RegExpMatchArray => !!m && isFinite(Number(m[3])))
       .slice(0, 12).map((m) => ({ key: m[1], op: m[2] as 'ge' | 'le', v: Number(m[3]) }));
     // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"

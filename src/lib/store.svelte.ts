@@ -70,6 +70,8 @@ class Store {
   gridLoading = $state(false);
   /** 地点を調べる: the next map click inspects a point (elevation, landform) */
   inspectArmed = $state(false);
+  /** 通行止め: the next map clicks close / open expressway stretches */
+  closeArmed = $state(false);
   inspect = $state.raw<import('./pointinfo').PointInfo | null>(null);
   inspectLoading = $state(false);
 

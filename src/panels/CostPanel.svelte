@@ -3,7 +3,8 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { fmtNum } from '../lib/scale';
-  import { costs, estimate } from '../lib/costs.svelte';
+  import { costs, estimate, transport, type DemandKey } from '../lib/costs.svelte';
+  import { VEHICLES, REGION_NAMES } from '../lib/fares';
 
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -17,6 +18,10 @@
     const med = (f: (x: typeof all[number]) => number) => { const v = all.map(f).filter(isFinite).sort((a, b) => a - b); return v[v.length >> 1]; };
     return { land: med((x) => x.land), staff: med((x) => x.staff), fuel: med((x) => x.fuel) };
   });
+  // runs: recomputed when the inputs, the site or the routing options change
+  const tr = $derived.by(() => { void app.peak; void app.ferries; void s.lt?.closedEdges; void costs.inputs.vehicle; void costs.inputs.runs; void costs.inputs.load; void costs.inputs.limit; void costs.inputs.demand; void costs.inputs.days; return i >= 0 ? transport(i, costs.inputs) : null; });
+  const DEMANDS: [DemandKey, Key][] = [['pop', 'dmPop'], ['hh', 'dmHh'], ['retail', 'dmRetail'], ['mailorder', 'dmMail'], ['mfgShip', 'dmMfg'], ['wsEmp', 'dmWs']];
+  const LIMITS = [60, 120, 180, 240, 360, 600];
   const oku = (y: number) => (isFinite(y) ? (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`) : '–');
   const FIELDS: [keyof typeof costs.inputs, Key, string][] = [
     ['plot', 'costPlot', '㎡'], ['staff', 'costStaff', ''], ['hours', 'costHours', 'h'], ['premium', 'costPremium', '%'],
@@ -42,6 +47,31 @@
           <tr><th>{tt('costFuelYear')}</th><td class="tnum">{oku(e.fuel)}</td><td class="tnum">{oku(median?.fuel ?? NaN)}</td></tr>
         </tbody>
       </table>
+      <p class="sub-eyebrow">{tt('trTitle')}</p>
+      <div class="grid">
+        <label><span class="small">{tt('trVehicle')}</span>
+          <select bind:value={costs.inputs.vehicle} onchange={() => costs.save()}>{#each VEHICLES as v (v.key)}<option value={v.key}>{v[L]}</option>{/each}</select></label>
+        <label><span class="small">{tt('trDemand')}</span>
+          <select bind:value={costs.inputs.demand} onchange={() => costs.save()}>{#each DEMANDS as [k, lab] (k)}<option value={k}>{tt(lab)}</option>{/each}</select></label>
+        <label><span class="small">{tt('trRuns')}</span>
+          <span class="in"><input type="number" min="0" step="1" bind:value={costs.inputs.runs} onchange={() => costs.save()} /><span class="u">{L === 'ja' ? '運行/日' : 'runs/day'}</span></span></label>
+        <label><span class="small">{tt('trLoad')}</span>
+          <span class="in"><input type="number" min="10" max="100" step="5" bind:value={costs.inputs.load} onchange={() => costs.save()} /><span class="u">%</span></span></label>
+        <label><span class="small">{tt('trLimit')}</span>
+          <select bind:value={costs.inputs.limit} onchange={() => costs.save()}>{#each LIMITS as m (m)}<option value={m}>{fmtNum(L, m / 60, m % 60 ? 1 : 0)}{L === 'ja' ? '時間以内' : ' h'}</option>{/each}</select></label>
+      </div>
+      {#if tr}
+        <table class="res">
+          <tbody>
+            <tr><th>{tt('trYearly')}</th><td class="tnum">{oku(tr.yearly)}</td></tr>
+            <tr><th>{tt('trPerRun')}</th><td class="tnum">{fmtNum(L, tr.perRun, 0)}{L === 'ja' ? '円' : ' ¥'} · {fmtNum(L, tr.km, 0)} km</td></tr>
+            <tr><th>{tt('trCo2')}</th><td class="tnum">{fmtNum(L, tr.co2 / 1000, 0)} t-CO₂</td></tr>
+            <tr><th>{tt('trServed')}</th><td class="tnum">{fmtNum(L, tr.served * 100, 0)}%</td></tr>
+          </tbody>
+        </table>
+        <p class="src">{tt('trNote').replace('{r}', REGION_NAMES[tr.region] ?? tr.region)}
+          <a href="https://www.mlit.go.jp/jidosha/jidosha_tk4_000118.html">{tt('trSource')}</a> · <a href="https://www.greenpartnership.jp/co2">{tt('co2Source')}</a></p>
+      {:else if s.lt && !s.lt.router}<p class="src" role="status">{tt('loadingNetwork')}</p>{/if}
       <p class="src">{L === 'ja' ? `地価 ${fmtNum(L, e.landPrice, 0)}円/㎡ · 最低賃金 ${fmtNum(L, e.wage, 0)}円 · 軽油 ${fmtNum(L, e.diesel, 1)}円/L` : `Land ¥${fmtNum(L, e.landPrice, 0)}/m² · minimum wage ¥${fmtNum(L, e.wage, 0)} · diesel ¥${fmtNum(L, e.diesel, 1)}/L`}.
         {tt('costNote')} <button type="button" class="linkish" onclick={() => costs.reset()}>{tt('costReset')}</button></p>
     </details>
@@ -55,6 +85,7 @@
   .in { display: flex; align-items: center; gap: 4px; }
   .in input { width: 100%; min-height: 32px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); }
   .u { font-size: 11px; color: var(--muted); }
+  .grid select { width: 100%; min-height: 32px; }
   .res { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
   .res th, .res td { padding: 4px 2px; border-bottom: 1px solid var(--line); text-align: right; }
   .res th:first-child { text-align: left; color: var(--ink-2); font-weight: 500; }

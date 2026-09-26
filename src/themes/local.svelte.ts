@@ -46,12 +46,32 @@ export class LocalTheme implements ThemeView {
   simPicks = $state.raw<number[]>([]);
   /** the 1 km grid, once loaded and prepared (App loads it when the grid view is asked for) */
   grid = $state.raw<Grid | null>(null);
+  /** closed stretches as router edge ids */
+  readonly closedEdges = $derived.by(() => {
+    const r = this.router, ll = r?.net.nodeLL;
+    const out = new Set<number>();
+    if (!r || !ll || !app.closures.length) return out;
+    const at = new Map(ll.map((p, i) => [`${p[0]},${p[1]}`, i]));
+    for (const c of app.closures) {
+      const [a, b] = c.split('_').map((s) => at.get(s));
+      if (a === undefined || b === undefined) continue;
+      const e = r.edgeBetween(a, b);
+      if (e >= 0) out.add(e);
+    }
+    return out;
+  });
+  /** the router set for the current options (ferries, rush hour, closures) */
+  rt(open = false) {
+    const r = this.router!;
+    r.ferries = app.ferries; r.peak = app.peak; r.closed = open ? new Set() : this.closedEdges;
+    return r;
+  }
   private places = (keys: string[]) => keys.map((k) => this.router!.poi(k)).filter((p): p is Place => !!p);
   /** minutes from every municipality to the nearest hub of each group */
   readonly hubTimes = $derived.by(() => {
     const r = this.router, g = this.groups;
     if (!r || !g) return null;
-    r.ferries = app.ferries;
+    this.rt();
     return { port: r.toMunis(this.places(g.port)), air: r.toMunis(this.places(g.air)), rail: r.toMunis(this.places(g.rail)) };
   });
   /** origin of the reach map: app.iso, else the selected municipality */
@@ -79,15 +99,29 @@ export class LocalTheme implements ThemeView {
   readonly isoTimes = $derived.by(() => {
     const o = this.originPlaces(this.originKey);
     if (!o.length) return null;
-    this.router!.ferries = app.ferries;
-    return this.router!.toMunis(o);
+    return this.rt().toMunis(o);
+  });
+  /** extra minutes the closures cost, per municipality (0 without closures) */
+  readonly closureDelay = $derived.by(() => {
+    const o = this.originPlaces(this.originKey), t = this.isoTimes;
+    if (!o.length || !t || !this.closedEdges.size) return null;
+    const open = this.rt(true).toMunis(o);
+    this.rt();
+    return Float32Array.from(t, (x, i) => (isFinite(open[i]) ? (isFinite(x) ? x - open[i] : 600) : NaN));
+  });
+  /** road km along the quickest path from the origin (for distance-based fares) */
+  readonly isoKm = $derived.by(() => {
+    const o = this.originPlaces(this.originKey);
+    if (!o.length || !this.router) return null;
+    void this.isoTimes;
+    return this.rt().toMunisKm(o).km;
   });
   /** minutes per 1 km cell (grid view) */
   readonly gridTimes = $derived.by(() => {
     if (!app.igrid || !this.grid || !this.reach?.ready) return null;
     const o = this.originPlaces(this.originKey);
     if (!o.length) return null;
-    this.router!.ferries = app.ferries;
+    this.rt();
     return this.reach.toGrid(o, this.grid);
   });
   /** hubs (ports / airports / rail stations) nearest the origin by time */
@@ -95,8 +129,7 @@ export class LocalTheme implements ThemeView {
     const o = this.originPlace(key), g = this.groups;
     if (!o || !g) return [];
     const keys = g[group].filter((k) => this.router!.poi(k));
-    this.router!.ferries = app.ferries;
-    const times = this.router!.toPlaces([o], this.places(keys));
+    const times = this.rt().toPlaces([o], this.places(keys));
     return keys.map((k, j) => ({ name: k.slice(k.indexOf(':') + 1), t: times[j] })).filter((x) => isFinite(x.t)).sort((a, b) => a.t - b.t).slice(0, n);
   }
   /** people within 30 / 60 / 90 / 120 / 180 min of the origin (1 km grid when loaded, else by
@@ -204,6 +237,9 @@ export class LocalTheme implements ThemeView {
         fmt: (x: number) => this.ctx.tt(x === 1 ? 'trip1' : x === 2 ? 'trip2' : 'trip3'), better: -1, category: true,
         hint: { ja: '起点から日帰り往復／片道1日／2日以上・中継輸送（拘束13時間・運転9時間・4時間ごとに30分休憩、荷役を含む推計）',
                 en: 'From the origin: there and back in a shift / one way per shift / two days or a relay (13 h on duty, 9 h driving, 30 min rest per 4 h, handling included; estimate)' }, source: net },
+      ...(this.closureDelay ? [{ key: 'delay', ja: '通行止めによる所要時間の増加', en: 'Extra time from the closures', group: 'access' as const,
+        get: arr(this.closureDelay), fmt: (x: number) => (x >= 600 ? this.ctx.tt('unreachable') : `+${mins(x)}`), better: -1 as const,
+        hint: { ja: '起点から、設定した区間を通行止めにしたときに増える時間（迂回・フェリーを含む推計）', en: 'From the origin: how much longer with the closed stretches (detours and ferries, estimate)' }, source: net }] : []),
       { key: 'tPort', ja: '主要コンテナ港までの時間', en: 'Time to a main container port', group: 'access', get: arr(this.hubTimes?.port), fmt: mins, better: -1, time: true,
         hint: { ja: '年10万TEU以上の港まで（推計）', en: 'To a port handling ≥ 100k TEU a year (estimate)' }, source: net },
       { key: 'tAir', ja: '主要貨物空港までの時間', en: 'Time to a main cargo airport', group: 'access', get: arr(this.hubTimes?.air), fmt: mins, better: -1, time: true,

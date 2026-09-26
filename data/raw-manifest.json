@@ -660,6 +660,335 @@
    "script": "etl-multimodal"
   },
   {
+   "file": "data/raw/roadcensus/kasyo01.csv",
+   "bytes": 3130569,
+   "sha256": "6a9d5b94bb771b80b7b4c298c825577a3b61d67d6c937c6a69f6caf54ed2b2e5",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo02.csv",
+   "bytes": 1113338,
+   "sha256": "34648f24e795a5ff5dabf089e99b1b6b81f0e935c54aaea7566defc3029549c3",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo03.csv",
+   "bytes": 1096484,
+   "sha256": "a8af1ea2ca231b419007235b10ac4e02d9893b78d698009eda260376f98e1e0d",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo04.csv",
+   "bytes": 1156089,
+   "sha256": "1ae09c6ffcc65350ba2e0e7f9316ccae4d74a715ec53517747dc0b56ed2eed31",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo05.csv",
+   "bytes": 795558,
+   "sha256": "e9a81513033bd21a55cb800273624b5933867d7caa0971c352e1d738f296dcd4",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo06.csv",
+   "bytes": 1210890,
+   "sha256": "b418e6e2f8ecb52c0d5e130150a1d93e93f4c40f90d127617671220200a439eb",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo07.csv",
+   "bytes": 1825117,
+   "sha256": "ddbb26b9a20aaaf73dc4e5b0098c0db2b32fb06c123e5f16c81b077935cd2c92",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo08.csv",
+   "bytes": 1826746,
+   "sha256": "eaeeddbf9f47608e350f70a0dff9a3a0f0af0b1f15941b7bf99b56a9cd8cd933",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo09.csv",
+   "bytes": 1370349,
+   "sha256": "c33c2e85a38187567a4d0b4c82412a0ae065c12b670be48b74f3973991b970ee",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo10.csv",
+   "bytes": 1501342,
+   "sha256": "e128e858e784aceb31a33153f3e530ae0bed3584a78db0acaa098b0ca1083694",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo11.csv",
+   "bytes": 2031769,
+   "sha256": "691fd97182425bd4397a8d8743b2b8192bd53154b5847886fd3b7b7ebd952afd",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo12.csv",
+   "bytes": 1644382,
+   "sha256": "5e10ffbcd7bc029d5eece06d6caa951a10a0ec7354ac30be045f1e21c7d92fd5",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo13.csv",
+   "bytes": 2276487,
+   "sha256": "37c41661cf92ee0f9964138694f43c5764f237dc061262f6457bbb6dd3e30c85",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo14.csv",
+   "bytes": 1463998,
+   "sha256": "c50903ecd7daabca6cffa9a1f51905b8746d9e965dc8cc20704a6335664e638b",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo15.csv",
+   "bytes": 2349443,
+   "sha256": "b8a6cae5f22b6fa66d6833746de3d22b550222b829c9d547ff13120e8f855553",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo16.csv",
+   "bytes": 1412734,
+   "sha256": "051adcf16741663bf37662b1fa7e42241439e918246676df8af4d9465c091f29",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo17.csv",
+   "bytes": 948212,
+   "sha256": "22f93c3b69acc981fff66a2ccfb988abfb34e521d507709cdbcd229d9f3be33d",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo18.csv",
+   "bytes": 852513,
+   "sha256": "a0a5553b4aaf92dbc7626d1d3f8689ace4c8bc004c4502d2f0ebdd429881edf9",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo19.csv",
+   "bytes": 761223,
+   "sha256": "b0887b492a6d75c469ed2c20d24a71f10ca220f601e669bd42e7aa1449322ab8",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo20.csv",
+   "bytes": 1719652,
+   "sha256": "be5c7adcf5964c3053f8226dbd7c64f93954d5eae9923865262a80358a911c35",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo21.csv",
+   "bytes": 1344791,
+   "sha256": "2869136e5c1f24f5d73ccb6ddb1c86a2c1fdea81a00db174ec02214d3163a469",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo22.csv",
+   "bytes": 1751614,
+   "sha256": "b4f87df9772edd4f793fafc7c51aa268bb354dcb43099dddf368f56b1b3c9484",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo23.csv",
+   "bytes": 3220011,
+   "sha256": "bda9df38b1e471c384748516281834913ab561563a093914e2b71be6bd853440",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo24.csv",
+   "bytes": 1443482,
+   "sha256": "dae993f8104968bd04afff296856810d54ecddc05160e981392011c5787255be",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo25.csv",
+   "bytes": 1070105,
+   "sha256": "fa6503bed633792b533140cfdfb28780069af0f3a6760ec8360e9132a0b41fdc",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo26.csv",
+   "bytes": 1488052,
+   "sha256": "4ff1c0cd7ed26e767e17dfc071280640ee438961067cc30110071684cee3fd50",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo27.csv",
+   "bytes": 2297449,
+   "sha256": "e816251ff440c914ce5e094c4f4b6aa7ff900df6c429f3f66e1695ef79d4f516",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo28.csv",
+   "bytes": 2535198,
+   "sha256": "68c3e2ad78d6b89b92730ed24aad412e4342e9ae358f0436634683b2d5390ca2",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo29.csv",
+   "bytes": 1024204,
+   "sha256": "e2d031397e1c12e51c6df69be016a4a3758446d46fafd54cab28cfddcc99242d",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo30.csv",
+   "bytes": 956448,
+   "sha256": "7efb22c1791f8e758b84b6983c8d932d7059c788784b7df806f1f885eba6e179",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo31.csv",
+   "bytes": 776556,
+   "sha256": "cd6674f4def23c5ca843ca4a9aecf5fdac9f191718e6afbe32050082e022e063",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo32.csv",
+   "bytes": 929746,
+   "sha256": "eae1a6df149d24b6fad2d7a9d736b1617176a90e48135f76686dbb5921a03af1",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo33.csv",
+   "bytes": 1544676,
+   "sha256": "1fa1247266a59bec1323d7bb10f831c6082b8a06b10b09ce9e0366512ebfd21f",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo34.csv",
+   "bytes": 1591498,
+   "sha256": "e210955433a1b93f417b19ee451fb0ed114176273266057ecc510509e432fc8c",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo35.csv",
+   "bytes": 1050714,
+   "sha256": "c1285202d5a132ee69cd41e46c84a963d6e0878ca5da3657f0f5df2ce17308aa",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo36.csv",
+   "bytes": 833717,
+   "sha256": "d74b160faca692fa9a6c622e241605c94d26935c1ecc1cc3efb7d2b9d68cb043",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo37.csv",
+   "bytes": 914288,
+   "sha256": "1ef5d30885c71db5999430aceadf60700c4150abe054edfe7f79dfc67ab8185d",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo38.csv",
+   "bytes": 991421,
+   "sha256": "013eef69ca21230cde0844d2dce03a18a3dda789655eb2722fc110c632caac94",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo39.csv",
+   "bytes": 733029,
+   "sha256": "06d1bc3c72f8408b64e4e9722efe88d196a798f3d6d3b9aa62050391c4a18831",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo40.csv",
+   "bytes": 2872796,
+   "sha256": "b24d04c1b5e7807e5b76cc490214c68ec6cd93f03abc025ee46ee5fd47e6ab68",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo41.csv",
+   "bytes": 810847,
+   "sha256": "7c1ff7ba6a02eea2aa79d32289ead1dbc511b28a1441f93abb95d99050c8e395",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo42.csv",
+   "bytes": 682950,
+   "sha256": "f01d8e1fc6ee08b9c48fcff643c320df0801e01cfe9bec37c1eaf8d721fea45b",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo43.csv",
+   "bytes": 1248982,
+   "sha256": "b23be1b18127e79b807f2c8fba79f64ec85e2587bcab0ebec5e9b074be46af5f",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo44.csv",
+   "bytes": 966669,
+   "sha256": "7e8d9a48755e689dc14d9a4ae0564f5a93cd7a164310277bd56688456317f68e",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo45.csv",
+   "bytes": 803975,
+   "sha256": "7adac7535f3aa7750584a2b1be59973eeba25cf009b601f7e6c71632020f0229",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo46.csv",
+   "bytes": 1116151,
+   "sha256": "0cdeffb7e2a8078bb33608810df0ac4fc5e4671a47cdeafd62df16afacf1298b",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
+   "file": "data/raw/roadcensus/kasyo47.csv",
+   "bytes": 754908,
+   "sha256": "5f835319609e847b34ea30f9a826c95398ff1c47058a8d7c7d2033a71dd55c79",
+   "source": "https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)",
+   "script": "build-network"
+  },
+  {
    "file": "data/raw/ssw/001402078.xlsx",
    "bytes": 180427,
    "sha256": "81ac781345cf6e14098afa93e69677252e893b644794960178afe60bd893ba78",

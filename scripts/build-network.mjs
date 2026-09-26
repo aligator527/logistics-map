@@ -22,6 +22,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GridIndex, km } from './lib/geo-ll.mjs';
 import { writeJson } from './lib/io.mjs';
+import { censusChains, icNames } from './lib/roadcensus.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = resolve(root, process.argv[2] ?? 'data/geo/N06-25/N06-25_GML/UTF-8');
@@ -74,20 +75,91 @@ const node = (p) => {
 };
 const ends = new Map(); // vertex -> number of line ends there
 for (const f of sections) for (const line of f.geometry.coordinates) for (const p of [line[0], line.at(-1)]) ends.set(key(p), (ends.get(key(p)) ?? 0) + 1);
+// road pieces between nodes: length, the N06 road type and route; speeds are set below (census, else SPEED)
+const roadEdges = [];
 for (const f of sections) {
-  const v = SPEED[Number(f.properties.N06_008)] ?? 60;
+  const type = Number(f.properties.N06_008), route = f.properties.N06_007;
   for (const line of f.geometry.coordinates) {
     let from = node(line[0]), len = 0;
     for (let i = 1; i < line.length; i++) {
       len += km({ lon: line[i - 1][0], lat: line[i - 1][1] }, { lon: line[i][0], lat: line[i][1] });
       const k = key(line[i]);
       if (i === line.length - 1 || uses.get(k) > 1 || jointAt.has(k)) {
-        const to = node(line[i]), min = (len / v) * 60;
-        nodes[from].adj.push([to, min]); nodes[to].adj.push([from, min]);
+        const to = node(line[i]);
+        const e = { a: from, b: to, km: len, type, route, day: NaN, peak: NaN };
+        roadEdges.push(e);
+        nodes[from].adj.push([to, 0, 0, len, e]); nodes[to].adj.push([from, 0, 0, len, e]);
         from = to; len = 0;
       }
     }
   }
+}
+
+// ------------------------------------------------------------------ 1b. measured truck speeds (道路交通センサス 2021)
+// Each census IC-to-IC stretch is laid on the shortest road path between joints of the same names whose
+// length agrees within 30%; its edges take the stretch's truck speeds. Edges no stretch reached take their
+// route's average; roads the census does not cover keep SPEED.
+const CENSUS_DIR = resolve(root, 'data/raw/roadcensus');
+let census = { matched: 0, chains: 0, edgesKm: 0, measuredKm: 0 };
+{
+  const jointNames = new Map(); // normalised name -> node ids
+  for (const f of joints) {
+    const k = key(f.geometry.coordinates);
+    if (!nodeOf.has(k)) continue;
+    for (const n of icNames(f.properties.N06_018)) (jointNames.get(n) ?? jointNames.set(n, new Set()).get(n)).add(nodeOf.get(k));
+  }
+  const { chains } = censusChains(CENSUS_DIR);
+  census.chains = chains.length;
+  // bounded Dijkstra by length from one node; returns distance and the edge used to reach each node
+  const shortest = (src, limit) => {
+    const dist = new Map([[src, 0]]), via = new Map(), done = new Set(), heap = [[0, src]];
+    while (heap.length) {
+      heap.sort((x, y) => x[0] - y[0]);
+      const [d, u] = heap.shift();
+      if (done.has(u)) continue;
+      done.add(u);
+      for (const [v, , , len, e] of nodes[u].adj) {
+        const nd = d + len;
+        if (nd > limit || nd >= (dist.get(v) ?? Infinity)) continue;
+        dist.set(v, nd); via.set(v, [u, e]); heap.push([nd, v]);
+      }
+    }
+    return { dist, via };
+  };
+  for (const c of chains) {
+    const A = c.a.flatMap((n) => [...(jointNames.get(n) ?? [])]), B = new Set(c.b.flatMap((n) => [...(jointNames.get(n) ?? [])]));
+    if (!A.length || !B.size || !(c.km > 0)) continue;
+    let best = null;
+    for (const a of A) {
+      const { dist, via } = shortest(a, c.km * 1.3 + 1);
+      for (const b of B) {
+        const d = dist.get(b);
+        if (d === undefined || d < c.km * 0.7 - 1) continue;
+        if (!best || Math.abs(d - c.km) < Math.abs(best.d - c.km)) best = { d, b, via };
+      }
+    }
+    if (!best) continue;
+    census.matched++;
+    for (let v = best.b; best.via.has(v); v = best.via.get(v)[0]) {
+      const e = best.via.get(v)[1];
+      if (!isFinite(e.day)) { e.day = c.day; e.peak = c.peak; }
+    }
+  }
+  // the rest of a route: its measured average (time-weighted), else the flat speed of its road type
+  const byRoute = new Map();
+  for (const e of roadEdges) if (isFinite(e.day)) { const r = byRoute.get(e.route) ?? byRoute.set(e.route, { km: 0, td: 0, tp: 0 }).get(e.route); r.km += e.km; r.td += e.km / e.day; r.tp += e.km / e.peak; }
+  for (const e of roadEdges) {
+    census.edgesKm += e.km;
+    if (isFinite(e.day)) { census.measuredKm += e.km; continue; }
+    const r = byRoute.get(e.route);
+    if (r && r.km > 5) { e.day = r.km / r.td; e.peak = r.km / r.tp; e.routeAvg = true; }
+    else { e.day = e.peak = SPEED[e.type] ?? 60; }
+  }
+  // sensible bounds for a loaded truck (the census also counts cars on some stretches)
+  for (const e of roadEdges) { e.day = Math.min(90, Math.max(20, e.day)); e.peak = Math.min(e.day, Math.max(10, e.peak)); }
+  const avgKm = roadEdges.filter((e) => e.routeAvg).reduce((s, e) => s + e.km, 0);
+  console.log(`census speeds: ${census.matched}/${census.chains} stretches laid on the graph; measured ${(census.measuredKm / census.edgesKm * 100).toFixed(0)}% of expressway km, route average ${(avgKm / census.edgesKm * 100).toFixed(0)}%, flat speed the rest`);
+  for (const n of nodes) for (const a of n.adj) { const e = a[4]; a[1] = (e.km / e.day) * 60; a[2] = (e.km / e.peak) * 60; }
 }
 // entries: IC and smart IC (not JCT), and dead ends where a section runs into ordinary roads
 for (const [k, kind] of jointAt) if (kind !== '3' && nodeOf.has(k)) nodes[nodeOf.get(k)].entry = true;
@@ -103,17 +175,23 @@ console.log(`road pieces before contraction: ${pieces(nodes)}`);
 // contract pass-through nodes (two neighbours, not an entry) to keep the file small
 for (const [i, n] of nodes.entries()) {
   if (n.entry || n.adj.length !== 2 || n.adj[0][0] === n.adj[1][0]) continue;
-  const [[a, ta], [b, tb]] = n.adj;
+  const [[a, ta, pa, ka], [b, tb, pb, kb]] = n.adj;
   if (a === i || b === i) continue;
   const A = nodes[a], B = nodes[b];
   A.adj = A.adj.filter(([x]) => x !== i); B.adj = B.adj.filter(([x]) => x !== i);
-  A.adj.push([b, ta + tb]); B.adj.push([a, ta + tb]);
+  A.adj.push([b, ta + tb, pa + pb, ka + kb]); B.adj.push([a, ta + tb, pa + pb, ka + kb]);
   n.adj = []; n.gone = true;
 }
 const keep = nodes.map((n, i) => [n, i]).filter(([n]) => !n.gone && n.adj.length);
 const newId = new Map(keep.map(([, i], j) => [i, j]));
-const edges = [];
-for (const [n, i] of keep) for (const [to, t] of n.adj) if (i < to && newId.has(to)) edges.push(newId.get(i), newId.get(to), Math.max(1, Math.round(t * 10)));
+const edges = [], edgePeak = [], edgeKm = [];
+/** an edge: minutes (daytime trucks), rush-hour minutes and road km (for distance fares) */
+const addEdge = (a, b, t, tp = t, dkm = 0) => {
+  edges.push(a, b, Math.max(1, Math.round(t * 10)));
+  edgePeak.push(Math.max(1, Math.round(tp * 10)));
+  edgeKm.push(Math.round(dkm * 10));
+};
+for (const [n, i] of keep) for (const [to, t, tp, len] of n.adj) if (i < to && newId.has(to)) addEdge(newId.get(i), newId.get(to), t, tp, len);
 const graph = keep.map(([n]) => n);
 console.log(`road pieces after: ${pieces(nodes)}`);
 console.log(`network: ${graph.length} nodes (${graph.filter((n) => n.entry).length} entries), ${edges.length / 3} edges`);
@@ -181,7 +259,7 @@ const GAP_KM = 60;
   for (const [e, f, d] of best.values()) {
     if (!overLand(e, f)) continue;
     const min = (d * DETOUR / (e.lat > 41.4 && e.lon > 139.3 ? LOCAL_HK : LOCAL)) * 60;
-    edges.push(e.j, f.j, Math.max(1, Math.round(min * 10)));
+    addEdge(e.j, f.j, min, min, d * DETOUR);
     added++;
   }
   const par2 = graph.map((_, i) => i), fr2 = (i) => { while (par2[i] !== i) i = par2[i] = par2[par2[i]]; return i; };
@@ -225,7 +303,7 @@ const terminalNode = {};
     // ordinary-road links to the three nearest entries on the same land (none on 佐渡: the terminal is the entry)
     for (const e of idx.within(q, ACCESS_KM).filter((e) => e.comp === comp && overLand(q, e)).sort((a, b) => km(q, a) - km(q, b)).slice(0, 3)) {
       const min = (km(q, e) * DETOUR / (lat > 41.4 && lon > 139.3 ? LOCAL_HK : LOCAL)) * 60;
-      edges.push(j, e.j, Math.max(1, Math.round(min * 10)));
+      addEdge(j, e.j, min, min, km(q, e) * DETOUR);
     }
   }
 }
@@ -276,13 +354,24 @@ for (const s of read('public/data/dpl.json').sites) pois[`site:${s.name}`] = pla
 
 writeJson(resolve(root, 'public/geo/network.json'), {
   source: {
-    ja: `国土数値情報（高速道路時系列データ N06, 20${tag}年度）から推計`,
-    en: `Estimated from MLIT expressway data (N06, FY20${tag})`,
+    ja: `国土数値情報（高速道路時系列データ N06, 20${tag}年度）と令和3年度道路交通センサス（大型車の旅行速度）から推計`,
+    en: `Estimated from MLIT expressway data (N06, FY20${tag}) and 2021 road census truck speeds`,
     url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html',
   },
   params: { speed: SPEED, local: LOCAL, localHk: LOCAL_HK, detour: DETOUR, accessKm: ACCESS_KM, directKm: DIRECT_KM, linkKm: LINK_KM },
   nodes: graph.length,
   edges,
+  /** per edge (same order as edges / 3): rush-hour minutes × 10, road km × 10 */
+  edgePeak,
+  edgeKm,
+  /** node positions [lon, lat] (to draw and pick closed stretches) */
+  nodeLL: graph.map((n) => [r4(n.lon), r4(n.lat)]),
+  speedSource: {
+    ja: '令和3年度全国道路・街路交通情勢調査 一般交通量調査（国土交通省）の大型車旅行速度を加工して作成',
+    en: '2021 Road Traffic Census (MLIT): truck travel speeds, processed',
+    url: 'https://www.mlit.go.jp/road/census/r3/index.html',
+    measuredShare: Math.round((census.measuredKm / census.edgesKm) * 100) / 100,
+  },
   munis: { ll: munis.map((m) => m.ll), comp: muniComp, acc: munis.map((m) => m.acc) },
   pois,
   /** ferry links [nodeA, nodeB, minutes×10, route] and their names (off-switchable in the map) */

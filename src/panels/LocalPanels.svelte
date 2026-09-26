@@ -10,6 +10,7 @@
   import { shortlist } from '../lib/shortlist.svelte';
   import SimPanel from './SimPanel.svelte';
   import CostPanel from './CostPanel.svelte';
+  import { LocalTheme } from '../themes/local.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -42,7 +43,29 @@
             {tt('pickOnMap')}</button>
           <button type="button" class="btn chip" aria-pressed={app.igrid} onclick={() => (app.igrid = !app.igrid)}>{tt('gridView')}</button>
           <button type="button" class="btn chip" aria-pressed={app.ferries} onclick={() => (app.ferries = !app.ferries)} title={tt('ferriesHint')}>{tt('ferries')}</button>
+          <button type="button" class="btn chip" aria-pressed={app.peak} onclick={() => (app.peak = !app.peak)} title={tt('peakHint')}>{tt('peakSpeed')}</button>
+          <button type="button" class="btn chip" aria-pressed={s.closeArmed} onclick={() => { s.closeArmed = !s.closeArmed; s.pickArmed = false; }} title={tt('closeHint')}>
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.5" /><path d="M2.6 6h6.8" stroke="currentColor" stroke-width="2" /></svg>
+            {tt('closeRoads')}</button>
         </div>
+        {#if s.closeArmed}<p class="src" role="status">{tt('closeHint')}</p>{/if}
+        {#if app.closures.length}
+          {@const delay = lt.closureDelay}
+          {@const pop = muni?.m.pop ?? []}
+          {@const tBase = lt.isoTimes}
+          <div class="closures">
+            <p class="sub-eyebrow">{tt('closedCount')}: {app.closures.length}
+              <button type="button" class="linkish" onclick={() => (app.closures = [])}>{tt('reopenAll')}</button></p>
+            {#if delay && tBase}
+              {@const lost = lt.codes.reduce((s0, _, i) => s0 + (tBase[i] > 0 && LocalTheme.tripClass(tBase[i]) > 1 && LocalTheme.tripClass(tBase[i] - delay[i]) === 1 ? pop[i] ?? 0 : 0), 0)}
+              {@const worst = lt.codes.map((c, i) => ({ c, d: delay[i] })).filter((x) => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 5)}
+              <p class="help">{tt('closureLost')}: <strong class="tnum">{fmtCompact(L, lost)}{L === 'ja' ? '人' : ''}</strong></p>
+              {#if worst.length}
+                <p class="help">{tt('closureWorst')}: {#each worst as w, k (w.c)}{k ? '、' : ''}<button type="button" class="linkish" onclick={() => onpick(w.c)}>{muniLabel(w.c)}</button> <span class="tnum">{w.d >= 600 ? tt('unreachable') : `+${fmtMinutes(L, w.d)}`}</span>{/each}</p>
+              {/if}
+            {/if}
+          </div>
+        {/if}
         {#if s.pickArmed}<p class="src" role="status">{s.gridLoading ? tt('gridLoading') : tt('pickOnMapHint')}</p>
         {:else if app.igrid && s.gridLoading}<p class="src" role="status">{tt('gridLoading')}</p>{/if}
       </div>

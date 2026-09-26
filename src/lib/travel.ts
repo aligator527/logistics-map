@@ -13,6 +13,11 @@ export interface Network {
   /** ferry links [nodeA, nodeB, minutes×10, route index] */
   ferries?: number[][];
   ferryRoutes?: { a: string; b: string; hours: number }[];
+  /** per edge: rush-hour minutes × 10, road km × 10; node positions */
+  edgePeak?: number[];
+  edgeKm?: number[];
+  nodeLL?: [number, number][];
+  speedSource?: { ja: string; en: string; url: string; measuredShare: number };
   generated: string;
 }
 
@@ -29,10 +34,18 @@ export class Router {
   private next: Int32Array;
   private to: Int32Array;
   private w: Float32Array;
+  /** rush-hour minutes and road km per directed edge; the undirected edge id (closures) */
+  private wPeak: Float32Array;
+  private kmE: Float32Array;
+  private eid: Int32Array;
   /** 1 on edges that are ferry crossings */
   private ferry: Uint8Array;
   /** use the long-distance ferries (on by default) */
   ferries = true;
+  /** rush-hour truck speeds (7–9, 17–19 h) instead of daytime ones */
+  peak = false;
+  /** closed road edges (index into net.edges / 3) */
+  closed = new Set<number>();
   constructor(net: Network) {
     this.net = net;
     // adjacency as linked lists in typed arrays; ferry links after the roads
@@ -41,20 +54,29 @@ export class Router {
     this.next = new Int32Array(2 * (m + f));
     this.to = new Int32Array(2 * (m + f));
     this.w = new Float32Array(2 * (m + f));
+    this.wPeak = new Float32Array(2 * (m + f));
+    this.kmE = new Float32Array(2 * (m + f));
+    this.eid = new Int32Array(2 * (m + f)).fill(-1);
     this.ferry = new Uint8Array(2 * (m + f));
     for (let k = 0; k < m; k++) {
       const a = net.edges[3 * k], b = net.edges[3 * k + 1], t = net.edges[3 * k + 2] / 10;
-      this.link(2 * k, a, b, t);
-      this.link(2 * k + 1, b, a, t);
+      const tp = net.edgePeak ? net.edgePeak[k] / 10 : t, d = net.edgeKm ? net.edgeKm[k] / 10 : 0;
+      this.link(2 * k, a, b, t, tp, d, k);
+      this.link(2 * k + 1, b, a, t, tp, d, k);
     }
     (net.ferries ?? []).forEach(([a, b, t10], k) => {
       const e = 2 * (m + k);
-      this.link(e, a, b, t10 / 10); this.link(e + 1, b, a, t10 / 10);
+      this.link(e, a, b, t10 / 10, t10 / 10, 0, -1); this.link(e + 1, b, a, t10 / 10, t10 / 10, 0, -1);
       this.ferry[e] = 1; this.ferry[e + 1] = 1;
     });
   }
-  private link(e: number, a: number, b: number, t: number) {
-    this.to[e] = b; this.w[e] = t; this.next[e] = this.head[a]; this.head[a] = e;
+  private link(e: number, a: number, b: number, t: number, tp: number, d: number, id: number) {
+    this.to[e] = b; this.w[e] = t; this.wPeak[e] = tp; this.kmE[e] = d; this.eid[e] = id; this.next[e] = this.head[a]; this.head[a] = e;
+  }
+  /** the edges of a node pair (for closures picked on the map) */
+  edgeBetween(a: number, b: number) {
+    for (let e = this.head[a]; e !== -1; e = this.next[e]) if (this.to[e] === b && this.eid[e] >= 0) return this.eid[e];
+    return -1;
   }
 
   /** minutes on ordinary roads for a straight-line distance at a latitude/longitude */
@@ -64,8 +86,11 @@ export class Router {
   }
 
   /** node -> minutes from the nearest origin (multi-source Dijkstra with a binary heap) */
-  private spread(origins: Place[]) {
+  private spread(origins: Place[], withKm = false) {
     const dist = new Float64Array(this.net.nodes).fill(Infinity);
+    // road km along the quickest path (access legs: straight line × detour)
+    const dkm = withKm ? new Float64Array(this.net.nodes).fill(Infinity) : null;
+    const W = this.peak ? this.wPeak : this.w, closed = this.closed.size ? this.closed : null;
     const heap: [number, number][] = [];
     const push = (d: number, n: number) => {
       heap.push([d, n]);
@@ -88,18 +113,26 @@ export class Router {
     };
     for (const o of origins) for (let k = 0; k < o.acc.length; k += 2) {
       const n = o.acc[k], t = o.acc[k + 1] / 10;
-      if (t < dist[n]) { dist[n] = t; push(t, n); }
+      if (t < dist[n]) { dist[n] = t; if (dkm) dkm[n] = this.localKm(t, o.ll); push(t, n); }
     }
     while (heap.length) {
       const [d, n] = pop();
       if (d > dist[n]) continue;
       for (let e = this.head[n]; e !== -1; e = this.next[e]) {
         if (!this.ferries && this.ferry[e]) continue;
-        const nd = d + this.w[e];
-        if (nd < dist[this.to[e]]) { dist[this.to[e]] = nd; push(nd, this.to[e]); }
+        if (closed && closed.has(this.eid[e])) continue;
+        const nd = d + W[e];
+        if (nd < dist[this.to[e]]) { dist[this.to[e]] = nd; if (dkm) dkm[this.to[e]] = dkm[n] + this.kmE[e]; push(nd, this.to[e]); }
       }
     }
+    this.lastKm = dkm;
     return dist;
+  }
+  private lastKm: Float64Array | null = null;
+  /** road km of an ordinary-road leg that takes t minutes (the inverse of local()) */
+  private localKm(t: number, [lon, lat]: [number, number]) {
+    const p = this.net.params;
+    return (t / 60) * (lat > 41.4 && lon > 139.3 ? p.localHk : p.local);
   }
 
   /** node -> minutes from the nearest origin */
@@ -115,6 +148,33 @@ export class Router {
       if (d <= this.net.params.directKm) best = Math.min(best, this.local(d, o.ll));
     }
     return best;
+  }
+
+  /** road km from the nearest-in-time origin to a place (after a spread with km) */
+  private reachKm(dist: Float64Array, origins: Place[], p: Place) {
+    const dkm = this.lastKm!;
+    let best = Infinity, bestKm = Infinity;
+    for (let k = 0; k < p.acc.length; k += 2) {
+      const t = dist[p.acc[k]] + p.acc[k + 1] / 10;
+      if (t < best) { best = t; bestKm = dkm[p.acc[k]] + this.localKm(p.acc[k + 1] / 10, p.ll); }
+    }
+    for (const o of origins) {
+      if (o.comp !== p.comp) continue;
+      const d = km(o.ll, p.ll);
+      if (d <= this.net.params.directKm && this.local(d, o.ll) < best) { best = this.local(d, o.ll); bestKm = d * this.net.params.detour; }
+    }
+    return bestKm;
+  }
+  /** minutes and road km from the nearest origin to every municipality */
+  toMunisKm(origins: Place[]) {
+    const dist = this.spread(origins, true);
+    const { ll, comp, acc } = this.net.munis;
+    const t = new Float32Array(ll.length), d = new Float32Array(ll.length);
+    for (let i = 0; i < ll.length; i++) {
+      const p = { ll: ll[i], comp: comp[i], acc: acc[i] };
+      t[i] = this.reach(dist, origins, p); d[i] = isFinite(t[i]) ? this.reachKm(dist, origins, p) : Infinity;
+    }
+    return { t, km: d };
   }
 
   /** minutes from the nearest origin to every municipality (Infinity: not by road) */

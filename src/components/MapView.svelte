@@ -64,7 +64,7 @@
     /** selected municipality (muni level) */
     selMuni?: string | null;
     /** polylines in map space (typhoon tracks): d in viewBox units */
-    tracks?: { key: string; d: string; kind: 'past' | 'forecast' }[];
+    tracks?: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' }[];
     /** municipal comparison outlines */
     muniA?: string | null;
     muniB?: string | null;
@@ -1378,6 +1378,7 @@
   .ty { fill: color-mix(in oklab, var(--clay) 30%, transparent); stroke: var(--clay); stroke-width: 1.6; }
   .ty-g { fill: none; stroke: var(--clay); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
   .track { fill: none; stroke: var(--clay); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .track.closed { stroke: #d33; stroke-width: 5; stroke-dasharray: 6 4; stroke-linecap: round; }
   .track.forecast { stroke-dasharray: 5 4; }
   .nw { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
   .poi.news:hover .nw { fill: var(--ink-2); }
