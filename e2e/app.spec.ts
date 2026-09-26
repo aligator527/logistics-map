@@ -141,6 +141,8 @@ test('background map layer and fill strength', async ({ page }) => {
   const errors = await open(page, 'bm=pale&r=13');
   await expect(page.locator('canvas.tiles').first()).toBeAttached();
   await expect(page.locator('#basemap')).toHaveValue('pale');
+  // phones fold the controls away behind 表示設定
+  if (await page.locator('.ctl-toggle').isVisible()) await page.locator('.ctl-toggle').click();
   await expect(page.locator('.base-row input[type=range]')).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -149,6 +151,8 @@ test('keyboard: prefectures, then municipalities inside one', async ({ page }, i
   test.skip(info.project.name !== 'desktop', 'keyboard');
   await open(page, 't=local&r=11');
   const map = page.locator('svg[role="application"]');
+  // the municipal shapes arrive after the first paint
+  await expect(page.locator('g.areas.muni path').first()).toBeAttached({ timeout: 20_000 });
   await map.focus();
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('Enter');
@@ -166,5 +170,32 @@ test('site memo from a point on the map (GSI offline)', async ({ page }, info) =
   await panel.getByRole('button', { name: '地点カルテを作成' }).click();
   await expect(page.locator('.dossier-root')).toContainText('地点カルテ');
   await page.keyboard.press('Escape');
+  expect(errors).toEqual([]);
+});
+
+test('phone: folded controls and the selection bar', async ({ page }, info) => {
+  test.skip(info.project.name !== 'phone', 'phone layout');
+  await open(page, 't=local&mu=23206');
+  await expect(page.locator('#basemap')).toBeHidden();
+  await page.locator('.ctl-toggle').click();
+  await expect(page.locator('#basemap')).toBeVisible();
+  const bar = page.locator('.minibar');
+  await expect(bar).toContainText('春日井市');
+  await bar.getByRole('button').click();
+  await expect(bar).toHaveCount(0);
+});
+
+test('guide walks through a scenario', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  const errors = await open(page);
+  await page.getByRole('button', { name: 'ガイド' }).click();
+  await page.locator('.tour-dlg').getByRole('button', { name: /2024年問題/ }).click();
+  const tour = page.locator('.tour');
+  await expect(tour).toContainText('1 / 4');
+  await expect(page).toHaveURL(/lk=shift/);
+  await tour.getByRole('button', { name: /次へ/ }).click();
+  await expect(page).toHaveURL(/io=net%3Adpl|io=net:dpl/);
+  await tour.getByRole('button', { name: '閉じる' }).click();
+  await expect(tour).toHaveCount(0);
   expect(errors).toEqual([]);
 });

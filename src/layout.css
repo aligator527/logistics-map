@@ -122,6 +122,9 @@
     .subjects .seg { display: flex; flex-wrap: wrap; width: 100%; }
     .subjects .seg button { flex: 1 1 30%; min-width: 0; padding: 0 6px; font-size: 13.5px; }
     .controls { position: static; gap: 10px 16px; }
+    .controls .ctl-toggle { display: flex; width: 100%; gap: 8px; align-items: center; justify-content: flex-start; }
+    .controls.collapsed { padding-block: 8px; }
+    .controls.collapsed > :not(.ctl-toggle) { display: none; }
     .controls .seg { max-width: 100%; flex-wrap: wrap; }
     .ctl.time { flex-basis: 100%; }
     .foot dl { grid-template-columns: 1fr; }
@@ -150,3 +153,16 @@
 .base-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .base-row .fo { display: inline-flex; align-items: center; gap: 6px; }
 .base-row input[type='range'] { width: 110px; accent-color: var(--blue); }
+
+.ctl-toggle, .minibar { display: none; }
+.ctl-sum { color: var(--muted); font-size: 12.5px; flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.minibar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; align-items: center; gap: 10px;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom)); background: var(--surface);
+  border-top: 1px solid var(--line-strong); box-shadow: 0 -4px 12px rgb(0 0 0 / 0.08); font-size: 14px;
+}
+.minibar .mb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 720px) {
+  .minibar { display: flex; }
+  .foot { padding-bottom: 80px; }
+}

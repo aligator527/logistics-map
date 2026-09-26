@@ -30,6 +30,7 @@
   import { unproject } from './lib/project';
   import PointPanel from './panels/PointPanel.svelte';
   import ExportMenu from './components/ExportMenu.svelte';
+  import Tour from './components/Tour.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -339,6 +340,22 @@
   let newsPins = $state<string[]>([]);
   let newsFocus = $state<string | null>(null);
   let mapW = $state(1000);
+  // phones: the controls fold away, and a bar at the bottom keeps the selection in sight while the details are off screen
+  let ctlOpen = $state(false);
+  let sideEl = $state<HTMLElement | null>(null);
+  let sideSeen = $state(false);
+  $effect(() => {
+    if (!sideEl) return;
+    const io = new IntersectionObserver(([e]) => (sideSeen = e.isIntersecting), { rootMargin: '0px 0px -40% 0px' });
+    io.observe(sideEl);
+    return () => io.disconnect();
+  });
+  const mini = $derived.by(() => {
+    if (!view || app.compare) return null;
+    if (app.muni && mt && mt.indexOf(app.muni) >= 0) return { name: muniLabel(app.muni), value: view.fmt(mt.muniValue(app.muni)) };
+    if (app.pref && !mapMuni) return { name: pname(app.pref), value: view.fmt(view.value(app.pref)) };
+    return null;
+  });
   /** wide map: callout cards over the sea; narrow: a card strip under the map */
   const newsCards = $derived(mapW >= 640);
   /** group key of a news item: its first municipality, else prefecture, else national */
@@ -734,6 +751,7 @@
     <Segmented label={tt('theme')} value={app.theme}
                options={[{ value: 'light', label: tt('themeLight') }, { value: 'dark', label: tt('themeDark') }, { value: 'system', label: tt('themeSystem') }] as { value: Theme; label: string }[]}
                onchange={(v) => app.setTheme(v)} />
+    <Tour />
   </div>
 </header>
 
@@ -753,7 +771,10 @@
     <Segmented label={tt('subject')} value={app.layer} options={subjects} onchange={(v) => { app.layer = v; highlight = null; }} />
   </nav>
 
-  <section class="controls" aria-label={tt('metric')}>
+  <section class="controls" class:collapsed={!ctlOpen} aria-label={tt('metric')}>
+    <button type="button" class="btn ctl-toggle" aria-expanded={ctlOpen} onclick={() => (ctlOpen = !ctlOpen)}>
+      <span>{tt('viewSettings')}</span><span class="ctl-sum">{view.legend.title}</span><span aria-hidden="true">{ctlOpen ? '▴' : '▾'}</span>
+    </button>
     {#if app.layer === 'warehouse'}
       <div class="ctl">
         <span class="lab">{tt('metric')}</span>
@@ -1016,7 +1037,7 @@
       </div>
     </div>
 
-    <aside class="side" aria-live="polite">
+    <aside class="side" aria-live="polite" bind:this={sideEl}>
       {#if app.compare}
         <section class="panel">
           <p class="eyebrow">{tt('compare')} · {view.periodLabel}</p>
@@ -1163,6 +1184,12 @@
         {/if}
       {/if}
     </aside>
+    {#if mini && !sideSeen}
+      <div class="minibar" role="status">
+        <span class="mb-name">{mini.name}</span><strong class="tnum">{mini.value}</strong>
+        <button type="button" class="btn" onclick={() => sideEl?.scrollIntoView({ behavior: 'smooth' })}>{tt('detailsShort')} ↓</button>
+      </div>
+    {/if}
   </main>
 
   <SourcesFooter />
