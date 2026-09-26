@@ -11,6 +11,7 @@
 
 <script lang="ts">
   import { fmtDate } from '../lib/data';
+  import { sizedImage } from '../lib/newsmap';
   import { t, type Lang } from '../lib/i18n';
 
   let { news, lang, pref, pname, onpref, srcName, topic, ontopic, onhover, onmap }: {
@@ -62,7 +63,7 @@
         <li class:local={pref && it.prefs.includes(pref)} class:has-img={it.img && !broken[it.img]}
             onpointerenter={() => onhover?.(it)} onpointerleave={() => onhover?.(null)}>
           {#if it.img && !broken[it.img]}
-            <img class="thumb" src={it.img} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+            <img class="thumb" src={sizedImage(it.img, 56)} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                  onerror={() => (broken = { ...broken, [it.img!]: true })} />
           {/if}
           <div class="txt">

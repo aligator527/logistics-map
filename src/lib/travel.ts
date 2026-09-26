@@ -208,20 +208,21 @@ export class Reach {
   static readonly K = 6;
   async prepare(g: Grid) {
     if (this.cellAcc) return;
-    const K = Reach.K, p = this.router.net.params;
-    const node = new Int32Array(g.n * K).fill(-1), min = new Float32Array(g.n * K).fill(Infinity);
-    for (let start = 0; start < g.n; start += 15000) {
-      for (let i = start; i < Math.min(g.n, start + 15000); i++) {
-        const lon = g.lon[i], lat = g.lat[i], comp = g.comp[i];
-        const speed = lat > 41.4 && lon > 139.3 ? p.localHk : p.local;
-        const near = this.idx.near(lon, lat, p.accessKm).filter((e) => e.comp === comp)
-          .map((e) => ({ e, d: kmFast(lon, lat, e.ll[0], e.ll[1]) })).filter((x) => x.d <= p.accessKm)
-          .sort((a, b) => a.d - b.d).slice(0, K);
-        near.forEach((x, k) => { node[i * K + k] = x.e.node; min[i * K + k] = (x.d * p.detour / speed) * 60; });
-      }
-      await new Promise((r) => setTimeout(r, 0));
+    const p = this.router.net.params;
+    const args = { lat: g.lat, lon: g.lon, comp: g.comp, entries: this.entries, accessKm: p.accessKm, detour: p.detour, local: p.local, localHk: p.localHk };
+    // in a worker when possible (a few seconds of work on a phone), else here in slices
+    if (typeof Worker !== 'undefined') {
+      try {
+        const w = new Worker(new URL('./grid.worker.ts', import.meta.url), { type: 'module' });
+        this.cellAcc = await new Promise((res, rej) => {
+          w.onmessage = (e) => { res(e.data); w.terminate(); };
+          w.onerror = (e) => { rej(e); w.terminate(); };
+          w.postMessage(args);
+        });
+        return;
+      } catch { /* fall through */ }
     }
-    this.cellAcc = { node, min };
+    this.cellAcc = await cellAccess(args, () => new Promise((r) => setTimeout(r, 0)));
   }
   get ready() { return !!this.cellAcc; }
   /** minutes from the nearest origin to every grid cell (Infinity: not by road); needs prepare() */
@@ -253,4 +254,25 @@ export class Reach {
     }
     return out;
   }
+}
+
+export interface CellAccessArgs { lat: Float32Array; lon: Float32Array; comp: Uint16Array; entries: Entry[]; accessKm: number; detour: number; local: number; localHk: number }
+/** per grid cell, the K nearest expressway entries on the same land and the minutes to reach them;
+ *  `pause` lets a caller on the main thread yield between slices */
+export async function cellAccess(a: CellAccessArgs, pause?: () => Promise<void>) {
+  const K = Reach.K, n = a.lat.length;
+  const idx = new EntryIndex(a.entries);
+  const node = new Int32Array(n * K).fill(-1), min = new Float32Array(n * K).fill(Infinity);
+  for (let start = 0; start < n; start += 15000) {
+    for (let i = start; i < Math.min(n, start + 15000); i++) {
+      const lon = a.lon[i], lat = a.lat[i], comp = a.comp[i];
+      const speed = lat > 41.4 && lon > 139.3 ? a.localHk : a.local;
+      const near = idx.near(lon, lat, a.accessKm).filter((e) => e.comp === comp)
+        .map((e) => ({ e, d: kmFast(lon, lat, e.ll[0], e.ll[1]) })).filter((x) => x.d <= a.accessKm)
+        .sort((x, y) => x.d - y.d).slice(0, K);
+      near.forEach((x, k) => { node[i * K + k] = x.e.node; min[i * K + k] = (x.d * a.detour / speed) * 60; });
+    }
+    if (pause) await pause();
+  }
+  return { node, min };
 }

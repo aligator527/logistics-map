@@ -136,7 +136,17 @@ export async function loadMunis(geo: GeoData): Promise<GeoData> {
   const [topo, en] = await Promise.all([json<Topo>('japan.topo.json'), json<Record<string, string>>('muni-en.json', {})]);
   const { path } = projector(topo.meta);
   const muniObj = topo.objects.muni as GeometryCollection;
-  const munis = shapes(topo, muniObj, path, (c) => en[c] ?? '');
+  // 1,898 paths: built in slices so the page stays responsive while they load
+  const feats = (feature(topo, muniObj) as unknown as GeoJSON.FeatureCollection).features;
+  const munis: Shape[] = [];
+  for (let i = 0; i < feats.length; i += 150) {
+    for (const f of feats.slice(i, i + 150)) {
+      const code = String(f.id);
+      munis.push({ code, name: (f.properties as { n: string }).n, nameEn: en[code] ?? '', d: path(f) ?? '',
+                   bbox: path.bounds(f) as Shape['bbox'], centroid: path.centroid(f) as [number, number] });
+    }
+    await new Promise((r) => setTimeout(r, 0));
+  }
 
   // Tokyo's Izu and Ogasawara islands lie hundreds of km south of the city (and Ogasawara sits
   // in an inset), so framing all of Tokyo would make the wards tiny.

@@ -116,3 +116,14 @@ export function placeCards(
   }
   return out;
 }
+
+/** PR TIMES serves the preview at any size: ask for what is shown (2× for sharp screens) */
+export function sizedImage(url: string | null | undefined, cssWidth: number): string | null {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    if (!/prcdn|prtimes/.test(u.hostname)) return url;
+    u.searchParams.set('width', String(cssWidth * 2)); u.searchParams.set('height', String(Math.round(cssWidth * 2))); u.searchParams.set('fit', 'bounds');
+    return u.toString();
+  } catch { return url; }
+}

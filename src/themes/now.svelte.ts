@@ -10,11 +10,8 @@ import { pad2, rankMap, type Ctx, type ThemeView } from './types';
 
 export interface Diesel { dates: string[]; japan: (number | null)[]; prefs: (number | null)[][]; source: { ja: string; en: string; url: string } }
 
-/** JMA's own colours for the warning levels (注意報 yellow, 警報 red, 危険警報 purple, 特別警報 black) */
-export const WARN_COLORS = {
-  light: ['var(--land)', '#f2e700', '#ff2800', '#aa00aa', '#0c000c'],
-  dark: ['var(--land)', '#f2e700', '#ff2800', '#c040c0', '#e8e8e8'],
-};
+export { WARN_COLORS } from '../lib/warncolors';
+import { WARN_COLORS } from '../lib/warncolors';
 
 export class NowTheme implements ThemeView {
   // assigned in the constructor; declared first so the lazy $derived fields below can use them

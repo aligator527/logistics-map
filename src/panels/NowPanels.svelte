@@ -3,7 +3,7 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { live, WARN, INT_COLOR } from '../lib/live.svelte';
-  import { WARN_COLORS } from '../themes/now.svelte';
+  import { WARN_COLORS } from '../lib/warncolors';
   import { project as projectLL } from '../lib/project';
   import { pad2 } from '../themes/types';
   import BarList from '../components/BarList.svelte';

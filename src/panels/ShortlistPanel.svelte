@@ -6,8 +6,8 @@
   import { shortlist, shared, shareLink, resolveShared, type ShortItem } from '../lib/shortlist.svelte';
   import { downloadCsv } from '../lib/csv';
   import { fmtNum, fmtCompact } from '../lib/scale';
-  import { WARN_COLORS } from '../themes/now.svelte';
-  import Dossier, { type DossierTable } from '../components/Dossier.svelte';
+  import { WARN_COLORS } from '../lib/warncolors';
+  import type { DossierTable } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, type PointInfo } from '../lib/pointinfo';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -211,8 +211,10 @@
   {/if}
 </section>
 {#if compareOpen && compareTable}
+  {#await import('../components/Dossier.svelte') then { default: Dossier }}
   <Dossier title={tt('compareShortTitle')} subtitle={tt('compareShortSub')} sections={[]} table={compareTable}
            sources={compareSources} lang={L} onclose={() => (compareOpen = false)} />
+  {/await}
 {/if}
 
 <style>

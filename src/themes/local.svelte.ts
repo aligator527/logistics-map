@@ -6,6 +6,7 @@ import type { Label } from '../lib/data';
 import { SEQ, fmtCompact, fmtMinutes, fmtNum, makeClasses, type Classes } from '../lib/scale';
 import { hubGroups, Reach, type Grid, type HubItem, type Place, type Router } from '../lib/travel';
 import { store } from '../lib/store.svelte';
+import { tripClass } from '../lib/trips';
 import { shortlist } from '../lib/shortlist.svelte';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { CompareRow } from '../components/ComparePanel.svelte';
@@ -99,17 +100,7 @@ export class LocalTheme implements ThemeView {
     if (!t) return null;
     return lims.map((lim) => ({ lim, pop: t.reduce((s, x, i) => s + (x <= lim ? pop[i] ?? 0 : 0), 0) }));
   });
-  /** 2024 driving-time rules (改善基準告示, from April 2024): a day is at most 13 h on duty and
-   *  9 h at the wheel, with 30 min rest per 4 h of driving. Loading and unloading ≈ 1 h each end.
-   *  1 = there and back in one shift (日帰り往復), 2 = one way in a shift, 3 = two days or a relay. */
-  static tripClass(min: number) {
-    if (!isFinite(min)) return NaN;
-    const rest = (drive: number) => Math.floor(drive / 240) * 30;
-    const round = 2 * min;
-    if (round <= 540 && round + rest(round) + 120 <= 780) return 1;
-    if (min <= 540 && min + rest(min) + 60 <= 780) return 2;
-    return 3;
-  }
+  static tripClass = tripClass;
   readonly tripPop = $derived.by(() => {
     const out = [0, 0, 0];
     const g = this.gridTimes, grid = this.grid;

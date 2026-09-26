@@ -6,7 +6,7 @@
 import { app } from '../lib/state.svelte';
 import type { Jobs, Label } from '../lib/data';
 import { fmtCompact, fmtMinutes, fmtNum, makeClasses } from '../lib/scale';
-import { score, sensitivity, type Criterion, type Preset } from '../lib/score';
+import { score, type Criterion, type Preset } from '../lib/score';
 import type { Tip } from '../components/Tooltip.svelte';
 import type { ExtraCriteria } from './score.svelte';
 import type { Ctx, ThemeView } from './types';
@@ -18,14 +18,8 @@ export interface MuniData {
   sources: Record<string, Label & { url: string }>;
 }
 
-export const MUNI_PRESETS: Preset[] = [
-  { key: 'balanced', ja: 'バランス', en: 'Balanced', weights: {} },
-  { key: 'consumer', ja: '大消費地に近い', en: 'Near consumers', weights: { pop30: 4, pop60: 3, ic: 2, land: 1, zone: 1, cluster: 1, pool: 1, drivers: 0, handlers: 0 } },
-  { key: 'hub', ja: '広域配送ハブ', en: 'Wide-area hub', weights: { ic: 4, pop60: 3, cluster: 2, zone: 2, land: 2, port: 2, pop30: 1, pool: 1 } },
-  { key: 'cost', ja: 'コスト重視', en: 'Low cost', weights: { land: 5, zone: 3, ic: 2, pop30: 1, pop60: 1, cluster: 0, pool: 1 } },
-  { key: 'labour', ja: '人手を確保しやすい', en: 'Easier hiring', weights: { pool: 5, drivers: 2, handlers: 2, pop30: 1, ic: 1, land: 1, zone: 1, cluster: 0 } },
-  { key: 'safe', ja: '災害リスクを避ける', en: 'Low hazard', weights: {} },
-];
+export { MUNI_PRESETS } from './muni-presets';
+import { MUNI_PRESETS } from './muni-presets';
 
 export class MuniScoreTheme implements ThemeView {
   // assigned in the constructor; declared first so the lazy $derived fields below can use them
@@ -120,8 +114,6 @@ export class MuniScoreTheme implements ThemeView {
     app.preset = '';
   }
   readonly result = $derived.by(() => score(this.criteria, this.weights));
-  /** rank stability under ±50% changes of every weight (computed when the panel shows it) */
-  readonly sens = $derived.by(() => sensitivity(this.result.parts, this.weights));
   indexOf = (code: string) => this.d.codes.indexOf(code);
 
   // ------------------------------------------------------------ ThemeView

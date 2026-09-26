@@ -20,11 +20,11 @@
   import { FlowsTheme, FLOW_METRICS } from './themes/flows.svelte';
   import { LabourTheme } from './themes/labour.svelte';
   import { PRESETS, ScoreTheme, type ExtraCriteria, type PrefStats } from './themes/score.svelte';
-  import { MUNI_PRESETS, MuniScoreTheme } from './themes/muniscore.svelte';
-  import { LocalTheme } from './themes/local.svelte';
-  import { NowTheme, type Diesel } from './themes/now.svelte';
+  import { MUNI_PRESETS } from './themes/muni-presets';
+  import { tripClass } from './lib/trips';
+  import type { Diesel } from './themes/now.svelte';
   import { live, WARN, INT_COLOR } from './lib/live.svelte';
-  import { Router, loadGrid, type Network } from './lib/travel';
+  import type { Network } from './lib/travel';
   import { TILE_LAYERS } from './lib/tiles';
   import { pointInfo, groundRisk, type PointInfo } from './lib/pointinfo';
   import { unproject } from './lib/project';
@@ -50,7 +50,7 @@
   import { relatedOf, timelineOf, type NewsLite, type Related } from './lib/related';
   import SiteCard, { type Catchment } from './components/SiteCard.svelte';
   import PlaceSearch, { type Place } from './components/PlaceSearch.svelte';
-  import Dossier, { type DossierSection } from './components/Dossier.svelte';
+  import type { DossierSection } from './components/Dossier.svelte';
   import Segmented from './components/Segmented.svelte';
   import type { Tip } from './components/Tooltip.svelte';
 
@@ -114,13 +114,27 @@
       s.sc = new ScoreTheme(ww, flows, j, sw, ps, extra, ctx);
       s.w = ww; s.geo = g; s.dpl = d; s.census = ci; s.ssw = sw; s.jobs = j;
       app.fromHash(location.hash, lists!);
-      // municipalities (boundaries, names, municipal score) follow the first paint
-      loadMunis(g).then((full) => (s.geo = full)).catch((e) => console.warn('munis', e));
+      // The rest follows the first paint: at once when the opening view needs municipalities,
+      // else when the browser is idle (parsing 1,898 boundaries is the heaviest work on a phone).
+      const needMunis = app.layer === 'local' || app.layer === 'now' || (app.layer === 'score' && app.slevel === 'muni') || !!app.pref || !!app.muni;
+      const later = (fn: () => void) => (needMunis ? setTimeout(fn, 0)
+        : 'requestIdleCallback' in window ? requestIdleCallback(fn, { timeout: 2500 }) : setTimeout(fn, 400));
       // roads are secondary: the map works without them
       loadRoads().then((r) => (s.roads = r)).catch((e) => console.warn('roads', e));
+      later(() => loadMunis(g).then((full) => (s.geo = full)).catch((e) => console.warn('munis', e)));
+      later(() => void loadSecondary(j, extra));
+    } catch (e) {
+      error = String(e);
+    }
+  }
+  async function loadSecondary(j: Jobs, extra: ExtraCriteria[]) {
+    try {
       s.diesel = await fetch(`${import.meta.env.BASE_URL}data/diesel.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-      fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then((d) => {
+      // the municipal themes are split out of the first download
+      const themes = Promise.all([import('./themes/muniscore.svelte'), import('./themes/local.svelte'), import('./themes/now.svelte')]);
+      fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then(async (d) => {
         if (!d) return;
+        const [{ MuniScoreTheme }, { LocalTheme }, { NowTheme }] = await themes;
         s.muni = d;
         sc!.landRaw = d.prefLand.map((v: number | null) => v ?? NaN);
         const t = new MuniScoreTheme(d, j, extra, ctx);
@@ -171,7 +185,7 @@
     if (!lt || !hubs || lt.router || netLoading) return;
     if (!(app.layer === 'local' || muniLevel || app.site >= 0 || shortlist.items.length)) return;
     netLoading = true;
-    fetch(`${import.meta.env.BASE_URL}geo/network.json`).then((r) => (r.ok ? r.json() : null)).then((n: Network | null) => {
+    Promise.all([fetch(`${import.meta.env.BASE_URL}geo/network.json`).then((r) => (r.ok ? r.json() : null)), import('./lib/travel')]).then(([n, { Router }]: [Network | null, typeof import('./lib/travel')]) => {
       if (n && lt && hubs) lt.setTravel(new Router(n), hubs.items);
     }).catch((e) => console.warn('network', e)).finally(() => (netLoading = false));
   });
@@ -181,7 +195,7 @@
     const l = lt;
     if (!l?.reach || l.grid || s.gridLoading || !(app.igrid || s.pickArmed || app.iso.startsWith('pt:'))) return;
     s.gridLoading = true;
-    loadGrid(`${import.meta.env.BASE_URL}geo/grid.bin.gz`).then(async (g) => { await l.reach!.prepare(g); l.grid = g; })
+    import('./lib/travel').then(({ loadGrid }) => loadGrid(`${import.meta.env.BASE_URL}geo/grid.bin.gz`)).then(async (g) => { await l.reach!.prepare(g); l.grid = g; })
       .catch((e) => console.warn('grid', e)).finally(() => (s.gridLoading = false));
   });
   /** grid cell centres in map units */
@@ -199,7 +213,7 @@
     const color = (i: number) => {
       const v = g[i];
       if (!isFinite(v)) return null;
-      if (trip) return colors[LocalTheme.tripClass(v) - 1];
+      if (trip) return colors[tripClass(v) - 1];
       let k = 0;
       while (k < cls.breaks.length && v >= cls.breaks[k]) k++;
       return cls.colors[k];
@@ -1141,6 +1155,8 @@
 
   <SourcesFooter />
   {#if dossierOpen && dossier}
-    <Dossier title={dossier.title} subtitle={tt('dossierSub')} sections={dossier.sections} sources={dossier.sources} lang={L} onclose={() => (dossierOpen = false)} />
+    {#await import('./components/Dossier.svelte') then { default: Dossier }}
+      <Dossier title={dossier.title} subtitle={tt('dossierSub')} sections={dossier.sections} sources={dossier.sources} lang={L} onclose={() => (dossierOpen = false)} />
+    {/await}
   {/if}
 {/if}

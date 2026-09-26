@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { NewsGroup } from '../lib/newsmap';
+  import { sizedImage, type NewsGroup } from '../lib/newsmap';
   import { stageOf, type NewsLite, type Related } from '../lib/related';
   import { fmtDate } from '../lib/data';
   import { t, type Key, type Lang } from '../lib/i18n';
@@ -55,7 +55,7 @@
          onpointerenter={() => onhover?.(true)} onpointerleave={() => onhover?.(false)} {onclick}>
   <div class="media" aria-hidden="true">
     {#if it.img && !broken[it.img]}
-      <img src={it.img} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+      <img src={sizedImage(it.img, 76)} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
            onerror={() => (broken = { ...broken, [it.img!]: true })} />
     {:else}
       <span class="ph">{it.src.replace(/（.*$|\s*\(.*$/, '')}</span>
