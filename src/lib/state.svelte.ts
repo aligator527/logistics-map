@@ -1,0 +1,193 @@
+// Application state (Svelte 5 runes). Everything a viewer can change lives here and is
+// mirrored into the URL hash, so any view can be bookmarked or shared.
+
+import { detectLang, type Lang } from './i18n';
+import { METRICS, type Metric, type Mode } from './data';
+
+export type Theme = 'system' | 'light' | 'dark';
+/** subject shown on the map */
+export type Layer = 'warehouse' | 'flows' | 'labour' | 'score';
+export type FlowBasis = 'annual' | 'day3';
+export type FlowMetric = 'out' | 'in' | 'net' | 'intra';
+export type LabourMetric = 'ssw' | 'jobs';
+/** lists the hash is validated against */
+export interface HashLists { quarters: string[]; flowYears: number[]; flowCuts: string[]; sswPeriods: string[]; sswFields: string[]; jobPeriods: string[]; criteria: string[] }
+
+function readStored<T extends string>(key: string, allowed: readonly T[]): T | null {
+  try {
+    const v = localStorage.getItem(key) as T | null;
+    return v && allowed.includes(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+function store(key: string, v: string) {
+  try { localStorage.setItem(key, v); } catch { /* private mode etc. */ }
+}
+
+class AppState {
+  lang = $state<Lang>(readStored('lang', ['ja', 'en'] as const) ?? detectLang());
+  theme = $state<Theme>(readStored('theme', ['system', 'light', 'dark'] as const) ?? 'system');
+  systemDark = $state(false);
+
+  layer = $state<Layer>('warehouse');
+
+  // ---- warehouse
+  metric = $state<Metric>('area');
+  mode = $state<Mode>('value');
+  /** quarter index into warehouse.quarters */
+  q = $state(0);
+
+  /** focused prefecture 1..47 — 0 = all of Japan */
+  pref = $state(0);
+  /** compare mode: prefectures A and B (0 = not chosen yet) */
+  compare = $state(false);
+  a = $state(0);
+  b = $state(0);
+
+  // ---- freight flows (物流センサス)
+  flowYear = $state(2021);
+  basis = $state<FlowBasis>('annual');
+  /** 'all', a mode (3-day survey only) or a commodity group */
+  cut = $state('all');
+  fmetric = $state<FlowMetric>('out');
+  /** national arcs: include flows between neighbouring prefectures */
+  near = $state(false);
+
+  // ---- labour
+  lmetric = $state<LabourMetric>('ssw');
+  /** index into ssw.periods */
+  sp = $state(0);
+  field = $state('total');
+  /** index into jobs periods */
+  jp = $state(0);
+  /** occupation of the jobs ratio: drivers or cargo handling */
+  occ = $state<'driver' | 'handling'>('driver');
+
+  // ---- site score: weight 0..5 per criterion key (missing = default)
+  weights = $state<Record<string, number>>({});
+  /** preset the weights came from ('' = edited by hand) */
+  preset = $state('balanced');
+
+  showDpl = $state(true);
+  showRoads = $state(true);
+  /** selected DPL site (index into dpl.sites) — -1 = none */
+  site = $state(-1);
+
+  view = $state<'map' | 'table'>('map');
+
+  get dark() {
+    return this.theme === 'dark' || (this.theme === 'system' && this.systemDark);
+  }
+
+  setLang(l: Lang) { this.lang = l; store('lang', l); }
+  setTheme(t: Theme) {
+    this.theme = t;
+    store('theme', t);
+    if (t === 'system') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = t;
+  }
+
+  /** Click on a prefecture: focus it, or fill the A / B slots in compare mode. */
+  pick(code: number) {
+    if (!this.compare) { this.pref = code; return; }
+    if (code === this.a) { this.a = this.b; this.b = 0; return; }
+    if (code === this.b) { this.b = 0; return; }
+    if (!this.a) this.a = code;
+    else if (!this.b) this.b = code;
+    else this.b = code; // both taken: replace B
+  }
+  startCompare() {
+    this.compare = true;
+    if (this.pref && !this.a) this.a = this.pref;
+  }
+  stopCompare() {
+    this.compare = false;
+    if (this.a && !this.pref) this.pref = this.a;
+  }
+
+  // ------------------------------------------------------------ URL <-> state
+  toHash(lists: HashLists): string {
+    const p = new URLSearchParams();
+    if (this.layer !== 'warehouse') p.set('t', this.layer);
+    if (this.layer === 'flows') {
+      if (this.flowYear !== lists.flowYears.at(-1)) p.set('fy', String(this.flowYear));
+      if (this.basis !== 'annual') p.set('fb', this.basis);
+      if (this.cut !== 'all') p.set('fc', this.cut);
+      if (this.fmetric !== 'out') p.set('fm', this.fmetric);
+      if (this.near) p.set('fn', '1');
+    }
+    if (this.layer === 'labour') {
+      if (this.lmetric !== 'ssw') p.set('lm', this.lmetric);
+      if (this.lmetric === 'ssw' && this.sp !== lists.sswPeriods.length - 1) p.set('sp', lists.sswPeriods[this.sp]);
+      if (this.lmetric === 'ssw' && this.field !== 'total') p.set('sf', this.field);
+      if (this.lmetric === 'jobs' && lists.jobPeriods.length && this.jp !== lists.jobPeriods.length - 1) p.set('jp', lists.jobPeriods[this.jp]);
+      if (this.lmetric === 'jobs' && this.occ !== 'driver') p.set('jo', this.occ);
+    }
+    if (this.layer === 'score') {
+      if (this.preset && this.preset !== 'balanced') p.set('pr', this.preset);
+      if (!this.preset) p.set('sw', lists.criteria.map((k) => `${k}-${this.weights[k] ?? 1}`).join('.'));
+    }
+    const quarters = lists.quarters;
+    if (this.layer === 'warehouse' && this.q !== quarters.length - 1) p.set('q', quarters[this.q]);
+    if (this.layer === 'warehouse' && this.metric !== 'area') p.set('m', this.metric);
+    if (this.layer === 'warehouse' && this.mode !== 'value') p.set('y', '1');
+    if (this.pref) p.set('r', String(this.pref));
+    if (this.compare) p.set('c', `${this.a}-${this.b}`);
+    if (!this.showDpl) p.set('dpl', '0');
+    if (!this.showRoads) p.set('rd', '0');
+    if (this.view !== 'map') p.set('v', this.view);
+    return p.toString();
+  }
+
+  fromHash(hash: string, lists: HashLists) {
+    const p = new URLSearchParams(hash.replace(/^#/, ''));
+    const quarters = lists.quarters;
+    const tl = p.get('t');
+    this.layer = tl === 'flows' || tl === 'labour' || tl === 'score' ? tl : 'warehouse';
+    // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"
+    const sw = p.get('sw');
+    this.weights = {};
+    if (sw) {
+      for (const pair of sw.split('.')) {
+        const [k, v] = pair.split('-');
+        const n = Number(v);
+        if (lists.criteria.includes(k) && Number.isInteger(n) && n >= 0 && n <= 5) this.weights[k] = n;
+      }
+      this.preset = '';
+    } else this.preset = p.get('pr') ?? 'balanced';
+    const fy = Number(p.get('fy'));
+    this.flowYear = lists.flowYears.includes(fy) ? fy : lists.flowYears.at(-1)!;
+    this.basis = p.get('fb') === 'day3' ? 'day3' : 'annual';
+    const fc = p.get('fc') ?? 'all';
+    this.cut = lists.flowCuts.includes(fc) ? fc : 'all';
+    const fm = p.get('fm');
+    this.fmetric = fm === 'in' || fm === 'net' || fm === 'intra' ? fm : 'out';
+    this.near = p.get('fn') === '1';
+    this.lmetric = p.get('lm') === 'jobs' ? 'jobs' : 'ssw';
+    const sp = lists.sswPeriods.indexOf(p.get('sp') ?? '');
+    this.sp = sp >= 0 ? sp : lists.sswPeriods.length - 1;
+    const sf = p.get('sf') ?? 'total';
+    this.field = lists.sswFields.includes(sf) ? sf : 'total';
+    const jp = lists.jobPeriods.indexOf(p.get('jp') ?? '');
+    this.jp = jp >= 0 ? jp : Math.max(0, lists.jobPeriods.length - 1);
+    this.occ = p.get('jo') === 'handling' ? 'handling' : 'driver';
+    const qi = quarters.indexOf(p.get('q') ?? '');
+    this.q = qi >= 0 ? qi : quarters.length - 1;
+    const m = p.get('m') as Metric;
+    this.metric = METRICS.includes(m) ? m : 'area';
+    this.mode = p.get('y') === '1' ? 'yoy' : 'value';
+    const code = (v: string | null | undefined) => Math.min(47, Math.max(0, Number(v) || 0));
+    this.pref = code(p.get('r'));
+    const c = p.get('c');
+    this.compare = c !== null;
+    const [a, b] = (c ?? '').split('-');
+    this.a = code(a);
+    this.b = code(b) === this.a ? 0 : code(b);
+    this.showDpl = p.get('dpl') !== '0';
+    this.showRoads = p.get('rd') !== '0';
+    this.view = p.get('v') === 'table' ? 'table' : 'map';
+  }
+}
+
+export const app = new AppState();

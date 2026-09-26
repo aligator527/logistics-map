@@ -1,0 +1,690 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import { loadCensusIndex, loadDpl, loadJobs, loadRoads, loadSsw, loadWarehouse, METRICS, fmtDate, fmtValue, fmtYm, fmtYoy,
+           isBuilt, valueOf, yoyOf, type CensusIndex, type Dpl, type Jobs, type Roads, type Ssw, type Warehouse } from './lib/data';
+  import { loadGeo, roadPaths, type GeoData, type Shape } from './lib/geo';
+  import { app, type FlowBasis, type FlowMetric, type HashLists, type Layer, type LabourMetric, type Theme } from './lib/state.svelte';
+  import { prefName, t, type Key } from './lib/i18n';
+  import { fmtPct, fmtSqm } from './lib/scale';
+  import { WarehouseTheme } from './themes/warehouse.svelte';
+  import { FlowsTheme, FLOW_METRICS } from './themes/flows.svelte';
+  import { LabourTheme } from './themes/labour.svelte';
+  import { PRESETS, ScoreTheme, type ExtraCriteria, type PrefStats } from './themes/score.svelte';
+  import { pad2, type Ctx, type ThemeView } from './themes/types';
+  import MapView, { type Marker } from './components/MapView.svelte';
+  import Legend from './components/Legend.svelte';
+  import TimeControl from './components/TimeControl.svelte';
+  import Trend from './components/Trend.svelte';
+  import RegionTable from './components/RegionTable.svelte';
+  import SiteList from './components/SiteList.svelte';
+  import ComparePanel from './components/ComparePanel.svelte';
+  import BarList from './components/BarList.svelte';
+  import WeightPanel from './components/WeightPanel.svelte';
+  import ScoreBreakdown from './components/ScoreBreakdown.svelte';
+  import NewsFeed, { type News } from './components/NewsFeed.svelte';
+  import Segmented from './components/Segmented.svelte';
+  import type { Tip } from './components/Tooltip.svelte';
+
+  let w = $state.raw<Warehouse | null>(null);
+  let geo = $state.raw<GeoData | null>(null);
+  let dpl = $state.raw<Dpl | null>(null);
+  let roads = $state.raw<Roads | null>(null);
+  let census = $state.raw<CensusIndex | null>(null);
+  let ssw = $state.raw<Ssw | null>(null);
+  let jobs = $state.raw<Jobs | null>(null);
+  let news = $state.raw<News | null>(null);
+  let risk = $state.raw<{ sites: Record<string, { quake: number | null; flood: number; surge: number }>; depthLegend: { rank: number; ja: string; en: string }[] } | null>(null);
+  let error = $state<string | null>(null);
+  let highlight = $state<number | null>(null);
+
+  const L = $derived(app.lang);
+  const tt = (k: Key) => t(L, k);
+
+  // ------------------------------------------------------------ themes
+  const names = $derived(geo ? geo.prefs.map((p) => p.name) : []);
+  const pname = (c: number) => prefName(L, c, names[c - 1] ?? '');
+  const today = new Date();
+  const sites = $derived(dpl ? dpl.sites : []);
+  const sitesIn = (pref: number) => sites.map((s, i) => [i, s] as [number, typeof s]).filter(([, s]) => s.pref === pref);
+  const dplCount = (pref: number) => {
+    const list = sitesIn(pref);
+    const built = list.filter(([, s]) => isBuilt(s, today)).length;
+    return { built, pipe: list.length - built };
+  };
+  const ctx: Ctx = {
+    get L() { return app.lang; },
+    get dark() { return app.dark; },
+    get names() { return names; },
+    pname,
+    tt: (k) => t(app.lang, k),
+    anchor: (c) => geo!.anchors[c - 1],
+    adjacent: (a, b) => geo!.adjacent.has(`${Math.min(a, b)}-${Math.max(a, b)}`),
+    dplCount,
+  };
+  let wh = $state.raw<WarehouseTheme | null>(null);
+  let fl = $state.raw<FlowsTheme | null>(null);
+  let lb = $state.raw<LabourTheme | null>(null);
+  let sc = $state.raw<ScoreTheme | null>(null);
+  const view = $derived<ThemeView | null>(app.layer === 'flows' ? fl : app.layer === 'labour' ? lb : app.layer === 'score' ? sc : wh);
+
+  const lists = $derived<HashLists | null>(w && census && ssw && jobs && sc ? {
+    quarters: w.quarters.map((x) => x.id),
+    flowYears: census.years.map((y) => y.year),
+    flowCuts: ['all', ...census.modes.map((m) => m.key), ...census.commodities.map((c) => c.key)],
+    sswPeriods: ssw.periods.map((p) => p.id),
+    sswFields: ssw.fields.map((f) => f.key),
+    jobPeriods: jobs.periods.map((p) => p.id),
+    criteria: sc.keys,
+  } : null);
+
+  // ------------------------------------------------------------ boot
+  async function boot() {
+    error = null;
+    try {
+      const [ww, g, d, ci, s, j, ps, extra] = await Promise.all([loadWarehouse(), loadGeo(), loadDpl(), loadCensusIndex(), loadSsw(), loadJobs(),
+        fetch(`${import.meta.env.BASE_URL}geo/prefstats.json`).then((r) => r.json() as Promise<PrefStats>), loadRiskCriteria()]);
+      wh = new WarehouseTheme(ww, ctx);
+      fl = new FlowsTheme(ci, ctx);
+      lb = new LabourTheme(j, s, ctx);
+      sc = new ScoreTheme(ww, fl, j, s, ps, extra, ctx);
+      w = ww; geo = g; dpl = d; census = ci; ssw = s; jobs = j;
+      app.fromHash(location.hash, lists!);
+      // roads are secondary: the map works without them
+      loadRoads().then((r) => (roads = r)).catch((e) => console.warn('roads', e));
+      fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (news = n)).catch(() => {});
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  onMount(() => {
+    boot();
+    const mq = matchMedia('(prefers-color-scheme: dark)');
+    app.systemDark = mq.matches;
+    const onmq = () => (app.systemDark = mq.matches);
+    mq.addEventListener('change', onmq);
+    const onhash = () => { if (lists && location.hash.slice(1) !== app.toHash(lists)) app.fromHash(location.hash, lists); };
+    addEventListener('hashchange', onhash);
+    return () => { mq.removeEventListener('change', onmq); removeEventListener('hashchange', onhash); };
+  });
+
+  $effect(() => {
+    if (!lists) return;
+    const h = app.toHash(lists);
+    if (location.hash.slice(1) !== h) history.replaceState(null, '', h ? `#${h}` : location.pathname + location.search);
+  });
+  $effect(() => { document.documentElement.lang = L; document.title = `${tt('title')} · ${L === 'ja' ? 'Japan Logistics Map' : '総合物流マップ'}`; });
+  // census tables (~70 KB each) are loaded when the flow theme (or the score, which uses them) is opened
+  $effect(() => { if ((app.layer === 'flows' || app.layer === 'score') && fl) fl.load(); });
+
+  /** hazard criteria for the score (public/data/risk.json); the score works without them */
+  async function loadRiskCriteria(): Promise<ExtraCriteria[]> {
+    try {
+      const r = await fetch(`${import.meta.env.BASE_URL}data/risk.json`);
+      if (!r.ok) return [];
+      const j = await r.json();
+      risk = j;
+      return j.criteria as ExtraCriteria[];
+    } catch {
+      return [];
+    }
+  }
+
+  // ------------------------------------------------------------ point layers
+  const markers = $derived.by((): Marker[] => {
+    if (!geo || !app.showDpl) return [];
+    // pipeline first so built sites are drawn on top
+    return sites.map((s, i) => ({ i, xy: geo!.P(s.p), built: isBuilt(s, today), label: s.name }))
+      .sort((x, y) => Number(x.built) - Number(y.built) || (x.i === app.site ? 1 : 0) - (y.i === app.site ? 1 : 0));
+  });
+  const roadLayer = $derived(geo && roads ? roadPaths(geo, roads) : null);
+  const dplSource = $derived(!dpl ? '' : L === 'ja' ? `${dpl.source.ja}（${fmtDate(L, dpl.source.updated)}更新）`
+    : `${dpl.source.en} (updated ${fmtDate(L, dpl.source.updated)})`);
+
+  function muniTip(s: Shape): Tip {
+    const c = Number(s.code.slice(0, 2));
+    const n = sites.filter((x) => x.muni === s.code).length;
+    return {
+      title: L === 'ja' ? s.name : s.nameEn || s.name,
+      sub: pname(c),
+      rows: app.showDpl ? [[tt('dplIn'), n ? `${n}` : '–']] : [],
+      note: tt('muniNote'),
+    };
+  }
+  function siteTip(i: number): Tip {
+    const s = sites[i];
+    const rows: [string, string][] = [];
+    if (s.floor) rows.push([tt('floor'), fmtSqm(L, s.floor)]);
+    if (s.plot) rows.push([tt('plot'), fmtSqm(L, s.plot)]);
+    rows.push([s.land ? tt('opens') : tt('completed'), fmtYm(L, s.date)]);
+    rows.push([tt('address'), `${names[s.pref - 1] ?? ''}${s.address}`]);
+    const hz = risk?.sites[s.name];
+    const depth = (r: number) => (r ? risk!.depthLegend.find((d) => d.rank === r)?.[L] ?? '–' : tt('hzNone'));
+    if (hz) {
+      if (hz.quake !== null) rows.push([tt('hzQuake'), fmtPct(L, hz.quake, 0)]);
+      rows.push([tt('hzFlood'), depth(hz.flood)]);
+      rows.push([tt('hzSurge'), depth(hz.surge)]);
+    }
+    return {
+      title: s.name,
+      sub: `${tt(`st_${s.status}`)} · ${isBuilt(s, today) ? tt('operating') : tt('pipeline')}`,
+      rows,
+      note: [s.approx ? tt('approx') : '', hz ? tt('hzNote') : ''].filter(Boolean).join(' / ') || undefined,
+      source: dplSource,
+      link: s.url ? { href: s.url, label: tt('detailPage') } : undefined,
+    };
+  }
+
+  function onpick(code: string) {
+    app.site = -1;
+    app.pick(Number(code));
+  }
+  function onsite(i: number) {
+    app.site = app.site === i ? -1 : i;
+    if (app.site >= 0 && !app.compare && sites[i].pref !== app.pref) app.pref = sites[i].pref;
+  }
+  function clearFocus() {
+    app.pref = 0;
+    app.site = -1;
+  }
+
+  // ------------------------------------------------------------ side panel helpers
+  const rank = (v: ThemeView, p: number) => {
+    const vals = [...v.values.values()].filter((x) => isFinite(x)).sort((a, b) => b - a);
+    const x = v.value(p);
+    return isFinite(x) ? vals.indexOf(x) + 1 : 0;
+  };
+  const topBars = (v: ThemeView) => {
+    const arr = [...v.values.entries()].filter(([, x]) => isFinite(x)).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const max = Math.max(...arr.map(([, x]) => Math.abs(x)), 1e-9);
+    return arr.map(([c, x]) => ({ key: c, label: pname(Number(c)), value: v.fmt(x), pct: (Math.abs(x) / max) * 100, neg: x < 0,
+                                   onclick: () => onpick(c) }));
+  };
+
+  const subjects = $derived([
+    { value: 'warehouse', label: tt('layerWarehouse') },
+    { value: 'flows', label: tt('layerFlows') },
+    { value: 'labour', label: tt('layerLabour') },
+    { value: 'score', label: tt('layerScore') },
+  ] as { value: Layer; label: string }[]);
+  const cutOptions = $derived(census ? [
+    { group: '', items: [{ key: 'all', label: tt('allGoods'), disabled: false }] },
+    { group: tt('byMode'), items: census.modes.map((m) => ({ key: m.key, label: m[L], disabled: app.basis === 'annual' })) },
+    { group: tt('byCommodity'), items: census.commodities.map((c) => ({ key: c.key, label: c[L], disabled: false })) },
+  ] : []);
+  const fieldOptions = $derived(ssw ? [
+    ssw.fields.find((f) => f.key === 'total')!,
+    ...ssw.fields.filter((f) => f.logistics),
+    ...ssw.fields.filter((f) => !f.logistics && f.key !== 'total'),
+  ].map((f) => ({ key: f.key, label: f[L], disabled: !(f.key in ssw!.s1) })) : []);
+
+  let mapView: MapView | undefined = $state();
+</script>
+
+<a class="skip" href="#main">{tt('skip')}</a>
+
+<header class="top">
+  <div class="brand">
+    <svg class="logo" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--blue)" /><path d="M7 22V13l9-5 9 5v9" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round" /><rect x="12" y="16" width="8" height="6" fill="var(--mark)" /></svg>
+    <div>
+      <h1>{tt('title')} <span class="phase mono">{tt('phase')}</span></h1>
+      <p class="sub">{tt('subtitle')}</p>
+    </div>
+  </div>
+  <div class="prefs">
+    <Segmented label={tt('language')} value={app.lang} options={[{ value: 'ja', label: '日本語' }, { value: 'en', label: 'EN' }]}
+               onchange={(v) => app.setLang(v)} />
+    <Segmented label={tt('theme')} value={app.theme}
+               options={[{ value: 'light', label: tt('themeLight') }, { value: 'dark', label: tt('themeDark') }, { value: 'system', label: tt('themeSystem') }] as { value: Theme; label: string }[]}
+               onchange={(v) => app.setTheme(v)} />
+  </div>
+</header>
+
+{#if error}
+  <div class="state" role="alert">
+    <p>{tt('loadError')}</p>
+    <p class="mono small">{error}</p>
+    <button type="button" class="btn" onclick={boot}>{tt('retry')}</button>
+  </div>
+{:else if !w || !geo || !dpl || !census || !ssw || !jobs || !view || !wh || !fl || !lb || !sc}
+  <div class="state" aria-busy="true"><p>{tt('loading')}</p></div>
+{:else}
+  <nav class="subjects" aria-label={tt('subject')}>
+    <Segmented label={tt('subject')} value={app.layer} options={subjects} onchange={(v) => { app.layer = v; highlight = null; }} />
+  </nav>
+
+  <section class="controls" aria-label={tt('metric')}>
+    {#if app.layer === 'warehouse'}
+      <div class="ctl">
+        <span class="lab">{tt('metric')}</span>
+        <Segmented label={tt('metric')} value={app.metric}
+                   options={METRICS.map((m) => ({ value: m, label: tt(`m_${m}`), title: tt(`mh_${m}`) }))} onchange={(v) => (app.metric = v)} />
+      </div>
+      <div class="ctl">
+        <span class="lab">{tt('mode')}</span>
+        <Segmented label={tt('mode')} value={app.mode}
+                   options={[{ value: 'value', label: tt('modeValue') }, { value: 'yoy', label: tt('modeYoy') }]}
+                   onchange={(v) => (app.mode = v)} />
+      </div>
+      <div class="ctl time"><TimeControl quarters={w.quarters} q={app.q} lang={L} onchange={(q) => (app.q = q)} /></div>
+    {:else if app.layer === 'flows'}
+      <div class="ctl">
+        <span class="lab">{tt('metric')}</span>
+        <Segmented label={tt('metric')} value={app.fmetric}
+                   options={FLOW_METRICS.map((m) => ({ value: m, label: tt(`fm_${m}`) })) as { value: FlowMetric; label: string }[]}
+                   onchange={(v) => (app.fmetric = v)} />
+      </div>
+      <div class="ctl">
+        <span class="lab">{tt('surveyYear')}</span>
+        <Segmented label={tt('surveyYear')} value={app.flowYear}
+                   options={census.years.map((y) => ({ value: y.year, label: String(y.year) }))} onchange={(v) => (app.flowYear = v)} />
+      </div>
+      <div class="ctl">
+        <span class="lab">{tt('basis')}</span>
+        <Segmented label={tt('basis')} value={app.basis}
+                   options={[{ value: 'annual', label: tt('basisAnnual') }, { value: 'day3', label: tt('basis3day'), title: tt('basisHint') }] as { value: FlowBasis; label: string; title?: string }[]}
+                   onchange={(v) => (app.basis = v)} />
+      </div>
+      <label class="ctl">
+        <span class="lab">{tt('cut')}</span>
+        <select class="sel" value={fl.cut} onchange={(e) => (app.cut = e.currentTarget.value)}>
+          {#each cutOptions as g (g.group)}
+            {#if g.group}
+              <optgroup label={g.group}>
+                {#each g.items as o (o.key)}<option value={o.key} disabled={o.disabled}>{o.label}</option>{/each}
+              </optgroup>
+            {:else}
+              {#each g.items as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
+            {/if}
+          {/each}
+        </select>
+      </label>
+      {#if !app.pref && !app.compare}
+        <div class="ctl">
+          <span class="lab">{tt('arcs')}</span>
+          <button type="button" class="btn chip" aria-pressed={app.near} onclick={() => (app.near = !app.near)}
+                  title={tt('nearHint')}>{tt('near')}</button>
+        </div>
+      {/if}
+    {:else if app.layer === 'score'}
+      <div class="ctl">
+        <span class="lab">{tt('preset')}</span>
+        <Segmented label={tt('preset')} value={app.preset}
+                   options={[...PRESETS.map((p) => ({ value: p.key, label: p[L] })), ...(app.preset ? [] : [{ value: '', label: tt('custom') }])]}
+                   onchange={(v) => { app.preset = v; app.weights = {}; }} />
+      </div>
+    {:else}
+      <div class="ctl">
+        <span class="lab">{tt('labourMetric')}</span>
+        <Segmented label={tt('labourMetric')} value={app.lmetric}
+                   options={[{ value: 'jobs', label: tt('lm_jobs') }, { value: 'ssw', label: tt('lm_ssw') }] as { value: LabourMetric; label: string }[]}
+                   onchange={(v) => (app.lmetric = v)} />
+      </div>
+      {#if app.lmetric === 'jobs'}
+        <div class="ctl">
+          <span class="lab">{tt('occupation')}</span>
+          <Segmented label={tt('occupation')} value={app.occ}
+                     options={jobs.occupations.map((o) => ({ value: o.key as 'driver' | 'handling', label: o[L] }))} onchange={(v) => (app.occ = v)} />
+        </div>
+        <div class="ctl time"><TimeControl quarters={jobs.periods} q={app.jp} lang={L} label="fiscalYear" onchange={(q) => (app.jp = q)} /></div>
+      {:else}
+        <label class="ctl">
+          <span class="lab">{tt('field')}</span>
+          <select class="sel" value={app.field} onchange={(e) => (app.field = e.currentTarget.value)}>
+            {#each fieldOptions as o (o.key)}<option value={o.key} disabled={o.disabled}>{o.label}{o.disabled ? `（${L === 'ja' ? '未計上' : 'no data yet'}）` : ''}</option>{/each}
+          </select>
+        </label>
+        <div class="ctl time"><TimeControl quarters={ssw.periods} q={app.sp} lang={L} onchange={(q) => (app.sp = q)} /></div>
+      {/if}
+    {/if}
+    <div class="ctl">
+      <span class="lab">{tt('layers')}</span>
+      <div class="toggles">
+        <button type="button" class="btn chip" aria-pressed={app.showDpl} onclick={() => (app.showDpl = !app.showDpl)}>
+          <svg width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4.5" class="k-built" /></svg>DPL
+        </button>
+        <button type="button" class="btn chip" aria-pressed={app.showRoads} onclick={() => (app.showRoads = !app.showRoads)}>
+          <svg width="16" height="10" aria-hidden="true"><path d="M1 5h14" stroke="currentColor" stroke-width="2" /></svg>{tt('layerRoads')}
+        </button>
+        <button type="button" class="btn chip" aria-pressed={app.compare}
+                onclick={() => (app.compare ? app.stopCompare() : app.startCompare())}>
+          <span class="ab" aria-hidden="true">A</span><span class="ab b" aria-hidden="true">B</span>{tt('compare')}
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <main id="main" class="grid">
+    <div class="mapcol">
+      <div class="viewbar">
+        <Segmented label={`${tt('map')} / ${tt('table')}`} value={app.view}
+                   options={[{ value: 'map', label: tt('map') }, { value: 'table', label: tt('table') }]}
+                   onchange={(v) => (app.view = v)} />
+        {#if app.pref && !app.compare}
+          <button type="button" class="linkish" onclick={clearFocus}>← {tt('backToJapan')}</button>
+        {/if}
+        {#if app.layer === 'flows' && fl.loading}<span class="small" role="status">{tt('loadingFlows')}</span>{/if}
+      </div>
+
+      {#if app.view === 'map'}
+        <MapView
+          bind:this={mapView}
+          {geo} values={view.values} classes={view.classes} lang={L} {highlight}
+          focus={app.pref ? pad2(app.pref) : null}
+          compare={app.compare} a={app.a} b={app.b}
+          {markers} site={app.site}
+          roads={roadLayer} showRoads={app.showRoads}
+          flows={view.flows} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && app.layer !== 'score'}
+          prefTip={view.prefTip} {muniTip} {siteTip}
+          {onpick} onclear={clearFocus} {onsite}
+        />
+      {:else}
+        <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={app.pref}
+                     compare={app.compare} a={app.a} b={app.b} onpick={(c) => onpick(String(c))} />
+      {/if}
+
+      <div class="below">
+        <Legend classes={view.classes} lang={L} title={view.legend.title} fmt={view.legend.fmt} hint={view.legend.hint}
+                flows={app.view === 'map' ? view.legend.flows : null}
+                showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare} bind:highlight />
+        {#if app.layer === 'flows' && view.flows.length}
+          <p class="src">{!app.pref && !app.compare ? `${tt(app.near ? 'arcsNationalNear' : 'arcsNational')}${L === 'ja' ? '。' : '. '}` : ''}{tt('flowArcNote')}</p>
+        {/if}
+        <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a></p>
+      </div>
+    </div>
+
+    <aside class="side" aria-live="polite">
+      {#if app.compare}
+        <section class="panel">
+          <p class="eyebrow">{tt('compare')} · {view.periodLabel}</p>
+          <ComparePanel {names} lang={L} a={app.a} b={app.b} rows={view.compareRows}
+                        onset={(slot, c) => (app[slot] = c)} onswap={() => ([app.a, app.b] = [app.b, app.a])} />
+        </section>
+        {#if (app.a || app.b) && view.trend}
+          {@const tr = view.trend}
+          <section class="panel"><Trend series={tr.series} quarters={tr.periods} q={tr.q} lang={L} label={tr.label} format={tr.fmt}
+                                        tick={tr.tick} xticks={tr.xticks} dots={tr.dots} onselect={tr.setQ} /></section>
+        {/if}
+      {:else}
+        {@const p = app.pref}
+        {@const r = p ? rank(view, p) : 0}
+        {@const tr = view.trend}
+        <section class="panel readout">
+          <p class="eyebrow">{p ? pname(p) : tt('japan')} · {view.periodLabel}</p>
+          {#if app.layer === 'score' && !p}
+            {@const best = topBars(view)[0]}
+            <p class="kpi tnum">{best ? `${best.label} ${best.value}` : '–'}</p>
+          {:else}
+            <p class="kpi tnum">{view.fmt(view.value(p))}</p>
+          {/if}
+          <p class="kpi-sub">
+            {view.legend.title}
+            {#if app.layer === 'warehouse' && app.mode === 'value'} · {tt('yoy')} <strong class="tnum">{fmtYoy(L, app.metric, yoyOf(w, app.metric, app.q, p - 1))}</strong>{/if}
+            {#if r && !(app.layer === 'flows' && app.fmetric === 'net')} · {tt('rank')} <strong class="tnum">{r}</strong>{L === 'ja' ? tt('rankOf') : ` ${tt('rankOf')}`}{/if}
+            {#if p && app.layer === 'warehouse' && app.mode === 'value' && app.metric !== 'vacancy'}
+              · {tt('shareOfJapan')} <strong class="tnum">{fmtPct(L, (valueOf(w, app.metric, app.q, p - 1) / valueOf(w, app.metric, app.q, -1)) * 100)}</strong>
+            {/if}
+          </p>
+          {#if app.layer === 'warehouse'}<p class="help">{tt(`mh_${app.metric}`)}</p>
+          {:else if app.layer === 'flows'}<p class="help">{census.source.note[L]}</p>
+          {:else if app.layer === 'score'}<p class="help">{tt('scoreHint')}</p>
+          {:else}<p class="help">{app.lmetric === 'jobs' ? jobs.source.note[L] : ssw.source.note[L]}</p>{/if}
+        </section>
+
+        {#if app.layer === 'warehouse' && p}
+          <section class="panel">
+            <p class="eyebrow">{tt('allMetrics')}</p>
+            <div class="tiles">
+              {#each METRICS as m (m)}
+                <button type="button" class="tile" aria-pressed={m === app.metric} onclick={() => (app.metric = m)}>
+                  <span class="tl">{tt(`m_${m}`)}</span>
+                  <span class="tv tnum">{fmtValue(L, m, valueOf(w, m, app.q, p - 1))}</span>
+                  <span class="ty tnum">{tt('yoy')} {fmtYoy(L, m, yoyOf(w, m, app.q, p - 1))}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/if}
+        {#if app.layer === 'flows' && p}
+          <section class="panel">
+            <p class="eyebrow">{tt('allMetrics')}</p>
+            <div class="tiles">
+              {#each FLOW_METRICS as m (m)}
+                <button type="button" class="tile" aria-pressed={m === app.fmetric} onclick={() => (app.fmetric = m)}>
+                  <span class="tl">{tt(`fm_${m}`)}</span>
+                  <span class="tv tnum">{m === 'net' ? fl!.signedTons(fl!.metricOf(m, p)) : fl!.tons(fl!.metricOf(m, p))}</span>
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        {#if app.layer === 'score'}
+          <section class="panel">
+            <div class="head-row">
+              <p class="eyebrow">{tt('weights')}</p>
+              {#if app.preset !== 'balanced'}<button type="button" class="linkish" onclick={() => { app.preset = 'balanced'; app.weights = {}; }}>{tt('resetWeights')}</button>{/if}
+            </div>
+            <WeightPanel criteria={sc.criteria} weights={sc.weights} lang={L} onweight={(k, v) => sc!.setWeight(k, v)} />
+            <p class="src note">{tt('scoreCaveat')}</p>
+          </section>
+          {#if p}
+            <section class="panel">
+              <p class="eyebrow">{tt('breakdown')} · {pname(p)}</p>
+              <ScoreBreakdown criteria={sc.criteria} parts={sc.result.parts} weights={sc.weights} code={p} lang={L} />
+            </section>
+          {/if}
+        {/if}
+
+        {#if tr}
+        <section class="panel">
+          <Trend series={tr.series} quarters={tr.periods} q={tr.q} lang={L} label={tr.label} format={tr.fmt}
+                 tick={tr.tick} xticks={tr.xticks} dots={tr.dots} onselect={tr.setQ} />
+          {#if app.layer === 'labour' && app.lmetric === 'jobs'}<p class="src note">{tt('breakNote')}</p>{/if}
+        </section>
+        {/if}
+
+        {#if app.layer === 'flows'}
+          {#if p}
+            {#each ['out', 'in'] as const as dir (dir)}
+              {@const list = fl.partners(p, dir, 10)}
+              <section class="panel">
+                <p class="eyebrow">{tt(dir === 'out' ? 'topOut' : 'topIn')}</p>
+                <BarList bars={list.map((x) => ({ key: String(x.code), label: pname(x.code), value: `${fl!.tons(x.v)} · ${fmtPct(L, x.share, 0)}`,
+                                                   pct: (x.v / (list[0]?.v || 1)) * 100, onclick: () => onpick(String(x.code)) }))} />
+              </section>
+            {/each}
+          {:else}
+            {@const pairs = fl.topPairs(10)}
+            <section class="panel">
+              <p class="eyebrow">{tt('topPairs')}</p>
+              <BarList bars={pairs.map((x) => ({ key: `${x.o}-${x.d}`, label: `${pname(x.o)} → ${pname(x.d)}`, value: fl!.tons(x.v),
+                                                  pct: (x.v / (pairs[0]?.v || 1)) * 100, onclick: () => onpick(String(x.o)) }))} />
+            </section>
+          {/if}
+        {/if}
+
+        {#if app.layer === 'labour'}
+          {#if app.lmetric === 'ssw'}
+            <section class="panel note-card">
+              <p class="eyebrow">{tt('warehouseField')}</p>
+              <p>{tt('warehouseFieldNote')}</p>
+              {#if app.field === 'transport'}<p>{tt('transportFieldNote')}</p>{/if}
+            </section>
+          {:else}
+            <section class="panel">
+              <p class="eyebrow">{tt('regionShortfall')}</p>
+              <BarList ranked={false} bars={jobs.shortfall2024.regions.map((r) => ({ key: r.en, label: r[L], value: fmtPct(L, r.pct),
+                                                                                      pct: (r.pct / 20) * 100 }))} />
+              <p class="src note">{tt('shortfallNote')} <a href={jobs.shortfall2024.source.url}>{jobs.shortfall2024.source[L]}</a> ·
+                <a href={jobs.shortfall2024.national.source.url}>{jobs.shortfall2024.national.source[L]}</a></p>
+            </section>
+          {/if}
+        {/if}
+
+        {#if p && (app.layer === 'warehouse' || app.showDpl)}
+          <section class="panel">
+            <p class="eyebrow">{tt('dplIn')} · {pname(p)}</p>
+            <SiteList sites={sitesIn(p)} lang={L} selected={app.site} {onsite} />
+            <p class="src">{dplSource}</p>
+          </section>
+        {:else if !p && app.layer !== 'flows'}
+          <section class="panel">
+            <p class="eyebrow">{app.layer === 'score' ? tt('ranking') : tt('top')}</p>
+            <BarList bars={topBars(view)} />
+          </section>
+        {/if}
+        {#if news}
+          <section class="panel">
+            <p class="eyebrow">{tt('news')}</p>
+            <NewsFeed {news} lang={L} pref={p} {pname} onpref={(c) => onpick(String(c))} />
+          </section>
+        {/if}
+      {/if}
+    </aside>
+  </main>
+
+  <footer class="foot">
+    <h2 class="eyebrow">{tt('sources')}</h2>
+    <dl>
+      <dt>{L === 'ja' ? '営業倉庫' : 'Warehouses'}</dt>
+      <dd>
+        <a href={w.source.url}>{w.source[L]}</a>. {w.source.scope[L]}
+        {L === 'ja' ? '収録' : 'Coverage'}: {L === 'ja' ? w.quarters[0].ja : w.quarters[0].en} – {L === 'ja' ? w.quarters.at(-1)!.ja : w.quarters.at(-1)!.en}
+        {L === 'ja' ? `（最新号 ${fmtDate(L, w.quarters.at(-1)!.published)}公表）。` : ` (latest issue published ${fmtDate(L, w.quarters.at(-1)!.published)}).`}
+        {tt('lagNote')} {#if w.notes.length}{tt('totalReplaced')} ({w.notes.map((n) => n.quarter).join(', ')}){/if}
+      </dd>
+      <dt>{tt('layerFlows')}</dt>
+      <dd><a href={census.source.url}>{census.source[L]}</a>: {census.years.map((y) => y.survey[L]).join(', ')}. {census.source.note[L]} {census.source.licence[L]}.</dd>
+      <dt>{tt('lm_jobs')}</dt>
+      <dd><a href={jobs.source.url}>{jobs.source[L]}</a> ({jobs.periods[0][L]}–{jobs.periods.at(-1)![L]}). {jobs.source.note[L]}</dd>
+      <dt>{tt('lm_ssw')}</dt>
+      <dd><a href={ssw.source.url}>{ssw.source[L]}</a> ({ssw.periods[0][L]}–{ssw.periods.at(-1)![L]}). {ssw.source.note[L]}</dd>
+      <dt>{L === 'ja' ? '輸送力不足' : 'Capacity shortfall'}</dt>
+      <dd><a href={jobs.shortfall2024.national.source.url}>{jobs.shortfall2024.national.source[L]}</a>; <a href={jobs.shortfall2024.source.url}>{jobs.shortfall2024.source[L]}</a></dd>
+      <dt>DPL</dt>
+      <dd><a href={dpl.source.url}>{dpl.source[L]}</a>{L === 'ja'
+        ? `（${fmtDate(L, dpl.source.updated)}更新、${fmtDate(L, dpl.source.retrieved)}取得）。`
+        : ` (updated ${fmtDate(L, dpl.source.updated)}, retrieved ${fmtDate(L, dpl.source.retrieved)}). `}{dpl.source.note[L]}</dd>
+      {#if roads}
+        <dt>{tt('layerRoads')}</dt>
+        <dd><a href={roads.source.url}>{roads.source[L]}</a></dd>
+      {/if}
+      {#if risk}
+        <dt>{tt('groupRisk')}</dt>
+        <dd>{#each (risk as unknown as { criteria: ExtraCriteria[] }).criteria as c, i (c.key)}{i ? '; ' : ''}{c[L]}: {c.source[L]}{/each}.
+          {L === 'ja' ? 'DPL地点のハザード：' : 'Hazards at DPL sites: '}<a href="https://www.j-shis.bosai.go.jp/">J-SHIS</a>,
+          <a href="https://disaportal.gsi.go.jp/hazardmap/copyright/opendata.html">{L === 'ja' ? 'ハザードマップポータルサイト' : 'Hazard Map Portal'}</a>.</dd>
+      {/if}
+      {#if news}
+        <dt>{tt('news')}</dt>
+        <dd>{#each news.sources as s, i (s.key)}{i ? ', ' : ''}<a href={s.url}>{s[L]}</a>{/each}. {L === 'ja' ? '国土交通省の見出しは国土交通省ウェブサイトへのリンクです。' : 'MLIT headlines link to the MLIT website.'}</dd>
+      {/if}
+      <dt>{tt('boundaries')}</dt>
+      <dd>{tt('boundarySource')}</dd>
+    </dl>
+    <p class="next">{tt('phaseNext')}</p>
+  </footer>
+{/if}
+
+<style>
+  .skip { position: absolute; left: -9999px; top: 8px; z-index: 100; background: var(--surface); padding: 8px 12px; border-radius: 8px; }
+  .skip:focus { left: 8px; }
+
+  .top {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px;
+    padding: 16px clamp(16px, 3vw, 32px) 12px;
+  }
+  .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
+  .logo { flex: none; }
+  h1 { margin: 0; font-size: 20px; line-height: 1.25; letter-spacing: 0.01em; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .phase { font-size: 11px; font-weight: 500; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 4px; padding: 1px 6px; }
+  .sub { margin: 2px 0 0; font-size: 13px; color: var(--muted); max-width: 72ch; }
+  .prefs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  .state { padding: 64px 16px; text-align: center; color: var(--ink-2); }
+  .small { font-size: 12px; color: var(--muted); }
+
+  .subjects { padding: 0 clamp(16px, 3vw, 32px) 12px; border-bottom: 1px solid var(--line); }
+  .subjects :global(.seg button) { min-height: 38px; padding: 0 18px; font-size: 14.5px; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-end;
+    padding: 12px clamp(16px, 3vw, 32px);
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 40;
+  }
+  .ctl { display: grid; gap: 4px; min-width: 0; }
+  .ctl .lab { font-size: 12px; color: var(--muted); }
+  .ctl.time { flex: 1 1 280px; max-width: 520px; }
+  .sel {
+    min-height: 38px; padding: 0 10px; max-width: 100%;
+    border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-2); font-size: 13.5px;
+  }
+  .toggles { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { min-height: 36px; font-size: 13px; }
+  .chip[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
+  .chip[aria-pressed='true'] .ab { background: var(--bg); }
+  .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
+
+  .grid {
+    display: grid; gap: 24px 32px;
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+    padding: 16px clamp(16px, 3vw, 32px) 24px;
+  }
+  .mapcol { min-width: 0; display: grid; gap: 10px; align-content: start; }
+  .viewbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .below { display: grid; gap: 8px; }
+  .src { margin: 0; font-size: 11.5px; color: var(--muted); }
+  .src a { color: var(--muted); }
+  .src.note { margin-top: 8px; }
+
+  .side { display: grid; gap: 20px; align-content: start; min-width: 0; border-left: 1px solid var(--line); padding-left: 32px; }
+  .panel { min-width: 0; }
+  .readout .kpi { margin: 0; font-size: clamp(28px, 4vw, 36px); font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+  .kpi-sub { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+  .kpi-sub strong { color: var(--ink); font-weight: 600; }
+  .help { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+  .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .head-row .eyebrow { margin-bottom: 10px; }
+  .note-card { border: 1px solid var(--line); border-left: 3px solid var(--mark); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); font-size: 13px; }
+  .note-card p { margin: 0; }
+  .note-card p + p { margin-top: 8px; color: var(--ink-2); }
+
+  .tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .tile {
+    display: grid; gap: 2px; text-align: left; padding: 10px 12px; min-height: 44px;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  }
+  .tile:hover { border-color: var(--line-strong); }
+  .tile[aria-pressed='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .tl { font-size: 12px; color: var(--muted); }
+  .tv { font-size: 16px; font-weight: 600; }
+  .ty { font-size: 11.5px; color: var(--ink-2); }
+
+  .foot { padding: 20px clamp(16px, 3vw, 32px) 40px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+  .foot dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; max-width: 110ch; }
+  .foot dt { color: var(--muted); }
+  .foot dd { margin: 0; }
+  .next { margin: 16px 0 0; color: var(--muted); }
+
+  @media (max-width: 1080px) {
+    .grid { grid-template-columns: 1fr; }
+    .side { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 24px 32px; }
+  }
+  @media (max-width: 720px) {
+    .top { padding-top: 12px; }
+    h1 { font-size: 18px; }
+    .sub { display: none; }
+    .subjects :global(.seg) { display: flex; width: 100%; }
+    .subjects :global(.seg button) { flex: 1; padding: 0 8px; }
+    .controls { position: static; gap: 10px 16px; }
+    .controls :global(.seg) { max-width: 100%; flex-wrap: wrap; }
+    .ctl.time { flex-basis: 100%; }
+    .foot dl { grid-template-columns: 1fr; }
+    .foot dt { margin-top: 8px; }
+  }
+</style>

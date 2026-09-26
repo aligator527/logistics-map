@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.playwright-mcp/
+.DS_Store
+# large downloads / intermediates, re-created by the scripts in scripts/
+data/raw/
+data/geo/

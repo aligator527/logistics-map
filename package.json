@@ -1,0 +1,49 @@
+{
+  "name": "logistics-map",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "etl:warehouse": "node scripts/etl-warehouse.mjs",
+    "etl:dpl": "node scripts/build-dpl.mjs",
+    "geo": "node scripts/build-geo.mjs",
+    "roads": "node scripts/build-roads.mjs",
+    "labels": "node scripts/build-labels.mjs",
+    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run news",
+    "etl:census": "node scripts/etl-census.mjs",
+    "etl:ssw": "node scripts/etl-ssw.mjs",
+    "etl:jobs": "node scripts/etl-jobs.mjs",
+    "anchors": "node scripts/build-anchors.mjs",
+    "etl:suigai": "node scripts/etl-suigai.mjs",
+    "etl:risk": "node scripts/etl-risk.mjs",
+    "news": "node scripts/fetch-news.mjs"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tsconfig/svelte": "^5.0.8",
+    "@types/d3-geo": "^3.1.1",
+    "@types/d3-selection": "^3.0.12",
+    "@types/d3-transition": "^3.0.9",
+    "@types/d3-zoom": "^3.0.8",
+    "@types/topojson-client": "^3.1.5",
+    "@types/topojson-specification": "^1.0.5",
+    "d3-geo": "^3.1.1",
+    "mapshaper": "^0.7.67",
+    "proj4": "^2.22.0",
+    "svelte": "^5.57.1",
+    "svelte-check": "^4.7.6",
+    "topojson-client": "^3.1.0",
+    "typescript": "~5.9",
+    "vite": "^8.3.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "dependencies": {
+    "d3-selection": "^3.0.0",
+    "d3-transition": "^3.0.1",
+    "d3-zoom": "^3.0.0"
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>総合物流マップ · Japan Logistics Map</title>
+    <meta name="description" content="Screening map for logistics sites in Japan: commercial warehouse floor area, inbound and stock by prefecture, Daiwa House DPL sites and expressway interchanges. 営業倉庫・物流施設・高速道路ICを地図で見る。" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f4f4f2" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16181a" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans+JP:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Apply the stored theme before first paint to avoid a flash.
+      try {
+        const t = localStorage.getItem('theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

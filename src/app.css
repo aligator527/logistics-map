@@ -1,0 +1,181 @@
+/* Design tokens. Light is the default; dark applies from the OS setting unless
+   the viewer picked a theme (data-theme on <html> always wins).
+   Palette "concrete / container / floor marking": concrete-grey neutrals,
+   container blue for data, floor-marking amber for DPL sites and selection. */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;              /* concrete */
+  --surface: #fbfbfa;
+  --surface-2: #e9e9e6;
+  --ink: #17191b;
+  --ink-2: #43474c;
+  --muted: #5f646a;           /* 5.4:1 on --bg */
+  --line: #dcdcd8;
+  --line-strong: #c4c5c1;
+  --accent: #8a5700;          /* amber, darkened for text and focus rings (5.9:1) */
+  --accent-soft: #f6ead0;
+  --mark: #f2a900;            /* floor-marking amber: DPL points, selection A */
+  --mark-ring: #17191b;
+  --sel-a: #e09c00;
+  --sel-b: #17191b;
+  --blue: #0168b0;            /* container blue: bars, lines */
+  --blue-soft: #d7e6f3;
+  --clay: #a95d3a;            /* decrease (diverging scale) */
+  --flow-all: #17191b;        /* freight flow arcs */
+  --flow-out: #17191b;
+  --flow-in: #8a4a24;
+  --land: #e2e2de;            /* no data */
+  --hatch: #a7a8a3;
+  --road: #43474c;
+  --road-halo: #fbfbfa;
+  --shadow: 0 1px 2px rgb(23 25 27 / 0.06), 0 8px 24px rgb(23 25 27 / 0.1);
+  --radius: 10px;
+  --font: 'IBM Plex Sans', 'IBM Plex Sans JP', system-ui, -apple-system, 'Hiragino Sans', 'Yu Gothic UI', 'Segoe UI', sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
+:lang(ja) { --font: 'IBM Plex Sans JP', 'IBM Plex Sans', system-ui, -apple-system, 'Hiragino Sans', 'Yu Gothic UI', sans-serif; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #16181a;
+    --surface: #1e2124;
+    --surface-2: #262a2e;
+    --ink: #eef0f2;
+    --ink-2: #c3c8ce;
+    --muted: #9ba2a9;
+    --line: #2c3136;
+    --line-strong: #41474d;
+    --accent: #ffb81c;
+    --accent-soft: #3a2f16;
+    --mark: #ffb81c;
+    --mark-ring: #0c0d0e;
+    --sel-a: #ffb81c;
+    --sel-b: #eef0f2;
+    --blue: #57a8ee;
+    --blue-soft: #1d3147;
+    --clay: #c37552;
+    --flow-all: #eef0f2;
+    --flow-out: #eef0f2;
+    --flow-in: #f0a37a;
+    --land: #2a2d31;
+    --hatch: #50565c;
+    --road: #c3c8ce;
+    --road-halo: #16181a;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #16181a;
+  --surface: #1e2124;
+  --surface-2: #262a2e;
+  --ink: #eef0f2;
+  --ink-2: #c3c8ce;
+  --muted: #9ba2a9;
+  --line: #2c3136;
+  --line-strong: #41474d;
+  --accent: #ffb81c;
+  --accent-soft: #3a2f16;
+  --mark: #ffb81c;
+  --mark-ring: #0c0d0e;
+  --sel-a: #ffb81c;
+  --sel-b: #eef0f2;
+  --blue: #57a8ee;
+  --blue-soft: #1d3147;
+  --clay: #c37552;
+  --flow-all: #eef0f2;
+  --flow-out: #eef0f2;
+  --flow-in: #f0a37a;
+  --land: #2a2d31;
+  --hatch: #50565c;
+  --road: #c3c8ce;
+  --road-halo: #16181a;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 32px rgb(0 0 0 / 0.45);
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+:lang(ja) body, :lang(ja) { line-break: strict; }
+
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+.tnum { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); }
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+:lang(en) .eyebrow { text-transform: uppercase; letter-spacing: 0.08em; }
+
+/* Quiet buttons: hairline, no gradients. */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 14px;
+}
+.btn:hover { border-color: var(--ink-2); }
+.btn[aria-pressed='true'] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); }
+
+.linkish {
+  border: 0; background: none; padding: 0;
+  color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-thickness: 1px; font-size: 13px;
+}
+.linkish:hover { color: var(--ink); }
+a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+
+/* A/B markers used by the compare mode (never colour alone: letter + line style). */
+.ab {
+  display: inline-grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 4px;
+  font: 600 11px/1 var(--mono);
+  border: 2px solid var(--sel-a); color: var(--ink); background: var(--surface);
+}
+.ab.b { border-style: dashed; border-color: var(--sel-b); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
+
+@media (forced-colors: active) {
+  .btn[aria-pressed='true'] { border: 2px solid CanvasText; }
+}
