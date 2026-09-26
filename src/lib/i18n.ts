@@ -132,7 +132,7 @@ const strings = {
   layerLocal: { ja: '市区町村', en: 'Municipalities' },
   localMetric: { ja: '指標', en: 'Indicator' },
   lg_people: { ja: '人口・需要', en: 'People & demand' },
-  lg_demand: { ja: '需要・EC', en: 'Demand & e-commerce' },
+  lg_demand: { ja: '需要（消費・EC・企業間）', en: 'Demand (consumer, e-commerce, B2B)' },
   lg_access: { ja: 'アクセス', en: 'Access' },
   lg_land: { ja: '土地', en: 'Land' },
   lg_industry: { ja: '物流産業', en: 'Logistics industry' },

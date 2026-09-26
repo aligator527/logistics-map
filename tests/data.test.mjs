@@ -200,7 +200,10 @@ test('facility registry from the news', () => {
 test('demand, wages and land trend', () => {
   const m = load('data/muni.json');
   const ix = (c) => m.codes.indexOf(c);
-  for (const k of ['hh', 'mig', 'income', 'retail', 'mailorder', 'land5', 'land10']) assert.equal(m.m[k].length, 1898, k);
+  for (const k of ['hh', 'mig', 'income', 'retail', 'mailorder', 'land5', 'land10', 'mfgShip', 'mfgEmp', 'wsEmp']) assert.equal(m.m[k].length, 1898, k);
+  // 製造品出荷額等 2024: 豊田市 is Japan's largest (over 15兆円 = 150,000億円); Hamamatsu's new wards have B2B values
+  assert.ok(m.m.mfgShip[ix('23211')] > 150_000, '豊田市 shipments > 15兆円');
+  assert.ok(m.m.mfgEmp[ix('22138')] > 10_000 && m.m.retail[ix('22139')] > 0, '浜松市 new wards filled');
   assert.ok(m.m.income[ix('13101')] > 1000, '千代田区: income per taxpayer > 1,000万円');
   assert.equal(m.m.income[ix('14101')], m.m.income[ix('14102')], 'wards of 横浜市 take the city figure');
   assert.ok(m.m.hh[ix('11203')] > 250000 && m.m.hh[ix('11203')] < 400000, '川口市 households');

@@ -9,6 +9,9 @@
 //                                     課税対象所得 ÷ 所得割の納税義務者数 (designated cities: the city's figure for every ward)
 //   https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09_25.html
 // data/raw/census2020/000040067885.xlsx  経済センサス‐活動調査2021 — retail (I2) and mail-order (611) employees
+//                                     + manufacturing (E) and wholesale (I1) employees (B2B demand)
+// data/raw/industry/2025-k4-data.xlsx 2025年経済構造実態調査 製造業事業所調査（2024年実績）参考表 市区町村別 — 製造品出荷額等
+//   https://www.e-stat.go.jp/stat-search/files?toukei=00200555 (statInfId 000040480531)
 // data/raw/wage/mw.xlsx               厚生労働省 地域別最低賃金の推移（H14〜R7）-> per prefecture, with history
 //   https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/minimumichiran/
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -78,23 +81,54 @@ const income = Array(N).fill(null);
 }
 
 // ------------------------------------------------------------------ retail and mail-order employees (経済センサス2021)
-const retail = Array(N).fill(null), mailorder = Array(N).fill(null);
+const retail = Array(N).fill(null), mailorder = Array(N).fill(null), mfgEmp = Array(N).fill(null), wsEmp = Array(N).fill(null);
 {
   const rows = sheet('census2020/000040067885.xlsx');
   const head = rows[5].map(String);
   const cRetail = head.findIndex((h) => /^I2_小売業$/.test(h)), cMail = head.findIndex((h) => /^611_/.test(h));
+  const cMfg = head.findIndex((h) => /^E_製造業$/.test(h)), cWs = head.findIndex((h) => /^I1_卸売業$/.test(h));
+  const cityRow = new Map();
   // the area code is in one of the first columns (5 digits, or 5 + check digit)
   let n = 0;
   for (const r of rows.slice(8)) {
     const cell = r.slice(0, 4).map(String).find((x) => /^\d{5,6}$/.test(x.trim()) || /^\d{5}_/.test(x.trim()));
     if (!cell) continue;
     const code = cell.trim().slice(0, 5);
+    const vals = [num(r[cRetail]), num(r[cMail]), num(r[cMfg]), num(r[cWs])].map((v) => (isFinite(v) ? v : 0));
+    cityRow.set(code, vals);
     if (!idx.has(code)) continue;
     const i = idx.get(code);
-    retail[i] = num(r[cRetail]); mailorder[i] = num(r[cMail]);
+    [retail[i], mailorder[i], mfgEmp[i], wsEmp[i]] = vals;
     n++;
   }
+  // Hamamatsu's wards were redrawn in 2024 (22138–22140): the 2021 city total, shared by population
+  const newWards = out.codes.filter((c) => /^2213[89]|^22140/.test(c));
+  const city = cityRow.get('22130'), popSum = newWards.reduce((s, c) => s + (out.m.pop[idx.get(c)] ?? 0), 0);
+  if (city && popSum) for (const c of newWards) {
+    const i = idx.get(c), f = (out.m.pop[i] ?? 0) / popSum;
+    [retail[i], mailorder[i], mfgEmp[i], wsEmp[i]] = city.map((v) => Math.round(v * f));
+  }
   console.log(`経済センサス: retail / mail-order employees for ${n} municipalities (cols ${cRetail}, ${cMail})`);
+}
+
+// ------------------------------------------------------------------ 製造品出荷額等 (2024, 万円 -> 億円); X = suppressed
+const mfgShip = Array(N).fill(null);
+{
+  const rows = sheet('industry/2025-k4-data.xlsx', '参考表');
+  let n = 0, x = 0;
+  const seen = new Set();
+  for (const r of rows.slice(10)) {
+    if (String(r[4]) !== '00') continue;
+    const code = String(r[2]).trim();
+    if (!idx.has(code)) continue;
+    seen.add(code);
+    const v = num(r[12]);
+    if (isFinite(v)) { mfgShip[idx.get(code)] = Math.round(v / 1e4 * 10) / 10; n++; } else x++;
+  }
+  // not in the table: no manufacturing establishments (small villages)
+  let zero = 0;
+  out.codes.forEach((c, i) => { if (!seen.has(c)) { mfgShip[i] = 0; zero++; } });
+  console.log(`製造品出荷額等: ${n} municipalities, ${x} suppressed (X), ${zero} without a row (0)`);
 }
 
 // ------------------------------------------------------------------ minimum wage per prefecture (H14–R7)
@@ -157,15 +191,17 @@ const landTrend = { years: [], japan: [], prefs: [] };
   console.log(`地価公示 trend: ${pts.length} industrial points; Japan 2026 = ${landTrend.japan.at(-1)} (2016 = 100); 5-yr change for ${land5.filter((v) => v !== null).length} municipalities`);
 }
 
-Object.assign(out.m, { hh, mig, income, retail, mailorder, land5, land10 });
+Object.assign(out.m, { hh, mig, income, retail, mailorder, land5, land10, mfgShip, mfgEmp, wsEmp });
 out.landTrend = landTrend;
 out.wage = wage;
 Object.assign(out.sources, {
   juki: { ja: '総務省 住民基本台帳に基づく人口・世帯数（2026年1月1日）・人口動態（2025年）', en: 'MIC Basic Resident Register: households (1 Jan 2026), migration (2025)', url: 'https://www.soumu.go.jp/main_sosiki/jichi_gyousei/daityo/jinkou_jinkoudoutai-setaisuu.html' },
   income: { ja: '総務省 市町村税課税状況等の調 第11表（令和7年度、課税対象所得÷所得割納税義務者数。政令市の区は市の値）', en: 'MIC municipal tax survey, table 11 (FY2025): taxable income per taxpayer (wards: city value)', url: 'https://www.soumu.go.jp/main_sosiki/jichi_zeisei/czaisei/czaisei_seido/ichiran09_25.html' },
   retail: { ja: '令和3年経済センサス‐活動調査（小売業・通信販売の従業者）', en: '2021 Economic Census (retail and mail-order employees)', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553' },
+  b2b: { ja: '令和3年経済センサス‐活動調査（製造業・卸売業の従業者）を加工して作成', en: '2021 Economic Census (manufacturing and wholesale employees), processed', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553' },
+  mfgShip: { ja: '2025年経済構造実態調査 製造業事業所調査（2024年実績、市区町村別 参考表）を加工して作成', en: '2025 Economic Structure Survey, manufacturing (2024 shipments by municipality), processed', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200555' },
   wage: { ja: `厚生労働省 地域別最低賃金（${wage.years.at(-1)}）`, en: `MHLW regional minimum wages (${wage.years.at(-1)})`, url: 'https://www.mhlw.go.jp/stf/seisakunitsuite/bunya/koyou_roudou/roudoukijun/minimumichiran/' },
 });
 writeFileSync(resolve(root, 'public/data/muni.json'), JSON.stringify(out));
-const show = (c) => { const i = idx.get(c); return `${c}: hh ${hh[i]}, mig ${mig[i]}%, income ${income[i]}万, retail ${retail[i]}, mail ${mailorder[i]}`; };
-for (const c of ['13101', '11203', '14101', '01101', '47201']) console.log(' ', show(c));
+const show = (c) => { const i = idx.get(c); return `${c}: hh ${hh[i]}, mig ${mig[i]}%, income ${income[i]}万, retail ${retail[i]}, mail ${mailorder[i]}, mfg ${mfgEmp[i]}人 ${mfgShip[i]}億円, ws ${wsEmp[i]}`; };
+for (const c of ['13101', '11203', '14101', '01101', '47201', '23211', '22138', '22140']) console.log(' ', show(c));

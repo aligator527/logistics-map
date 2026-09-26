@@ -576,6 +576,13 @@
    "script": "etl-diesel"
   },
   {
+   "file": "data/raw/industry/2025-k4-data.xlsx",
+   "bytes": 3771881,
+   "sha256": "4971245aed38665c231dadaad59e73de0d4c0c3bceef4be983f8f8bfd9057809",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00200555 (経済構造実態調査2025 製造業 参考表, statInfId 000040480531)",
+   "script": "etl-demand"
+  },
+  {
    "file": "data/raw/jobs/000040455706.xlsx",
    "bytes": 1001209,
    "sha256": "4c740910e86217951ea7ccfe9f0ed32ff53b3f088c3c97e2328fd13c5d5070ce",
