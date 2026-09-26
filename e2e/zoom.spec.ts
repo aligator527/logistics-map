@@ -141,3 +141,40 @@ test('side panel: tabs, width and hiding (wide screens)', async ({ page }, info)
   await expect(side).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('screening funnel greys out municipalities and survives the link', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  const errors = await open(page, 't=local&tb=screen');
+  await page.getByRole('button', { name: '物流用地の例を使う' }).click();
+  await expect(page).toHaveURL(/fx=zone\.ge\.20~/);
+  const result = page.locator('.screen .result');
+  const n = Number((await result.innerText()).match(/([\d,]+)\s*\//)![1].replace(/,/g, ''));
+  expect(n).toBeGreaterThan(20);
+  expect(n).toBeLessThan(1000);
+  await expect(page.locator('g.areas path.out').first()).toBeAttached();
+  await expect(page.getByRole('tab', { name: new RegExp(`絞り込み\\s*${n}`) })).toBeVisible();
+  // the same conditions from the link
+  await page.reload();
+  await expect(page.locator('.screen .result')).toContainText(String(n.toLocaleString('ja-JP')));
+  expect(errors).toEqual([]);
+});
+
+test('candidate status and note; back and forward between places', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  await page.addInitScript(() => localStorage.setItem('shortlist', JSON.stringify([{ kind: 'muni', code: '23206' }])));
+  await open(page, 't=local&mu=23206&tb=short');
+  await page.locator('ul.short select').selectOption('nego');
+  await page.locator('ul.short .note-btn').click();
+  await page.locator('ul.short textarea').fill('地権者と面談済み');
+  await page.locator('ul.short textarea').blur();
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('shortlist')!));
+  expect(saved[0]).toMatchObject({ status: 'nego', note: '地権者と面談済み' });
+  // a place picked from a list is a step in the history
+  await page.getByRole('tab', { name: '概要' }).click();
+  await page.locator('aside .panel', { hasText: '上位の市区町村' }).getByRole('button').first().click();
+  await expect(page).toHaveURL(/mu=13102/);
+  await page.getByRole('button', { name: '前の表示' }).click();
+  await expect(page).toHaveURL(/mu=23206/);
+  await page.getByRole('button', { name: '次の表示' }).click();
+  await expect(page).toHaveURL(/mu=13102/);
+});

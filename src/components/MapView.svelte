@@ -38,7 +38,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
-        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [],
+        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [], keep = null,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -114,6 +114,8 @@
     /** buildings (国土地理院 vector tiles) from z15, land parcels (登記所備付地図) from z16 */
     showBld?: boolean;
     showFude?: boolean;
+    /** screening: only these municipalities stay in colour (null = all) */
+    keep?: Set<string> | null;
     /** plots saved in the shortlist: rings in lon/lat */
     plots?: { key: string; ring: [number, number][]; label: string }[];
     prefTip: (code: string) => Tip;
@@ -987,7 +989,7 @@
       <g class="areas" class:muni={level === 'muni'} class:deep={fade < 1}>
         {#each areaShapes as s (s.code)}
           {@const f = fill(s.code)}
-          <path d={dOf(s)} data-code={s.code} fill={f} class:dim={dimmed(s.code)}
+          <path d={dOf(s)} data-code={s.code} fill={f} class:dim={dimmed(s.code)} class:out={!!keep && level === 'muni' && !keep.has(s.code)}
                 style:stroke={fade < 1 ? (f.startsWith('url') ? 'var(--hatch)' : f) : null}
                 class:faded={level === 'pref' && !!focus && !compare && s.code !== focus} />
         {/each}
@@ -1309,6 +1311,8 @@
     cursor: pointer;
   }
   .areas path.dim { opacity: 0.18; }
+  /* screened out: kept as a pale ghost so the passing ones stand out */
+  .areas path.out { fill: var(--land) !important; fill-opacity: 1; }
   .areas.muni path { stroke: var(--bg); stroke-width: 0.3; stroke-opacity: 0.7; vector-effect: non-scaling-stroke; }
   .pref-borders.strong { stroke: var(--ink-2); stroke-opacity: 0.7; stroke-width: 0.9; }
   .focus.thin { stroke-width: 1.5; stroke-dasharray: 4 3; }

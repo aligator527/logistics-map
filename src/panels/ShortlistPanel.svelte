@@ -3,7 +3,7 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { live, WARN } from '../lib/live.svelte';
-  import { shortlist, shared, shareLink, resolveShared, ptOf, plotRing, type ShortItem } from '../lib/shortlist.svelte';
+  import { shortlist, shared, shareLink, resolveShared, ptOf, plotRing, STATUSES, type ShortItem, type Status } from '../lib/shortlist.svelte';
   import { area as ringArea } from '../lib/measure.svelte';
   import { downloadCsv } from '../lib/csv';
   import { fmtNum, fmtCompact } from '../lib/scale';
@@ -11,6 +11,10 @@
   import type { DossierTable } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
   import { estimate, costs } from '../lib/costs.svelte';
+  const statusName = (st: Status | undefined) => tt(`st_${st ?? 'cand'}` as Key);
+  let noteOpen = $state<string | null>(null);
+  let hideDropped = $state(false);
+  const shown = $derived(shortlist.items.filter((it) => !(hideDropped && it.status === 'drop')));
   const plotArea = (it: ShortItem) => (it.kind === 'plot' ? ringArea(plotRing(it.code)) : NaN);
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
@@ -66,7 +70,7 @@
   }
   function exportShortlist() {
     const lm = lt?.metrics ?? [];
-    const head = ['kind', 'code', 'name', 'prefecture', ...(sc ? [tt('layerScore') + '（' + tt('byPref') + '）'] : []),
+    const head = ['kind', 'code', 'name', 'status', 'note', 'prefecture', ...(sc ? [tt('layerScore') + '（' + tt('byPref') + '）'] : []),
       ...(msc ? [tt('layerScore') + '（' + tt('byMuni') + '）'] : []), ...lm.map((m) => m[L]), tt('pop30'), tt('nearestIc'), tt('nearestAir')];
     const rows = shortlist.items.map((it) => {
       const pc = it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0;
@@ -74,7 +78,7 @@
       const mi = mc && lt ? lt.indexOf(mc) : -1;
       const ct = it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined;
       const hb = it.kind === 'site' ? hubs?.sites[sites[Number(it.code)]?.name ?? '']?.air : undefined;
-      return [it.kind, it.code, shortLabel(it), pname(pc), ...(sc ? [sc.result.total[pc - 1]?.toFixed(1)] : []),
+      return [it.kind, it.code, shortLabel(it), statusName(it.status), it.note ?? '', pname(pc), ...(sc ? [sc.result.total[pc - 1]?.toFixed(1)] : []),
         ...(msc ? [mi >= 0 && msc ? msc.result.total[msc.indexOf(mc)]?.toFixed(1) : ''] : []),
         ...lm.map((m) => (mi >= 0 ? m.get(mi) : '')), ct?.pop30 ?? '', ct ? `${ct.icName ?? ''} ${ct.ic ?? ''}` : '', hb ? `${hb.n} ${hb.km}` : ''];
     });
@@ -159,6 +163,8 @@
     const groups: DossierTable['groups'] = [];
     groups.push({ title: tt('cmpBasics'), rows: [
       { label: tt('cmpKind'), cells: items.map((it) => shortKind(it)) },
+      { label: tt('status'), cells: items.map((it) => statusName(it.status)) },
+      ...(items.some((it) => it.note) ? [{ label: tt('note'), cells: items.map((it) => it.note ?? '–') }] : []),
       { label: L === 'ja' ? '都道府県' : 'Prefecture', cells: items.map((it) => pname(prefOf(it))) },
       { label: L === 'ja' ? '市区町村' : 'Municipality', cells: items.map((it) => (muniOf(it) ? muniLabel(muniOf(it)) : '–')) },
       ...(sc ? [row(`${tt('layerScore')}（${tt('byPref')}）`, items.map((it) => sc!.result.total[prefOf(it) - 1] ?? NaN), (v) => fmtNum(L, v, 0), 1)] : []),
@@ -239,15 +245,31 @@
         {#if alerts.length}<button type="button" class="linkish" onclick={() => { app.layer = 'now'; app.nmet = 'warn'; }}>{tt('layerNow')} →</button>{/if}
       </p>
     {/if}
+    {#if shortlist.items.some((it) => it.status === 'drop')}
+      <label class="chk small"><input type="checkbox" bind:checked={hideDropped} /> {tt('hideDropped')}</label>
+    {/if}
     <ul class="short">
-      {#each shortlist.items as it (it.kind + it.code)}
+      {#each shown as it (it.kind + it.code)}
         {@const al = shortAlert(it)}
-        <li>
+        {@const key = it.kind + it.code}
+        <li class="st-{it.status ?? 'cand'}">
           <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}
             {#if al.level >= 2}<span class="lv-chip" style:background={WARN_COLORS[app.dark ? 'dark' : 'light'][al.level - 1]} class:inv={al.level >= 3}
                                     title={al.text}>{nt?.levelName(al.level) ?? ''}</span>{/if}</button>
           <span class="kind">{shortKind(it)}</span>
           <button type="button" class="btn ghost x" aria-label={tt('remove')} onclick={() => shortlist.toggle(it.kind, it.code)}>×</button>
+          <div class="meta-row">
+            <select class="st" value={it.status ?? 'cand'} aria-label={`${tt('status')}: ${shortLabel(it)}`}
+                    onchange={(e) => shortlist.setStatus(it, e.currentTarget.value as Status)}>
+              {#each STATUSES as st (st)}<option value={st}>{statusName(st)}</option>{/each}
+            </select>
+            <button type="button" class="linkish note-btn" aria-expanded={noteOpen === key} onclick={() => (noteOpen = noteOpen === key ? null : key)}>
+              ✎ {it.note ? it.note.split('\n')[0].slice(0, 28) + (it.note.length > 28 ? '…' : '') : tt('addNote')}</button>
+          </div>
+          {#if noteOpen === key}
+            <textarea class="note" rows="3" placeholder={tt('notePlaceholder')} aria-label={`${tt('note')}: ${shortLabel(it)}`}
+                      value={it.note ?? ''} onchange={(e) => shortlist.setNote(it, e.currentTarget.value)}></textarea>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -265,5 +287,11 @@
 <style>
   .shared { border: 1px solid var(--line-strong); border-left: 3px solid var(--blue); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
   .shared p { margin: 0; }
+  .meta-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin: -2px 0 6px; }
+  .st { font-size: 12px; min-height: 26px; padding: 0 4px; border-radius: 4px; }
+  .note-btn { font-size: 12px; color: var(--ink-2); text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+  .note { grid-column: 1 / -1; width: 100%; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); margin-bottom: 8px; resize: vertical; }
+  li.st-drop :global(.linkish:first-child) { text-decoration: line-through; color: var(--muted); }
+  li.st-nego .st, li.st-survey .st { border-color: var(--blue); }
   .shared .acts { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
 </style>

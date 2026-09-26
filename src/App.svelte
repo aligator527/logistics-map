@@ -4,6 +4,7 @@
   import NowPanels from './panels/NowPanels.svelte';
   import LocalPanels from './panels/LocalPanels.svelte';
   import ScorePanels from './panels/ScorePanels.svelte';
+  import ScreenPanel from './panels/ScreenPanel.svelte';
   import FlowsPanels from './panels/FlowsPanels.svelte';
   import LabourPanels from './panels/LabourPanels.svelte';
   import ShortlistPanel from './panels/ShortlistPanel.svelte';
@@ -32,6 +33,7 @@
   import ExportMenu from './components/ExportMenu.svelte';
   import Tour from './components/Tour.svelte';
   import { measure, area as areaOf } from './lib/measure.svelte';
+  import { pins } from './lib/pins.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, shared, plotRing, type ShortItem } from './lib/shortlist.svelte';
@@ -165,15 +167,38 @@
     app.systemDark = mq.matches;
     const onmq = () => (app.systemDark = mq.matches);
     mq.addEventListener('change', onmq);
-    const onhash = () => { if (lists && location.hash.slice(1) !== app.toHash(lists)) app.fromHash(location.hash, lists); };
+    // back / forward, a link: the state follows the URL, and that is not a new step in the history
+    const onhash = () => { if (lists && location.hash.slice(1) !== app.toHash(lists)) { app.fromHash(location.hash, lists); lastSig = viewSig(); } };
     addEventListener('hashchange', onhash);
     return () => { mq.removeEventListener('change', onmq); removeEventListener('hashchange', onhash); };
   });
 
+  // history: choosing a place, a subject or a metric is a step back/forward can return to; moving the map and
+  // dragging sliders only update the current entry
+  let histIdx = $state(Number(history.state?.i) || 0);
+  let histMax = $state(Number(history.state?.max) || Number(history.state?.i) || 0);
+  let lastSig = '';
+  const viewSig = () => [app.layer, app.pref, app.muni, app.site, app.lmet, app.iso, app.compare, app.a, app.b, app.metric, app.slevel].join('|');
   $effect(() => {
     if (!lists) return;
-    const h = app.toHash(lists);
-    if (location.hash.slice(1) !== h) history.replaceState(null, '', h ? `#${h}` : location.pathname + location.search);
+    const h = app.toHash(lists), sig = viewSig();
+    const url = h ? `#${h}` : location.pathname + location.search;
+    untrack(() => {
+      if (location.hash.slice(1) !== h) {
+        if (lastSig && sig !== lastSig) { histIdx++; histMax = histIdx; history.pushState({ i: histIdx, max: histMax }, '', url); }
+        else history.replaceState({ i: histIdx, max: histMax }, '', url);
+      }
+    });
+    lastSig = sig;
+  });
+  onMount(() => {
+    // popstate comes before hashchange: take the URL's state now, so nothing writes the old one over it
+    const onpop = (e: PopStateEvent) => {
+      histIdx = Number(e.state?.i) || 0;
+      if (lists && location.hash.slice(1) !== app.toHash(lists)) { app.fromHash(location.hash, lists); lastSig = viewSig(); }
+    };
+    addEventListener('popstate', onpop);
+    return () => removeEventListener('popstate', onpop);
   });
   $effect(() => { document.documentElement.lang = L; document.title = `${tt('title')} · ${L === 'ja' ? 'Japan Logistics Map' : '総合物流マップ'}`; });
   // JMA live data: polled only while the live theme is open
@@ -370,7 +395,8 @@
   });
   const tabs = $derived.by(() => {
     const out: { key: SideTab; label: string; count?: number; alert?: boolean }[] = [{ key: 'overview', label: tt('tabOverview') }];
-    if (app.layer === 'local' && localLevel) out.push({ key: 'metrics', label: tt('tabMetrics') }, { key: 'calc', label: tt('tabCalc') });
+    if (app.layer === 'local' && localLevel) out.push({ key: 'screen', label: tt('tabScreen'), count: s.screened?.keep.size },
+      { key: 'metrics', label: tt('tabMetrics') }, { key: 'calc', label: tt('tabCalc') });
     if (app.layer === 'score') out.push({ key: 'metrics', label: tt('tabWeights') });
     out.push({ key: 'short', label: tt('tabShort'), count: shortlist.items.length, alert: shortAlerts > 0 });
     if (news) out.push({ key: 'news', label: tt('tabNews'), count: news.items.filter((it) => it.date >= freshCut).length || undefined });
@@ -389,7 +415,7 @@
     requestAnimationFrame(() => document.getElementById(`tab-${k}`)?.focus());
   }
   const readNum = (k: string, d: number) => { try { const v = Number(localStorage.getItem(k)); return v > 0 ? v : d; } catch { return d; } };
-  let sideW = $state(readNum('sideW', 420));
+  let sideW = $state(readNum('sideW', 460));
   let sideHidden = $state((() => { try { return localStorage.getItem('sideHidden') === '1'; } catch { return false; } })());
   const clampW = (w: number) => Math.round(Math.max(300, Math.min(760, w, innerWidth * 0.55)));
   $effect(() => { try { localStorage.setItem('sideW', String(sideW)); localStorage.setItem('sideHidden', sideHidden ? '1' : '0'); } catch { /* private mode */ } });
@@ -1051,6 +1077,10 @@
           <button type="button" class="linkish" onclick={clearFocus}>← {tt('backToJapan')}</button>
         {/if}
         {#if app.view === 'table'}<button type="button" class="btn" onclick={exportTable}>{tt('exportCsv')}</button>{/if}
+        <span class="hist" role="group" aria-label={tt('viewHistory')}>
+          <button type="button" class="btn ghost" aria-label={tt('histBack')} title={`${tt('histBack')} (Alt+←)`} disabled={histIdx <= 0} onclick={() => history.back()}>←</button>
+          <button type="button" class="btn ghost" aria-label={tt('histForward')} title={`${tt('histForward')} (Alt+→)`} disabled={histIdx >= histMax} onclick={() => history.forward()}>→</button>
+        </span>
         <ExportMenu />
         {#if sideHidden}
           <button type="button" class="btn show-side" onclick={() => (sideHidden = false)}>
@@ -1082,7 +1112,7 @@
           {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed} onpoint={onpointAny} {zoning}
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
-          showBld={app.showBld} showFude={app.showFude} {plots}
+          showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -1253,6 +1283,18 @@
 
         <NowPanels />
 
+        {#if app.layer === 'local' && lt && app.muni && lt.indexOf(app.muni) >= 0 && pins.keys.length}
+          {@const pm = pins.keys.map((k) => lt!.metrics.find((m) => m.key === k)).filter((m) => !!m)}
+          {@const i = lt.indexOf(app.muni)}
+          <section class="panel">
+            <p class="eyebrow">{tt('pinned')} · {muniLabel(app.muni)}</p>
+            <ul class="pinned">
+              {#each pm as m (m!.key)}
+                <li><button type="button" class="linkish" onclick={() => (app.lmet = m!.key)}>{m![L]}</button><strong class="tnum">{isFinite(m!.get(i)) ? m!.fmt(m!.get(i)) : '–'}</strong></li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
         <LocalPanels part="overview" />
 
         <ScorePanels part="overview" />
@@ -1290,6 +1332,8 @@
           </section>
         {/if}
         <GlossaryPanel />
+        {:else if tab === 'screen'}
+          <ScreenPanel />
         {:else if tab === 'metrics'}
           <LocalPanels part="metrics" />
           <ScorePanels part="metrics" />

@@ -18,6 +18,7 @@
   let needZone = $state(true);
   let avoidFlood = $state(true);
   let inPref = $state(false);
+  let onlyScreened = $state(false);
   let running = $state(false);
   let progress = $state(0);
   let result = $state.raw<SimResult | null>(null);
@@ -28,6 +29,7 @@
       if (needZone && !((m.zone[i] ?? 0) >= 20)) return false;
       if (avoidFlood && (m.hz_flood?.[i] ?? 0) >= 50) return false;
       if (inPref && app.pref && Number(muni!.codes[i].slice(0, 2)) !== app.pref) return false;
+      if (onlyScreened && s.screened && !s.screened.keep.has(muni!.codes[i])) return false;
       return (m.pop[i] ?? 0) > 0;
     });
   }
@@ -64,6 +66,7 @@
         <label class="chk"><input type="checkbox" bind:checked={needZone} /> {tt('simNeedZone')}</label>
         <label class="chk"><input type="checkbox" bind:checked={avoidFlood} /> {tt('simAvoidFlood')}</label>
         {#if app.pref}<label class="chk"><input type="checkbox" bind:checked={inPref} /> {tt('simInPref')}</label>{/if}
+        {#if s.screened}<label class="chk"><input type="checkbox" bind:checked={onlyScreened} /> {tt('screenOnly')}（{s.screened.keep.size}）</label>{/if}
         <p class="src">{tt('simCandidates')}: {count}</p>
         <button type="button" class="btn" onclick={run} disabled={running || !lt.router || !count}>
           {running ? `${tt('simRunning')} ${Math.round(progress * 100)}%` : !lt.router ? tt('loadingNetwork') : tt('simRun')}</button>

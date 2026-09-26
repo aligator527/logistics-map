@@ -2,6 +2,7 @@
   import TermText from './TermText.svelte';
   import type { LocalMetric } from '../themes/local.svelte';
   import { t, type Lang } from '../lib/i18n';
+  import { pins } from '../lib/pins.svelte';
 
   let { rows, lang, current, onmetric }: {
     rows: { m: LocalMetric; v: number; rank: number; n: number }[];
@@ -48,7 +49,7 @@
       <ul>
         {#each items as r (r.m.key)}
           {@const pos = r.rank && r.n ? 1 - (r.rank - 1) / Math.max(1, r.n - 1) : null}
-          <li>
+          <li class="li">
             <button type="button" class="row" aria-pressed={r.m.key === current} onclick={() => onmetric(r.m.key)}>
               <span class="nm"><TermText text={r.m[lang]} {lang} focusable={false} /></span>
               <span class="v tnum">{isFinite(r.v) ? r.m.fmt(r.v) : '–'}</span>
@@ -59,6 +60,8 @@
                 <span class="bar none" aria-hidden="true"></span><span class="rk"></span>
               {/if}
             </button>
+            <button type="button" class="pin" aria-pressed={pins.has(r.m.key)} title={t(lang, 'pinMetric')}
+                    aria-label={`${t(lang, 'pinMetric')}: ${r.m[lang]}`} onclick={() => pins.toggle(r.m.key)}>📌</button>
           </li>
         {/each}
       </ul>
@@ -80,6 +83,10 @@
     display: grid; grid-template-columns: 1fr auto 70px 64px; gap: 8px; align-items: center; font-size: 12.5px;
   }
   .row:hover { background: var(--surface-2); }
+  .li { display: flex; align-items: center; }
+  .pin { border: 0; background: none; cursor: pointer; font-size: 11px; min-width: 22px; min-height: 26px; opacity: 0.18; filter: grayscale(1); }
+  .li:hover .pin, .pin:focus-visible { opacity: 0.6; }
+  .pin[aria-pressed='true'] { opacity: 1; filter: none; }
   .row[aria-pressed='true'] { background: var(--accent-soft); }
   .v { font-weight: 600; text-align: right; }
   .bar { height: 6px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }

@@ -3,7 +3,7 @@
 
 import type { CensusIndex, Dpl, Jobs, Roads, Ssw, Warehouse } from './data';
 import type { GeoData, Shape } from './geo';
-import { app } from './state.svelte';
+import { app, type ScreenRule } from './state.svelte';
 import { prefName, t, type Key } from './i18n';
 import { fmtMinutes, fmtNum } from './scale';
 import { unproject } from './project';
@@ -85,6 +85,23 @@ class Store {
     : app.layer === 'score' ? (this.muniLevel ? this.msc : this.sc) : app.layer === 'local' ? this.lt : app.layer === 'now' ? this.nt : this.wh));
   /** the active score theme (prefecture or municipal) */
   readonly scv = $derived.by(() => (this.muniLevel ? this.msc : this.sc));
+
+  // ------------------------------------------------------------ screening (絞り込み)
+  /** each condition in turn: how many municipalities are left; `keep` = those passing all (null = no conditions) */
+  readonly screened = $derived.by(() => {
+    const lt = this.lt;
+    if (!lt || !this.localLevel || !app.screen.length) return null;
+    const byKey = new Map(lt.metrics.map((m) => [m.key, m]));
+    let left = lt.codes.map((_, i) => i);
+    const steps: { rule: ScreenRule; n: number; label: string }[] = [];
+    for (const r of app.screen) {
+      const m = byKey.get(r.key);
+      if (!m) continue;
+      left = left.filter((i) => { const v = m.get(i); return isFinite(v) && (r.op === 'ge' ? v >= r.v : v <= r.v); });
+      steps.push({ rule: r, n: left.length, label: m[app.lang] });
+    }
+    return { total: lt.codes.length, steps, keep: new Set(left.map((i) => lt.codes[i])), idx: left };
+  });
 
   // ------------------------------------------------------------ labels
   readonly names = $derived.by(() => (this.geo ? this.geo.prefs.map((p) => p.name) : []));

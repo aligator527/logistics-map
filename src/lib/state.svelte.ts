@@ -25,7 +25,9 @@ function store(key: string, v: string) {
   try { localStorage.setItem(key, v); } catch { /* private mode etc. */ }
 }
 
-export const SIDE_TABS = ['overview', 'metrics', 'calc', 'short', 'news'] as const;
+export const SIDE_TABS = ['overview', 'screen', 'metrics', 'calc', 'short', 'news'] as const;
+/** a screening condition: municipal metric ≥ / ≤ a value (in the metric's own units) */
+export interface ScreenRule { key: string; op: 'ge' | 'le'; v: number }
 export type SideTab = (typeof SIDE_TABS)[number];
 
 class AppState {
@@ -104,6 +106,8 @@ class AppState {
   showFac = $state(false);
   /** industrial zoning (用途地域) of the focused prefecture */
   showZone = $state(false);
+  /** screening conditions (市区町村) */
+  screen = $state<ScreenRule[]>([]);
   /** side panel tab */
   tab = $state<SideTab>('overview');
   /** buildings / land parcels at street level (on unless turned off) */
@@ -183,6 +187,7 @@ class AppState {
       if (this.iso) p.set('io', this.iso);
       if (this.igrid) p.set('ig', '1');
       if (!this.ferries) p.set('nf', '1');
+      if (this.screen.length) p.set('fx', this.screen.map((r) => `${r.key}.${r.op}.${+r.v.toPrecision(4)}`).join('~'));
     }
     if (this.layer === 'score') {
       if (this.slevel === 'muni') p.set('sl', 'muni');
@@ -208,7 +213,7 @@ class AppState {
     if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
     if (this.view !== 'map') p.set('v', this.view);
     if (this.mv) p.set('mv', this.mv);
-    return p.toString().replace(/%2F/g, '/');
+    return p.toString().replace(/%2F/g, '/').replace(/%7E/g, '~');
   }
 
   fromHash(hash: string, lists: HashLists) {
@@ -229,6 +234,8 @@ class AppState {
     this.iso = /^(muni:\d{5}|site:.{1,80}|pt:-?\d+(\.\d+)?,-?\d+(\.\d+)?,\d+|net:(dpl|short|sim))$/.test(io) ? io : '';
     this.igrid = p.get('ig') === '1';
     this.ferries = p.get('nf') !== '1';
+    this.screen = (p.get('fx') ?? '').split('~').map((s) => s.match(/^([A-Za-z0-9_]{1,20})\.(ge|le)\.(-?[\d.e+-]+)$/)).filter((m): m is RegExpMatchArray => !!m && isFinite(Number(m[3])))
+      .slice(0, 12).map((m) => ({ key: m[1], op: m[2] as 'ge' | 'le', v: Number(m[3]) }));
     // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"
     const sw = p.get('sw');
     this.weights = {};
