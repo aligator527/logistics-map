@@ -22,6 +22,7 @@
   --blue-soft: #d7e6f3;
   --clay: #a95d3a;            /* decrease (diverging scale) */
   --flow-all: #17191b;        /* freight flow arcs */
+  --hub: #2e5f6e;             /* airports, ports, rail freight (teal-slate, distinct from data blue and amber) */
   --flow-out: #17191b;
   --flow-in: #8a4a24;
   --land: #e2e2de;            /* no data */
@@ -55,6 +56,7 @@
     --blue: #57a8ee;
     --blue-soft: #1d3147;
     --clay: #c37552;
+    --hub: #8cc9d6;
     --flow-all: #eef0f2;
     --flow-out: #eef0f2;
     --flow-in: #f0a37a;
@@ -84,6 +86,7 @@
   --blue: #57a8ee;
   --blue-soft: #1d3147;
   --clay: #c37552;
+  --hub: #8cc9d6;
   --flow-all: #eef0f2;
   --flow-out: #eef0f2;
   --flow-in: #f0a37a;
@@ -171,6 +174,12 @@ a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; 
   border: 2px solid var(--sel-a); color: var(--ink); background: var(--surface);
 }
 .ab.b { border-style: dashed; border-color: var(--sel-b); }
+
+/* print: when the site memo is open, only the memo goes to paper */
+@media print {
+  #app:has(.dossier-root) > :not(.dossier-root) { display: none !important; }
+  body { background: #fff; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }

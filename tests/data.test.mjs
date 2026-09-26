@@ -94,6 +94,15 @@ test('risk + municipal indicators', () => {
   assert.ok(Object.keys(m.sites).length >= 100);
 });
 
+test('multimodal: airports and cargo (commercial-safe build has no ports / rail)', () => {
+  const m = load('data/multimodal.json');
+  const air = m.items.filter((x) => x.kind === 'air');
+  assert.ok(air.length >= 90);
+  assert.equal(air.find((x) => x.name === '成田国際空港').t, 2063350, 'Narita cargo 2025 (t)');
+  assert.equal(air.find((x) => x.name === '東京国際空港').t, 1218911, 'Haneda cargo 2025 (t)');
+  if (!m.noncommercial) assert.ok(m.items.every((x) => x.kind === 'air'), 'C02 / P31 are non-commercial sources');
+});
+
 test('news: headlines and links only', { skip: !existsSync(new URL('../public/data/news.json', import.meta.url)) }, () => {
   const n = load('data/news.json');
   for (const it of n.items) {

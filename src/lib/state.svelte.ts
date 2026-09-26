@@ -75,6 +75,8 @@ class AppState {
 
   showDpl = $state(true);
   showRoads = $state(true);
+  /** airports / ports / rail freight stations */
+  showHubs = $state(false);
   /** selected DPL site (index into dpl.sites) — -1 = none */
   site = $state(-1);
 
@@ -142,6 +144,7 @@ class AppState {
     if (this.compare) p.set('c', `${this.a}-${this.b}`);
     if (!this.showDpl) p.set('dpl', '0');
     if (!this.showRoads) p.set('rd', '0');
+    if (this.showHubs) p.set('hb', '1');
     if (this.view !== 'map') p.set('v', this.view);
     return p.toString();
   }
@@ -194,6 +197,7 @@ class AppState {
     this.b = code(b) === this.a ? 0 : code(b);
     this.showDpl = p.get('dpl') !== '0';
     this.showRoads = p.get('rd') !== '0';
+    this.showHubs = p.get('hb') === '1';
     this.view = p.get('v') === 'table' ? 'table' : 'map';
   }
 }

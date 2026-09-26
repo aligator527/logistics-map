@@ -10,11 +10,13 @@
   import Tooltip, { type Tip } from './Tooltip.svelte';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
+  /** freight hub (airport / port / rail station): r = marker radius in screen px */
+  export interface Poi { key: string; kind: 'air' | 'port' | 'rail'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip }
   /** flow arc between two anchors (viewBox units); w = stroke width in screen px */
   export interface Flow { key: string; o: [number, number]; d: [number, number]; w: number; kind: 'out' | 'in' | 'all'; tip: Tip }
 
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
-        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [],
+        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [],
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -39,6 +41,8 @@
     level?: 'pref' | 'muni';
     /** selected municipality (muni level) */
     selMuni?: string | null;
+    /** freight hubs (airports, ports, rail freight stations) */
+    pois?: Poi[];
     /** radius rings around a point (viewBox units), e.g. a DPL site's 10 / 30 / 60 km */
     rings?: { xy: [number, number]; r: number; label: string }[];
     prefTip: (code: string) => Tip;
@@ -192,7 +196,7 @@
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
   function target(e: Event) {
-    const el = (e.target as Element).closest?.('[data-code],[data-muni],[data-site],[data-joint],[data-flow]');
+    const el = (e.target as Element).closest?.('[data-code],[data-muni],[data-site],[data-joint],[data-flow],[data-poi]');
     if (!el) return null;
     return {
       code: el.getAttribute('data-code'),
@@ -200,11 +204,13 @@
       site: el.hasAttribute('data-site') ? Number(el.getAttribute('data-site')) : null,
       joint: el.hasAttribute('data-joint') ? Number(el.getAttribute('data-joint')) : null,
       flow: el.hasAttribute('data-flow') ? Number(el.getAttribute('data-flow')) : null,
+      poi: el.hasAttribute('data-poi') ? Number(el.getAttribute('data-poi')) : null,
     };
   }
   function tipFor(tg: NonNullable<ReturnType<typeof target>>): { tip: Tip; code?: string; muni?: string } | null {
     if (tg.site !== null) return { tip: siteTip(tg.site) };
     if (tg.flow !== null) return flows[tg.flow] ? { tip: flows[tg.flow].tip } : null;
+    if (tg.poi !== null) return pois[tg.poi] ? { tip: pois[tg.poi].tip } : null;
     if (tg.joint !== null) {
       const j = joints[tg.joint];
       return j ? { tip: { title: j.n, sub: t(lang, j.k) } } : null;
@@ -232,6 +238,7 @@
     if (!tg) { pinned = null; if (!compare) onclear(); return; }
     if (tg.site !== null) { onsite(tg.site); pinned = touch ? siteTip(tg.site) : null; return; }
     if (tg.flow !== null) { pinned = touch && flows[tg.flow] ? flows[tg.flow].tip : null; return; }
+    if (tg.poi !== null) { pinned = touch && pois[tg.poi] ? pois[tg.poi].tip : null; return; }
     if (tg.joint !== null) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
     if (tg.muni) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
     if (tg.code) { onpick(tg.code); pinned = touch ? prefTip(tg.code) : null; }
@@ -266,7 +273,7 @@
     if (hover.muni) return focusMunis.find((m) => m.code === hover!.muni) ?? null;
     return hover.code ? shapeOf(hover.code) : null;
   });
-  const selMuniShape = $derived(level === 'muni' && selMuni ? muniByCode.get(selMuni) ?? null : null);
+  const selMuniShape = $derived(selMuni ? muniByCode.get(selMuni) ?? null : null);
 </script>
 
 <div class="map" bind:this={wrap}>
@@ -370,6 +377,23 @@
         {#if j.k === 'jct'}<rect class="jm" x="-3.2" y="-3.2" width="6.4" height="6.4" transform="rotate(45)" />
         {:else}<rect class="jm" x="-3" y="-3" width="6" height="6" rx="1" />{/if}
         {#if labelled.has(`j${j.id}`)}<text x="7" dy="0.35em">{j.n}</text>{/if}
+      </g>
+    {/each}
+    {#each pois as h, hi (h.key)}
+      {@const [x, y] = transform.apply(h.xy)}
+      <g class="poi {h.kind}" transform="translate({x},{y}) scale({px})" data-poi={hi}>
+        <circle class="hit" r={Math.max(9, h.r + 3)} />
+        {#if h.kind === 'air'}
+          <circle class="pm" r={h.r} />
+          <path class="glyph" transform="scale({h.r / 6})" d="M0-4.2 0.9-1.2 4.2 0.6 4.2 1.5 0.9 0.6 0.6 3 1.8 3.9 1.8 4.5 0 3.9-1.8 4.5-1.8 3.9-0.6 3-0.9 0.6-4.2 1.5-4.2 0.6-0.9-1.2Z" />
+        {:else if h.kind === 'port'}
+          <rect class="pm" x={-h.r} y={-h.r} width={h.r * 2} height={h.r * 2} rx={h.r * 0.35} />
+          <path class="glyph line" transform="scale({h.r / 6})" d="M0-3.6V3.6M-2.4-1.4H2.4M-3.4 1.4Q0 4.8 3.4 1.4" />
+        {:else}
+          <rect class="pm" x={-h.r} y={-h.r * 0.7} width={h.r * 2} height={h.r * 1.4} rx="1.5" />
+          <path class="glyph line" transform="scale({h.r / 6})" d="M-3.6 0H3.6" />
+        {/if}
+        {#if h.major && transform.k >= 2.5}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
       </g>
     {/each}
     {#each rings as g (g.label)}
@@ -487,6 +511,11 @@
   .site.muted { opacity: 0.35; }
   .site.sel .dot, .site.sel .ring-out { stroke: var(--accent); stroke-width: 3; }
   .site:hover .dot, .site:hover .ring-out { stroke-width: 2.4; }
+  .poi .pm { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
+  .poi .glyph { fill: var(--hub); }
+  .poi .glyph.line { fill: none; stroke: var(--hub); stroke-width: 1.3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+  .poi:hover .pm { stroke-width: 2.6; }
+  .poi text { font-weight: 500; font-size: 11px; fill: var(--hub); }
   .ring { fill: var(--mark); fill-opacity: 0.05; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
   .ring-label { font-size: 11px; font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
   .flow { cursor: pointer; }

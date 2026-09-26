@@ -2,7 +2,7 @@
   import type { Classes } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
 
-  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, highlight = $bindable(null) }: {
+  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, hubs = [], highlight = $bindable(null) }: {
     classes: Classes;
     lang: Lang;
     title: string;
@@ -14,6 +14,8 @@
     compare: boolean;
     /** flow arcs on the map: out/in of a prefecture, or the largest flows */
     flows?: 'focus' | 'all' | null;
+    /** kinds of freight hubs on the map */
+    hubs?: ('air' | 'port' | 'rail')[];
     highlight?: number | null;
   } = $props();
   function range(i: number): string {
@@ -66,6 +68,10 @@
       <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" class="k-road k-urban" /></svg>{t(lang, 'urban')}</li>
       <li><svg width="12" height="12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" rx="1" class="k-ic" /></svg>{t(lang, 'ic')}</li>
     {/if}
+    {#if hubs.includes('air')}<li><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" class="k-hub" /></svg>{t(lang, 'hubAir')}</li>{/if}
+    {#if hubs.includes('port')}<li><svg width="14" height="14" aria-hidden="true"><rect x="1.5" y="1.5" width="11" height="11" rx="3" class="k-hub" /></svg>{t(lang, 'hubPort')}</li>{/if}
+    {#if hubs.includes('rail')}<li><svg width="14" height="12" aria-hidden="true"><rect x="1.5" y="2.5" width="11" height="7" rx="1.5" class="k-hub" /></svg>{t(lang, 'hubRail')}</li>{/if}
+    {#if hubs.length}<li class="muted">{t(lang, 'hubSizeNote')}</li>{/if}
     {#if compare}
       <li><span class="ab">A</span><span class="ab b">B</span>{t(lang, 'compare')}</li>
     {/if}
@@ -92,6 +98,8 @@
   .k-head { fill: var(--flow-all); }
   .k-flow.out { stroke: var(--flow-out); } .k-head.out { fill: var(--flow-out); }
   .k-flow.in { stroke: var(--flow-in); } .k-head.in { fill: var(--flow-in); }
+  .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
+  .muted { color: var(--muted); }
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.5; }
   .k-pipe-o { fill: var(--surface); stroke: var(--mark-ring); stroke-width: 1.1; }
   .k-pipe-i { fill: none; stroke: var(--mark); stroke-width: 2; }

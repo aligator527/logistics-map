@@ -12,7 +12,7 @@
   import { PRESETS, ScoreTheme, type ExtraCriteria, type PrefStats } from './themes/score.svelte';
   import { MUNI_PRESETS, MuniScoreTheme } from './themes/muniscore.svelte';
   import { pad2, type Ctx, type ThemeView } from './themes/types';
-  import MapView, { type Marker } from './components/MapView.svelte';
+  import MapView, { type Marker, type Poi } from './components/MapView.svelte';
   import Legend from './components/Legend.svelte';
   import TimeControl from './components/TimeControl.svelte';
   import Trend from './components/Trend.svelte';
@@ -24,6 +24,8 @@
   import ScoreBreakdown from './components/ScoreBreakdown.svelte';
   import NewsFeed, { type News } from './components/NewsFeed.svelte';
   import SiteCard, { type Catchment } from './components/SiteCard.svelte';
+  import PlaceSearch, { type Place } from './components/PlaceSearch.svelte';
+  import Dossier, { type DossierSection } from './components/Dossier.svelte';
   import Segmented from './components/Segmented.svelte';
   import type { Tip } from './components/Tooltip.svelte';
 
@@ -44,6 +46,9 @@
   let ssw = $state.raw<Ssw | null>(null);
   let jobs = $state.raw<Jobs | null>(null);
   let news = $state.raw<News | null>(null);
+  /** airports (+ ports / rail freight stations in a non-commercial build) */
+  let hubs = $state.raw<{ noncommercial: boolean; items: { kind: 'air' | 'port' | 'rail'; name: string; cls: string; t: number | null; intl?: number | null; teu?: number | null; p: [number, number] }[];
+    sites: Record<string, { air: { n: string; km: number } | null; port?: { n: string; km: number } }>; sources: Record<string, { ja: string; en: string; url: string }> } | null>(null);
   /** municipal indicators + DPL catchments (public/data/muni.json) */
   let muni = $state.raw<MuniData | null>(null);
   let risk = $state.raw<{ sites: Record<string, { quake: number | null; flood: number; surge: number }>; depthLegend: { rank: number; ja: string; en: string }[] } | null>(null);
@@ -121,6 +126,7 @@
         // the hash may carry municipal weights that were not known at boot
         app.fromHash(location.hash, lists!);
       }).catch((e) => console.warn('muni', e));
+      fetch(`${import.meta.env.BASE_URL}data/multimodal.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (hubs = d)).catch(() => {});
       fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (news = n)).catch(() => {});
     } catch (e) {
       error = String(e);
@@ -168,6 +174,32 @@
       .sort((x, y) => Number(x.built) - Number(y.built) || (x.i === app.site ? 1 : 0) - (y.i === app.site ? 1 : 0));
   });
   const roadLayer = $derived(geo && roads ? roadPaths(geo, roads) : null);
+  const pois = $derived.by((): Poi[] => {
+    if (!geo || !hubs || !app.showHubs) return [];
+    const maxT = { air: 0, port: 0, rail: 1 };
+    for (const h of hubs.items) if (h.t && h.t > maxT[h.kind]) maxT[h.kind] = h.t;
+    const label = { air: tt('hubAir'), port: tt('hubPort'), rail: tt('hubRail') };
+    return hubs.items.map((h, i) => {
+      const r = h.kind === 'rail' ? 4 : 4 + 7 * Math.sqrt((h.t ?? 0) / (maxT[h.kind] || 1));
+      const rows: [string, string][] = [];
+      if (h.t) rows.push([tt('cargoTons'), `${fmtCompact(L, h.t)}${L === 'ja' ? 'トン' : ' t'}`]);
+      if (h.intl && h.t) rows.push([tt('intlShare'), fmtPct(L, (h.intl / h.t) * 100, 0)]);
+      if (h.teu) rows.push([tt('teu'), fmtCompact(L, h.teu)]);
+      const src = hubs!.sources[h.kind];
+      return { key: `${h.kind}${i}`, kind: h.kind, xy: geo!.P(h.p), r, label: h.name, major: (h.t ?? 0) > (h.kind === 'air' ? 50_000 : 30_000_000),
+               tip: { title: h.name, sub: `${label[h.kind]} · ${h.cls}`, rows, source: src ? src[L] : undefined } };
+    }).sort((a, b) => a.r - b.r);
+  });
+
+  /** nearest cargo airport / major port of a DPL site */
+  function hubRows(name: string): [string, string][] {
+    const hb = hubs?.sites[name];
+    const out: [string, string][] = [];
+    if (hb?.air) out.push([tt('nearestAir'), `${hb.air.n} ${fmtNum(L, hb.air.km, 0)} km`]);
+    if (hb?.port) out.push([tt('nearestPort'), `${hb.port.n} ${fmtNum(L, hb.port.km, 0)} km`]);
+    return out;
+  }
+
   /** 10 / 30 / 60 km around the selected DPL site */
   const rings = $derived.by(() => {
     if (!geo || app.site < 0 || !sites[app.site] || !app.showDpl) return [];
@@ -208,6 +240,7 @@
       if (ct.pop30 !== null) rows.push([tt('pop30'), `${fmtCompact(L, ct.pop30)}${L === 'ja' ? '人' : ''}`]);
       if (ct.ic !== null) rows.push([tt('nearestIc'), `${ct.icName ?? ''} ${fmtNum(L, ct.ic, 1)} km`]);
     }
+    rows.push(...hubRows(s.name));
     const hz = risk?.sites[s.name];
     const depth = (r: number) => (r ? risk!.depthLegend.find((d) => d.rank === r)?.[L] ?? '–' : tt('hzNone'));
     if (hz) {
@@ -228,12 +261,120 @@
   function onpick(code: string) {
     app.site = -1;
     if (code.length === 5) { app.muni = app.muni === code ? '' : code; app.pref = Number(code.slice(0, 2)); return; }
+    app.muni = '';
     app.pick(Number(code));
   }
   function onsite(i: number) {
     app.site = app.site === i ? -1 : i;
     if (app.site >= 0 && !app.compare && sites[i].pref !== app.pref) app.pref = sites[i].pref;
   }
+  const places = $derived.by((): Place[] => {
+    if (!geo) return [];
+    const prefs = geo.prefs.map((p) => ({ key: p.code, name: L === 'ja' ? p.name : pname(Number(p.code)), alt: L === 'ja' ? pname(Number(p.code)) : p.name, parent: '', kind: 'pref' as const }));
+    const ms = geo.munis.map((m) => ({ key: m.code, name: L === 'ja' ? m.name : m.nameEn || m.name, alt: L === 'ja' ? m.nameEn : m.name,
+                                      parent: pname(Number(m.code.slice(0, 2))), kind: 'muni' as const }));
+    const ss = sites.map((s, i) => ({ key: String(i), name: s.name, alt: s.address, parent: pname(s.pref), kind: 'site' as const }));
+    return [...prefs, ...ms, ...ss];
+  });
+  function onplace(p: Place) {
+    if (p.kind === 'pref') { app.stopCompare(); app.muni = ''; app.site = -1; app.pref = Number(p.key); return; }
+    if (p.kind === 'site') { app.stopCompare(); const i = Number(p.key); app.site = i; app.pref = sites[i].pref; return; }
+    // municipality: its prefecture; in the municipal score also the municipality itself
+    app.stopCompare();
+    app.site = -1;
+    app.pref = Number(p.key.slice(0, 2));
+    app.muni = p.key;
+  }
+
+  // ------------------------------------------------------------ site memo (dossier)
+  let dossierOpen = $state(false);
+  function openDossier() { fl?.load(); dossierOpen = true; }
+  const rankIn = (arr: number[], i: number, desc = true) => {
+    const v = arr[i];
+    if (!isFinite(v)) return '';
+    const better = arr.filter((x) => isFinite(x) && (desc ? x > v : x < v)).length;
+    return L === 'ja' ? `（${better + 1}位/${arr.filter(isFinite).length}）` : ` (#${better + 1} of ${arr.filter(isFinite).length})`;
+  };
+  const dossier = $derived.by((): { title: string; sections: DossierSection[]; sources: string[] } | null => {
+    if (!dossierOpen || !w || !wh || !fl || !lb || !sc || !jobs || !ssw || !census || !app.pref) return null;
+    const p = app.pref, i = p - 1;
+    const q = w.quarters.length - 1;
+    const sections: DossierSection[] = [];
+    // warehouses
+    sections.push({ title: `${tt('layerWarehouse')} · ${L === 'ja' ? w.quarters[q].ja : w.quarters[q].en}`, rows: METRICS.map((m) => {
+      const all = Array.from({ length: 47 }, (_, k) => valueOf(w!, m, q, k));
+      return [tt(`m_${m}`), `${fmtValue(L, m, valueOf(w!, m, q, i))}${rankIn(all, i)} · ${tt('yoy')} ${fmtYoy(L, m, yoyOf(w!, m, q, i))}`] as [string, string];
+    }) });
+    // freight flows (latest round, annual)
+    const ly = census.years.at(-1)!.year;
+    const M = fl.data.get(ly)?.annual.all;
+    if (M) {
+      const tot = FlowsTheme.totals(M);
+      sections.push({ title: `${tt('layerFlows')} · ${census.years.at(-1)!.survey[L]}（${tt('basisAnnual')}）`,
+        rows: FLOW_METRICS.map((m) => [tt(`fm_${m}`), m === 'net' ? fl!.signedTons(tot.net[i]) : fl!.tons(tot[m][i])] as [string, string]),
+        list: [
+          ...fl.partners(p, 'out', 5, M).map((x) => ({ label: `→ ${pname(x.code)}`, value: `${fl!.tons(x.v)} (${fmtPct(L, x.share, 0)})` })),
+          ...fl.partners(p, 'in', 5, M).map((x) => ({ label: `← ${pname(x.code)}`, value: `${fl!.tons(x.v)} (${fmtPct(L, x.share, 0)})` })),
+        ] });
+    }
+    // labour
+    const jp = jobs.periods.length - 1, sp = ssw.periods.length - 1;
+    sections.push({ title: `${tt('layerLabour')} · ${jobs.periods[jp][L]} / ${ssw.periods[sp][L]}`, rows: [
+      [`${tt('jobsRatio')} · ${jobs.occupations[0][L]}`, `${fmtNum(L, jobs.ratio.driver[jp][i], 2)}${rankIn(jobs.ratio.driver[jp], i, false)}`],
+      [`${tt('jobsRatio')} · ${jobs.occupations[1][L]}`, `${fmtNum(L, jobs.ratio.handling[jp][i], 2)}${rankIn(jobs.ratio.handling[jp], i, false)}`],
+      [`${tt('ssw1')} · ${lb.fieldLabel('total')}`, lb.fmtPeople(lb.ssw1(p, sp, 'total'))],
+      [`${tt('ssw1')} · ${lb.fieldLabel('transport')}`, lb.fmtPeople(lb.ssw1(p, sp, 'transport'))],
+      ...(lb.region(p) ? [[tt('shortfall2024'), `${fmtPct(L, lb.region(p)!.pct)}（${lb.region(p)![L]}）`] as [string, string]] : []),
+    ], note: tt('jobsHint') });
+    // prefecture score with the current weights
+    const presetName = (app.preset ? PRESETS.find((x) => x.key === app.preset)?.[L] : tt('custom')) ?? '';
+    const st = sc.strengths(p);
+    sections.push({ title: `${tt('layerScore')}（${tt('byPref')} · ${presetName}）`, rows: [
+      [tt('layerScore'), `${sc.fmt(sc.result.total[i])}${rankIn(sc.result.total, i)}`],
+      ...st.slice(0, 3).map((x) => [`＋ ${x.c[L]}`, `${x.c.fmt(x.c.raw[i])} · ${fmtNum(L, x.p, 0)}`] as [string, string]),
+      ...st.slice(-2).map((x) => [`− ${x.c[L]}`, `${x.c.fmt(x.c.raw[i])} · ${fmtNum(L, x.p, 0)}`] as [string, string]),
+    ] });
+    // municipality
+    if (app.muni && msc && muni) {
+      const mi = msc.indexOf(app.muni);
+      if (mi >= 0) {
+        const mm = muni.m;
+        const num = (v: number | null | undefined) => (v === null || v === undefined ? NaN : v);
+        sections.push({ title: `${muniLabel(app.muni)}`, rows: [
+          [`${tt('layerScore')}（${tt('byMuni')}）`, `${msc.fmt(msc.result.total[mi])}${rankIn(msc.result.total, mi)}`],
+          [tt('pop30'), `${fmtCompact(L, num(mm.pop30[mi]))}${L === 'ja' ? '人' : ''}`],
+          [tt('pop60'), `${fmtCompact(L, num(mm.pop60[mi]))}${L === 'ja' ? '人' : ''}`],
+          [tt('nearestIc'), `${mm.icName[mi] ?? ''} ${fmtNum(L, num(mm.ic[mi]), 1)} km`],
+          [tt('landPref'), `${fmtCompact(L, num(mm.land[mi]))}${L === 'ja' ? '円/㎡' : ' ¥/m²'}${mm.landEst[mi] ? ' *' : ''}`],
+          [L === 'ja' ? '工業系用途地域' : 'Industrial zoning', `${fmtCompact(L, num(mm.zone[mi]))} ha`],
+          [tt('pool30'), `${fmtCompact(L, num(mm.pool30[mi]))}${L === 'ja' ? '人' : ''}`],
+          [tt('cluster20'), `${fmtCompact(L, num(mm.cluster20[mi]))}${L === 'ja' ? '人' : ''}`],
+          [tt('hzQuake'), `${fmtNum(L, num(mm.quake[mi]), 0)}%`],
+        ], note: mm.landEst[mi] ? tt(mm.landEst[mi] === 1 ? 'landEst15' : 'landEstPref') : undefined });
+      }
+    }
+    // hazards (prefecture)
+    const rc = (risk as unknown as { criteria?: ExtraCriteria[] } | null)?.criteria ?? [];
+    if (rc.length) sections.push({ title: tt('groupRisk'), rows: rc.map((c) => [c[L], `${fmtNum(L, c.raw[i], c.digits)}${c.unit[L]}${rankIn(c.raw, i, false)}`] as [string, string]),
+      note: L === 'ja' ? '順位は低リスク順' : 'Rank: lowest risk first' });
+    // DPL sites
+    const list = sitesIn(p);
+    if (list.length) sections.push({ title: `${tt('dplIn')}（${list.length}）`, list: list.slice(0, 20).map(([, s]) => {
+      const ct = muni?.sites[s.name];
+      return { label: s.name, href: s.url ?? undefined,
+               value: [tt(`st_${s.status}`), fmtYm(L, s.date), ct?.pop30 ? `${tt('pop30')} ${fmtCompact(L, ct.pop30)}` : '', ct?.ic != null ? `IC ${fmtNum(L, ct.ic, 1)} km` : ''].filter(Boolean).join(' · ') };
+    }) });
+    // news
+    const nn = (news?.items ?? []).filter((it) => it.prefs.includes(p)).slice(0, 6);
+    if (nn.length) sections.push({ title: tt('news'), list: nn.map((it) => ({ label: it.t, href: it.link, value: it.date })) });
+    const sources = [
+      `${w.source[L]}`, `${census.source[L]}`, `${jobs.source[L]}`, `${ssw.source[L]}`,
+      ...(dpl ? [dpl.source[L]] : []), ...rc.map((c) => c.source[L]),
+      ...(muni ? Object.values(muni.sources).map((s) => s[L]) : []),
+    ];
+    return { title: `${pname(p)}${app.muni && muniShape.get(app.muni) ? ` · ${L === 'ja' ? muniShape.get(app.muni)!.name : muniShape.get(app.muni)!.nameEn}` : ''}`, sections, sources: [...new Set(sources)] };
+  });
+
   function clearFocus() {
     app.pref = 0;
     app.site = -1;
@@ -406,6 +547,11 @@
         <button type="button" class="btn chip" aria-pressed={app.showRoads} onclick={() => (app.showRoads = !app.showRoads)}>
           <svg width="16" height="10" aria-hidden="true"><path d="M1 5h14" stroke="currentColor" stroke-width="2" /></svg>{tt('layerRoads')}
         </button>
+        {#if hubs}
+          <button type="button" class="btn chip" aria-pressed={app.showHubs} onclick={() => (app.showHubs = !app.showHubs)}>
+            <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="3" class="k-hub" /></svg>{tt('layerHubs')}
+          </button>
+        {/if}
         <button type="button" class="btn chip" aria-pressed={app.compare} disabled={muniLevel}
                 onclick={() => (app.compare ? app.stopCompare() : app.startCompare())}>
           <span class="ab" aria-hidden="true">A</span><span class="ab b" aria-hidden="true">B</span>{tt('compare')}
@@ -423,6 +569,7 @@
         {#if app.pref && !app.compare}
           <button type="button" class="linkish" onclick={clearFocus}>← {tt('backToJapan')}</button>
         {/if}
+        <div class="search-slot"><PlaceSearch {places} lang={L} onpick={onplace} /></div>
         {#if app.layer === 'flows' && fl.loading}<span class="small" role="status">{tt('loadingFlows')}</span>{/if}
       </div>
 
@@ -430,12 +577,12 @@
         <MapView
           bind:this={mapView}
           {geo} values={view.values} classes={view.classes} lang={L} {highlight}
-          level={muniLevel ? 'muni' : 'pref'} selMuni={muniLevel ? app.muni || null : null}
+          level={muniLevel ? 'muni' : 'pref'} selMuni={app.muni && !app.compare ? app.muni : null}
           focus={app.pref ? pad2(app.pref) : null}
           compare={app.compare} a={app.a} b={app.b}
           {markers} site={app.site}
           roads={roadLayer} showRoads={app.showRoads}
-          flows={view.flows} {rings} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
+          flows={view.flows} {rings} {pois} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
           prefTip={view.prefTip} {muniTip} {siteTip}
           {onpick} onclear={clearFocus} {onsite}
         />
@@ -454,7 +601,8 @@
       <div class="below">
         <Legend classes={view.classes} lang={L} title={view.legend.title} fmt={view.legend.fmt} hint={view.legend.hint}
                 flows={app.view === 'map' ? view.legend.flows : null}
-                showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare} bind:highlight />
+                showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare}
+                hubs={app.showHubs && hubs ? [...new Set(hubs.items.map((h) => h.kind))] : []} bind:highlight />
         {#if app.layer === 'flows' && view.flows.length}
           <p class="src">{!app.pref && !app.compare ? `${tt(app.near ? 'arcsNationalNear' : 'arcsNational')}${L === 'ja' ? '。' : '. '}` : ''}{tt('flowArcNote')}</p>
         {/if}
@@ -513,6 +661,7 @@
           {:else if app.layer === 'score'}<p class="help">{tt(muniLevel ? 'muniScoreHint' : 'scoreHint')}</p>
           {:else}<p class="help">{app.lmetric === 'jobs' ? jobs.source.note[L] : ssw.source.note[L]}</p>{/if}
           {/if}
+          {#if p}<p class="memo"><button type="button" class="btn" onclick={openDossier}>{tt('makeDossier')}</button></p>{/if}
         </section>
 
         {#if app.layer === 'warehouse' && p}
@@ -621,7 +770,8 @@
 
         {#if app.site >= 0 && sites[app.site] && muni?.sites[sites[app.site].name]}
           <section class="panel">
-            <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L} />
+            <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L}
+                      extra={hubRows(sites[app.site].name)} />
           </section>
         {/if}
         {#if p && (app.layer === 'warehouse' || app.showDpl)}
@@ -687,6 +837,9 @@
     </dl>
     <p class="next">{tt('phaseNext')}</p>
   </footer>
+  {#if dossierOpen && dossier}
+    <Dossier title={dossier.title} subtitle={tt('dossierSub')} sections={dossier.sections} sources={dossier.sources} lang={L} onclose={() => (dossierOpen = false)} />
+  {/if}
 {/if}
 
 <style>
@@ -730,6 +883,7 @@
   .chip:disabled { opacity: 0.4; cursor: not-allowed; }
   .chip[aria-pressed='true'] .ab { background: var(--bg); }
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
+  .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
 
   .grid {
     display: grid; gap: 24px 32px;
@@ -737,7 +891,9 @@
     padding: 16px clamp(16px, 3vw, 32px) 24px;
   }
   .mapcol { min-width: 0; display: grid; gap: 10px; align-content: start; }
-  .viewbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .viewbar { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; }
+  .search-slot { margin-left: auto; flex: 0 1 300px; }
+  @media (max-width: 720px) { .search-slot { flex-basis: 100%; margin-left: 0; } }
   .below { display: grid; gap: 8px; }
   .src { margin: 0; font-size: 11.5px; color: var(--muted); }
   .src a { color: var(--muted); }
@@ -751,6 +907,7 @@
   .help { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
   .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .head-row .eyebrow { margin-bottom: 10px; }
+  .memo { margin: 12px 0 0; }
   .note-card { border: 1px solid var(--line); border-left: 3px solid var(--mark); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); font-size: 13px; }
   .note-card p { margin: 0; }
   .note-card p + p { margin-top: 8px; color: var(--ink-2); }

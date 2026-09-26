@@ -11,12 +11,14 @@
   import { fmtCompact, fmtNum } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
 
-  let { name, c, median, lang }: {
+  let { name, c, median, lang, extra = [] }: {
     name: string;
     c: Catchment;
     /** median over all listed DPL sites */
     median: Record<string, number | null>;
     lang: Lang;
+    /** rows without a DPL median (e.g. nearest airport / port) */
+    extra?: [string, string][];
   } = $props();
 
   const people = (v: number) => `${fmtCompact(lang, v)}${lang === 'ja' ? '人' : ''}`;
@@ -55,6 +57,9 @@
           <td class="num tnum">{r.v === null ? '–' : r.f(r.v)}</td>
           <td class="num tnum muted">{median[r.key] == null ? '–' : r.f(median[r.key]!)}</td>
         </tr>
+      {/each}
+      {#each extra as [k, v] (k)}
+        <tr><th scope="row">{k}</th><td class="num tnum" colspan="2">{v}</td></tr>
       {/each}
     </tbody>
   </table>
