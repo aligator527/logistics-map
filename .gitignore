@@ -7,3 +7,6 @@ data/raw/
 data/geo/
 test-results/
 playwright-report/
+# throwaway browser profiles from Lighthouse runs under WSL (created with a Windows path as a folder name)
+C:*
+lighthouse.*
