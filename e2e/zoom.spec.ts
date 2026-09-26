@@ -185,7 +185,10 @@ test('split view: a second map, zoomed together', async ({ page }, info) => {
   await expect(page.locator('.mapwrap.split .map-b svg[role="application"]')).toBeAttached();
   await page.getByRole('button', { name: '拡大' }).first().click();
   await expect(page).toHaveURL(/mv=9\.8\//);
-  const tr = await page.evaluate(() => [...document.querySelectorAll('.mapwrap svg[role="application"] > g')].map((g) => g.getAttribute('transform')));
-  expect(tr[0]).toBe(tr[1]);
+  // the right map follows the left one's view (after its own short animation)
+  await expect.poll(() => page.evaluate(() => {
+    const [a, b] = [...document.querySelectorAll('.mapwrap svg[role="application"] > g')].map((g) => g.getAttribute('transform'));
+    return a === b;
+  }), { timeout: 5000 }).toBe(true);
   expect(errors).toEqual([]);
 });

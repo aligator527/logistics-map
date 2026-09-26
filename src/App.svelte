@@ -493,6 +493,8 @@
   const split = $derived(app.view === 'map' && app.layer === 'local' && !!lt && !!app.lk2 && mapW >= 700);
   const splitView = $derived(split && lt ? lt.viewOf(app.lk2) : null);
   const newsCards = $derived(mapW >= 640 && !split);
+  /** the exact view shared by the two maps of the split view */
+  let syncT = $state.raw<{ k: number; x: number; y: number } | null>(null);
   /** group key of a news item: its first municipality, else prefecture, else national */
   const newsKeyOf = (it: NewsItem) => (it.munis.length ? `m${it.munis[0]}` : it.prefs.length ? `p${pad2(it.prefs[0])}` : 'jp');
   /** news of the last 90 days grouped by place (an item naming two places is shown at both) */
@@ -1163,6 +1165,7 @@
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
           showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
+          syncT={split ? syncT : null} onsync={(v) => { if (split) syncT = v; }}
         />
         {#if split}<p class="split-cap">{view.legend.title}</p>{/if}
         </div>
@@ -1175,7 +1178,7 @@
               prefTip={view.prefTip} muniTip={(sh) => ({ title: muniLabel(sh.code), big: splitView.metric.fmt(splitView.values.get(sh.code) ?? NaN), sub: splitView.metric[L] })} {siteTip}
               {onpick} onclear={clearFocus} {onsite}
               tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
-              mv={app.mv} onmv={(v) => (app.mv = v)}
+              {syncT} onsync={(v) => (syncT = v)} follower
               showBld={app.showBld} showFude={false} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
             />
             <div class="split-cap">

@@ -38,7 +38,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
-        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [], keep = null, bcp = null,
+        zoomZ = $bindable(0), mv = '', onmv, syncT = null, onsync, follower = false, showBld = true, showFude = true, plots = [], keep = null, bcp = null,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -114,6 +114,11 @@
     /** buildings (国土地理院 vector tiles) from z15, land parcels (登記所備付地図) from z16 */
     showBld?: boolean;
     showFude?: boolean;
+    /** side-by-side maps: the other map's exact transform, and this one's while it moves */
+    syncT?: { k: number; x: number; y: number } | null;
+    onsync?: (t: { k: number; x: number; y: number }) => void;
+    /** the second map of a pair: never frames itself, passes on only the user's own moves */
+    follower?: boolean;
     /** 緊急輸送道路 (e1–e3) and 重要物流道路 (l1, l2 alternatives): SVG paths in viewBox units */
     bcp?: { e1: string; e2: string; e3: string; l1: string; l2: string } | null;
     /** screening: only these municipalities stay in colour (null = all) */
@@ -196,7 +201,7 @@
         return !(e as MouseEvent).button;
       })
       .on('start', () => { moving = true; })
-      .on('zoom', (e) => { transform = e.transform; hover = null; })
+      .on('zoom', (e) => { transform = e.transform; hover = null; if (!applyingSync && (!follower || e.sourceEvent)) onsync?.({ k: e.transform.k, x: e.transform.x, y: e.transform.y }); })
       .on('end', () => { moving = false; paint = transform; emitMv(); });
     select(svg).call(zb).on('dblclick.zoom', null);
     ready = true;
@@ -367,6 +372,20 @@
   const fmtLen = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(m >= 10_000 ? 1 : 2)} km` : `${Math.round(m)} m`);
   const fmtArea = (a: number) => (a >= 1e6 ? `${(a / 1e6).toFixed(2)} km²` : `${Math.round(a).toLocaleString()} m²`);
 
+  // follow the other map of a side-by-side pair (its events are not sent back)
+  let applyingSync = false;
+  $effect(() => {
+    const s = syncT;
+    if (!ready || !s) return;
+    untrack(() => {
+      const c = transform;
+      if (Math.abs(c.k - s.k) < 1e-9 * s.k && Math.abs(c.x - s.x) < 1e-6 && Math.abs(c.y - s.y) < 1e-6) return;
+      applyingSync = true;
+      select(svg).interrupt().call(zb.transform, zoomIdentity.translate(s.x, s.y).scale(s.k));
+      applyingSync = false;
+    });
+  });
+
   const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   function go(target: ZoomTransform, ms = 550) {
     const sel = select(svg);
@@ -393,6 +412,7 @@
     if (!ready) return;
     const cmp = compare, f = focus, zf = zoomFocus, bb = f ? geo.prefFrame.get(f) : null;
     const sel = `${cmp}|${a}|${b}|${f}`;
+    if (follower) return;
     untrack(() => {
       // data arriving later (municipal frames, the layer's zoom rule) must not throw away a view the user is in
       const selChanged = sel !== lastSel;
