@@ -41,7 +41,7 @@ export interface Karte { title: string; subtitle: string; sections: DossierSecti
 export async function buildKarte(lon: number, lat: number): Promise<Karte> {
   const L: Lang = app.lang, tt = (k: Key) => t(L, k), s = store;
   const geo = s.geo!, lt = s.lt, muni = s.muni;
-  const [info, hz, addr] = await Promise.all([pointInfo(lon, lat), hazardsAt(lon, lat), addressAt(lon, lat)]);
+  const [info, hz, addr, bcp] = await Promise.all([pointInfo(lon, lat), hazardsAt(lon, lat), addressAt(lon, lat), import('./bcp').then((m) => m.loadBcp())]);
   const mcode = addr?.muni ?? '';
   const planar = geo.layout ? projectLL(lon, lat, geo.layout).p : null;
   const zone = planar && mcode ? await zoningAt(Number(mcode.slice(0, 2)), planar) : null;
@@ -85,7 +85,11 @@ export async function buildKarte(lon: number, lat: number): Promise<Karte> {
       ...[30, 60, 120].map((m) => [`${tt('isoPop')} ${fmtMinutes(L, m)}`, `${fmtCompact(L, pop(m))}${L === 'ja' ? '人' : ''}`] as [string, string]),
       [`${tt('trip2024')}：${tt('trip1')}`, `${fmtCompact(L, trips[0])}${L === 'ja' ? '人' : ''}`],
       hub('port', 'tPortHub'), hub('air', 'tAirHub'), hub('rail', 'tRailHub'),
-    ], note: tt('isoNote') });
+      ...(bcp ? await import('./bcp').then(({ nearestKm }) => [
+        [tt('bcpE1'), `${fmtNum(L, nearestKm(bcp, lon, lat, 'emergency', '1', geo.layout), 1)} km`],
+        [tt('bcpLogi'), `${fmtNum(L, nearestKm(bcp, lon, lat, 'logistics', '1', geo.layout), 1)} km`],
+      ] as [string, string][]) : []),
+    ], note: `${tt('isoNote')}${bcp ? (L === 'ja' ? ' 緊急輸送道路・重要物流道路までは直線距離。' : ' Emergency / key logistics roads: straight-line distance.') : ''}` });
   }
 
   // 4. nearby

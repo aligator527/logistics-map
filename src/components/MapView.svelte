@@ -38,7 +38,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
-        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [], keep = null,
+        zoomZ = $bindable(0), mv = '', onmv, showBld = true, showFude = true, plots = [], keep = null, bcp = null,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -114,6 +114,8 @@
     /** buildings (国土地理院 vector tiles) from z15, land parcels (登記所備付地図) from z16 */
     showBld?: boolean;
     showFude?: boolean;
+    /** 緊急輸送道路 (e1–e3) and 重要物流道路 (l1, l2 alternatives): SVG paths in viewBox units */
+    bcp?: { e1: string; e2: string; e3: string; l1: string; l2: string } | null;
     /** screening: only these municipalities stay in colour (null = all) */
     keep?: Set<string> | null;
     /** plots saved in the shortlist: rings in lon/lat */
@@ -1016,6 +1018,13 @@
           {/each}
         </g>
       {/if}
+      {#if bcp}
+        <g class="bcp" aria-hidden="true">
+          <path class="l1" d={bcp.l1} /><path class="l2" d={bcp.l2} />
+          {#if transform.k >= 2}<path class="e3" d={bcp.e3} />{/if}
+          <path class="e2" d={bcp.e2} /><path class="e1" d={bcp.e1} />
+        </g>
+      {/if}
       {#if roads && showRoads}
         <g class="roads" class:far={transform.k < 2} aria-hidden="true">
           <path class="halo" d={(detailRoads ?? roads.d)[1] + (detailRoads ?? roads.d)[2] + (detailRoads ?? roads.d)[3]} />
@@ -1378,6 +1387,12 @@
   .ty { fill: color-mix(in oklab, var(--clay) 30%, transparent); stroke: var(--clay); stroke-width: 1.6; }
   .ty-g { fill: none; stroke: var(--clay); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
   .track { fill: none; stroke: var(--clay); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .bcp path { fill: none; vector-effect: non-scaling-stroke; pointer-events: none; stroke-linejoin: round; stroke-linecap: round; }
+  .bcp .l1 { stroke: var(--bcp-logi); stroke-width: 6; stroke-opacity: 0.4; }
+  .bcp .l2 { stroke: var(--bcp-logi); stroke-width: 3; stroke-opacity: 0.35; stroke-dasharray: 5 3; }
+  .bcp .e1 { stroke: var(--bcp-emerg); stroke-width: 1.8; }
+  .bcp .e2 { stroke: var(--bcp-emerg); stroke-width: 1.1; stroke-dasharray: 4 2; }
+  .bcp .e3 { stroke: var(--bcp-emerg); stroke-width: 0.8; stroke-opacity: 0.6; stroke-dasharray: 2 2; }
   .track.closed { stroke: #d33; stroke-width: 5; stroke-dasharray: 6 4; stroke-linecap: round; }
   .track.forecast { stroke-dasharray: 5 4; }
   .nw { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }

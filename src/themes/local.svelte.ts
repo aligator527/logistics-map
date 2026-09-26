@@ -246,6 +246,12 @@ export class LocalTheme implements ThemeView {
         hint: { ja: '貨物取扱量が年1万トン以上の空港まで（推計）', en: 'To an airport handling ≥ 10,000 t of cargo a year (estimate)' }, source: net },
       { key: 'tRail', ja: '貨物駅までの時間', en: 'Time to a rail freight station', group: 'access', get: arr(this.hubTimes?.rail), fmt: mins, better: -1, time: true,
         hint: { ja: 'JR貨物の駅・オフレールステーションまで（推計）', en: 'To a JR Freight station or off-rail station (estimate)' }, source: net },
+      ...('dEmerg' in m ? [
+        { key: 'dEmerg', ja: '第1次緊急輸送道路までの距離', en: 'Distance to a primary emergency route', group: 'access' as const, get: v('dEmerg'), fmt: (x: number) => `${fmtNum(L, x, 1)} km`, better: -1 as const,
+          hint: { ja: '人口重心から最寄りの第1次緊急輸送道路まで（直線）。災害時も優先して啓開・通行が確保される道路', en: 'From the population centre (straight line): roads cleared first after a disaster' }, source: src('bcpRoads') },
+        { key: 'dLogi', ja: '重要物流道路までの距離', en: 'Distance to a key logistics road', group: 'access' as const, get: v('dLogi'), fmt: (x: number) => `${fmtNum(L, x, 1)} km`, better: -1 as const,
+          hint: { ja: '人口重心から最寄りの重要物流道路まで（直線）。国際海上コンテナ車（40ft背高）の通行が確保される幹線', en: 'From the population centre (straight line): trunk roads fit for 40 ft high-cube container trucks' }, source: src('bcpRoads') },
+      ] : []),
       { key: 'land', ja: '工業地の地価', en: 'Industrial land price', group: 'land', get: v('land'), fmt: (x) => `${fmtCompact(L, x)}${L === 'ja' ? '円/㎡' : ' ¥/m²'}`, better: -1,
         hint: { ja: '地価公示・地価調査2026（地点がない市町村は周辺・県の中央値）', en: 'Official land prices 2026 (nearby / prefecture median where no point)' }, source: src('land') },
       { key: 'landChg', ja: '工業地地価の変動率', en: 'Industrial land price change', group: 'land', get: v('landChg'), fmt: signed, diverging: true, better: -1,

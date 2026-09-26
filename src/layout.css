@@ -204,3 +204,4 @@
 .pinned li strong { font-size: 16px; }
 .hist { display: inline-flex; gap: 0; }
 .hist .btn { min-width: 34px; padding: 0 8px; }
+.k-bcp { stroke: var(--bcp-emerg); stroke-width: 2; fill: none; }

@@ -116,6 +116,8 @@ class AppState {
   tab = $state<SideTab>('overview');
   /** buildings / land parcels at street level (on unless turned off) */
   showBld = $state(true);
+  /** 緊急輸送道路・重要物流道路 */
+  showBcp = $state(false);
   showFude = $state(true);
   /** 地理院タイル under the map ('' = none) and the opacity of the area fills over it */
   base = $state('');
@@ -213,6 +215,7 @@ class AppState {
     if (this.showFac) p.set('fc', '1');
     if (this.showZone) p.set('zn', '1');
     if (!this.showBld) p.set('bd', '0');
+    if (this.showBcp) p.set('bc', '1');
     if (this.tab !== this.defaultTab()) p.set('tb', this.tab);
     if (!this.showFude) p.set('fd', '0');
     if (this.base) p.set('bm', this.base);
@@ -291,6 +294,7 @@ class AppState {
     this.showFac = p.get('fc') === '1';
     this.showZone = p.get('zn') === '1';
     this.showBld = p.get('bd') !== '0';
+    this.showBcp = p.get('bc') === '1';
     const tb = p.get('tb') as SideTab | null;
     this.tab = tb && (SIDE_TABS as readonly string[]).includes(tb) ? tb : this.defaultTab();
     this.showFude = p.get('fd') !== '0';

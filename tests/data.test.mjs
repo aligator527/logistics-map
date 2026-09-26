@@ -212,6 +212,9 @@ test('demand, wages and land trend', () => {
   for (const k of ['hh', 'mig', 'income', 'retail', 'mailorder', 'land5', 'land10', 'mfgShip', 'mfgEmp', 'wsEmp']) assert.equal(m.m[k].length, 1898, k);
   // 製造品出荷額等 2024: 豊田市 is Japan's largest (over 15兆円 = 150,000億円); Hamamatsu's new wards have B2B values
   assert.ok(m.m.mfgShip[ix('23211')] > 150_000, '豊田市 shipments > 15兆円');
+  // distance to the nearest primary emergency / key logistics road (km, straight line from the population centre)
+  assert.ok(m.m.dEmerg[ix('13101')] < 1 && m.m.dLogi[ix('13101')] < 5, '千代田区 is on both networks');
+  assert.equal(m.m.dEmerg.filter((v) => v === null).length, 0, 'every municipality has a distance');
   assert.ok(m.m.mfgEmp[ix('22138')] > 10_000 && m.m.retail[ix('22139')] > 0, '浜松市 new wards filled');
   assert.ok(m.m.income[ix('13101')] > 1000, '千代田区: income per taxpayer > 1,000万円');
   assert.equal(m.m.income[ix('14101')], m.m.income[ix('14102')], 'wards of 横浜市 take the city figure');

@@ -3,7 +3,9 @@
   import type { Classes } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
 
-  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, hubs = [], categories = null, highlight = $bindable(null) }: {
+  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, hubs = [], categories = null, bcp = false, highlight = $bindable(null) }: {
+    /** 緊急輸送道路・重要物流道路 on the map */
+    bcp?: boolean;
     classes: Classes;
     lang: Lang;
     title: string;
@@ -80,6 +82,11 @@
       <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" class="k-road k-urban" /></svg>{t(lang, 'urban')}</li>
       <li><svg width="12" height="12" aria-hidden="true"><rect x="2.5" y="2.5" width="7" height="7" rx="1" class="k-ic" /></svg>{t(lang, 'ic')}</li>
     {/if}
+    {#if bcp}
+      <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" class="k-l1" /></svg>{t(lang, 'bcpLogi')}</li>
+      <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" class="k-e1" /></svg>{t(lang, 'bcpE1')}</li>
+      <li><svg width="22" height="10" aria-hidden="true"><path d="M1 5h20" class="k-e2" /></svg>{t(lang, 'bcpE2')}</li>
+    {/if}
     {#if hubs.includes('air')}<li><svg width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5.5" class="k-hub" /></svg>{t(lang, 'hubAir')}</li>{/if}
     {#if hubs.includes('port')}<li><svg width="14" height="14" aria-hidden="true"><rect x="1.5" y="1.5" width="11" height="11" rx="3" class="k-hub" /></svg>{t(lang, 'hubPort')}</li>{/if}
     {#if hubs.includes('rail')}<li><svg width="14" height="12" aria-hidden="true"><rect x="1.5" y="2.5" width="11" height="7" rx="1.5" class="k-hub" /></svg>{t(lang, 'hubRail')}</li>{/if}
@@ -119,6 +126,9 @@
   .k-pipe-o { fill: var(--surface); stroke: var(--mark-ring); stroke-width: 1.1; }
   .k-pipe-i { fill: none; stroke: var(--mark); stroke-width: 2; }
   .k-road { stroke: var(--road); stroke-width: 1.6; fill: none; }
+  .k-l1 { stroke: var(--bcp-logi); stroke-width: 5; stroke-opacity: 0.45; fill: none; }
+  .k-e1 { stroke: var(--bcp-emerg); stroke-width: 2; fill: none; }
+  .k-e2 { stroke: var(--bcp-emerg); stroke-width: 1.2; stroke-dasharray: 4 2; fill: none; }
   .k-urban { stroke-dasharray: 3 2; stroke-width: 1.2; }
   .k-ic { fill: var(--surface); stroke: var(--road); stroke-width: 1.4; }
   .ab + .ab { margin-left: -2px; }

@@ -566,6 +566,12 @@
   const tileLayer = $derived(TILE_LAYERS.find((l) => l.key === app.base) ?? null);
   // zoomed in close without a background map: the pale map comes in on its own (the choice itself is unchanged)
   let mapZ = $state(0);
+  // 緊急輸送道路・重要物流道路: loaded when switched on
+  let bcpData = $state.raw<import('./lib/bcp').BcpRoads | null>(null);
+  $effect(() => { if (app.showBcp && !bcpData) import('./lib/bcp').then((m) => m.loadBcp()).then((d) => (bcpData = d)); });
+  const bcpLayer = $derived.by(() => (app.showBcp && bcpData && geo ? bcpPathsFn?.(geo, bcpData) ?? null : null));
+  let bcpPathsFn = $state.raw<typeof import('./lib/bcp').bcpPaths | null>(null);
+  $effect(() => { if (app.showBcp && !bcpPathsFn) import('./lib/bcp').then((m) => (bcpPathsFn = m.bcpPaths)); });
   /** measured plots in the shortlist, outlined on the map */
   const plots = $derived(shortlist.items.filter((it) => it.kind === 'plot').map((it) => {
     const ring = plotRing(it.code);
@@ -1077,6 +1083,9 @@
         <button type="button" class="btn chip" aria-pressed={app.showZone} onclick={() => (app.showZone = !app.showZone)}>
           <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" class="k-zone" /></svg>{tt('layerZone')}
         </button>
+        <button type="button" class="btn chip" aria-pressed={app.showBcp} onclick={() => (app.showBcp = !app.showBcp)} title={tt('bcpHint')}>
+          <svg width="16" height="10" aria-hidden="true"><path d="M1 5h14" class="k-bcp" /></svg>{tt('layerBcp')}
+        </button>
         <button type="button" class="btn chip" aria-pressed={app.showBld} onclick={() => (app.showBld = !app.showBld)} title={tt('zoomForBld')}>
           <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="3" width="5" height="7.5" class="k-bld" /><rect x="7" y="1.5" width="3.5" height="9" class="k-bld" /></svg>{tt('layerBld')}
         </button>
@@ -1144,7 +1153,7 @@
           {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed || s.closeArmed} onpoint={onpointAny} {zoning}
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
-          showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null}
+          showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -1176,7 +1185,7 @@
       <div class="below">
         <Legend classes={view.classes} lang={L} title={view.legend.title} fmt={view.legend.fmt} hint={view.legend.hint}
                 flows={app.view === 'map' ? view.legend.flows : null}
-                showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare}
+                showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare} bcp={app.showBcp && !!bcpData}
                 hubs={app.showHubs && hubs ? [...new Set(hubs.items.map((h) => h.kind))] : []}
                 categories={view.categories ?? null} bind:highlight />
         {#if app.layer === 'flows' && view.flows.length}
@@ -1193,6 +1202,7 @@
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
           {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}
+          {#if app.showBcp && bcpData} · <a href={bcpData.source.emergency.url}>{bcpData.source.emergency[L]}</a> · <a href={bcpData.source.logistics.url}>{bcpData.source.logistics[L]}</a>（{bcpData.source.note[L]}）{/if}
           {#if app.showBld && mapZ >= 15} · <a href="https://github.com/gsi-cyberjapan/optimal_bvmap">{tt('bldSource')}</a>{/if}
           {#if app.showFude && mapZ >= 16} · <a href="https://www.moj.go.jp/MINJI/minji05_00494.html">{tt('fudeSource')}</a>（<a href="https://tiles.kmproj.com">KotobaMedia</a>）{/if}</p>
       </div>

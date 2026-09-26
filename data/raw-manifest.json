@@ -989,6 +989,342 @@
    "script": "build-network"
   },
   {
+   "file": "data/raw/roads/N10-24_GML.zip",
+   "bytes": 43176986,
+   "sha256": "f8c911b036ad803a01ae28bd01ed7a0144163268ef9098e48e53b75a9473193a",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_01_GML.zip",
+   "bytes": 2307966,
+   "sha256": "062873cf7fe81fa7dbee171c9dbc25e5b2c8c4b36aaabb0ada1631bf9606daf4",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_02_GML.zip",
+   "bytes": 469831,
+   "sha256": "d9ec2227626261b51204c22cfb1039d38d781537908aaa46cf4c7ca342d1b306",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_03_GML.zip",
+   "bytes": 949423,
+   "sha256": "1b41fe7a604b26c885de914004560bff9a9f1ffeb2f80f1b16bd936e0f934af3",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_04_GML.zip",
+   "bytes": 523287,
+   "sha256": "beefa9342b7bfd68b20d7f7c506899d896dd31e2609f47628c561101bb1501f5",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_05_GML.zip",
+   "bytes": 480552,
+   "sha256": "e081be5c372bd152058e7597a186875bf4b009aec06a147fbb80f88e5a86ac0d",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_06_GML.zip",
+   "bytes": 481752,
+   "sha256": "743a01e75bc56aeaaa055b966bc5284d02ca23ba637d86cb0dad37090dd43137",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_07_GML.zip",
+   "bytes": 722413,
+   "sha256": "86721a04104b4f57e7c3932836983547000c3fe985f0242b4f5ebd3b64243720",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_08_GML.zip",
+   "bytes": 432287,
+   "sha256": "e05bee106114386f0c3223a8c22b625c617419f63f0982ae81fcdda7012c846b",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_09_GML.zip",
+   "bytes": 300516,
+   "sha256": "95431b9a86aac259c3eec091ee3caba6d447bcb0ea5ec5c114b6b7e48ace369e",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_10_GML.zip",
+   "bytes": 294638,
+   "sha256": "54975faae31da9f604a014816819d471dd130e7652143c86caee95c690040646",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_11_GML.zip",
+   "bytes": 352211,
+   "sha256": "6a562fc34df3344bf1a2fb009ef5ca27eb0681d194dbb58b6a60b5a6837b310e",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_12_GML.zip",
+   "bytes": 533699,
+   "sha256": "6a9c6c8d5b5641331fc9d0b01a0a10504f36f3dee85b646c20f07744c5515989",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_13_GML.zip",
+   "bytes": 309471,
+   "sha256": "8f7935d21bb64b33a48e6bcf087788777de8a4b1800bc8cc30a3a59daa5fa453",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_14_GML.zip",
+   "bytes": 410807,
+   "sha256": "ef998443042a6d9d977da458feb676ba12606dfb50bc9f50704ae3622bb9b002",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_15_GML.zip",
+   "bytes": 348793,
+   "sha256": "e8bec2dba4d5260e468c5569ec88fc203146d241e23416b3af3b29b2ea58eefe",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_16_GML.zip",
+   "bytes": 160990,
+   "sha256": "28d9d13366917ecba1d973cd88a5d66547bc54eaa022085d236642c16648410c",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_17_GML.zip",
+   "bytes": 336603,
+   "sha256": "87696221ae118769fc41aab6e9c6a9782581408838ab1c346e20939f4747972c",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_18_GML.zip",
+   "bytes": 261842,
+   "sha256": "e06b5ff88ffaf8d157ef5061c71840d45056628c5ce50a1fc58ca5e7b47a4dcb",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_19_GML.zip",
+   "bytes": 304000,
+   "sha256": "6aae91bd7a9452ffe2d8590b7459a92cee52c155181841ffedc2d2a1d9f26950",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_20_GML.zip",
+   "bytes": 752281,
+   "sha256": "0f576926eb10b3b81e36865dfec54eefdef7b06a4ef6170d94966d15b68c82d2",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_21_GML.zip",
+   "bytes": 619021,
+   "sha256": "f48a8ac8c8fdf38306e287b3fc13446659d7e60974cec073646369b5b72963fa",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_22_GML.zip",
+   "bytes": 461877,
+   "sha256": "ff30dfce10951d4ab5217341adb9dd31df8a6b0e93a61512751ba68ef001d3ec",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_23_GML.zip",
+   "bytes": 602288,
+   "sha256": "9781e52df868af4c93a8c4b7a93bb731bab7c4d3dd54892bb863fd95f41465d6",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_24_GML.zip",
+   "bytes": 359196,
+   "sha256": "ec34daa43b3dc2902793c041e211fae8ad0fdaa81c5d4739ea49048af654f694",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_25_GML.zip",
+   "bytes": 276225,
+   "sha256": "85a30d574c31917640d815fadc8e33df02a3c9a16d243d7e098d4a28a99a6544",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_26_GML.zip",
+   "bytes": 317002,
+   "sha256": "847b60fe1e0ea22be6497753a50a44f6eee34a276c45d53d74226d2a2b3e5dbe",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_27_GML.zip",
+   "bytes": 228265,
+   "sha256": "e68197000470adc6ccfff8e6c694ad4fd022a643fe4f9a6ed5cde10e4a23a839",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_28_GML.zip",
+   "bytes": 493968,
+   "sha256": "e0b4e273508185c67b14963992b75eb29ca2244a5bfac9bef0815a743e6c1f53",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_29_GML.zip",
+   "bytes": 330615,
+   "sha256": "a9e13c3320e2734e85db2e6b439e0e3d5799888d33fbe620b3edfd3223bbfb48",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_30_GML.zip",
+   "bytes": 379887,
+   "sha256": "3bc51bc1a1735f397e07223826134cf88aca0cfa8340c5657a0ed640355b8f2a",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_31_GML.zip",
+   "bytes": 260769,
+   "sha256": "631610a4a1db777167fb3e278ca8dafe5452762bc1afad9a3f67947fd6925bfa",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_32_GML.zip",
+   "bytes": 411129,
+   "sha256": "a5bce1b9c08d32be6a3c68bd0bb638941e1ae12c573d23a42fcb3cc8caea7ccf",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_33_GML.zip",
+   "bytes": 403049,
+   "sha256": "3edb5eca0492774b7543096343f66077df7068753c2d7a5203283c80edc6ada4",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_34_GML.zip",
+   "bytes": 518456,
+   "sha256": "9a4b4dec9cfdc6514dc11270e15f2f36f3aa1a745a94dfea0e38bee46c7c9579",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_35_GML.zip",
+   "bytes": 485559,
+   "sha256": "1563f0fe120cd0b37375252cc969a92339a798da4f3ccddb7c7f4e159b11af06",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_36_GML.zip",
+   "bytes": 361730,
+   "sha256": "ad6c103ccb296756109e08a78a6eb16de7d79be5f3cab1f74010abba2df1e1ae",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_37_GML.zip",
+   "bytes": 218126,
+   "sha256": "6a316269f0ab00cea7529dd087ccaa6f4d8ad88805f683ef0322247e480165e4",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_38_GML.zip",
+   "bytes": 318778,
+   "sha256": "bd43f323ce47eb04e71245237f66558db2de73db159517741f7da99d35c1d3d3",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_39_GML.zip",
+   "bytes": 652427,
+   "sha256": "051fc1a3ea67b99556ec77611f860af2a6b311f7fe13a153c666014bfeaebd44",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_40_GML.zip",
+   "bytes": 420422,
+   "sha256": "fd0e4b68f59a2f5669e962a60e31583b616aecdae38347f7216707c21f9eff86",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_41_GML.zip",
+   "bytes": 207597,
+   "sha256": "2aeae61ae2e6760291ae956c3cdea76b3cf108e257f0617f23d06f6ee2f3eddc",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_42_GML.zip",
+   "bytes": 201836,
+   "sha256": "34a51388f4c06e3c5347453c4b68cc1d1e70e57efa53d2562d612ace5d029351",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_43_GML.zip",
+   "bytes": 381950,
+   "sha256": "2e183b8844cdd7cea2c4e976262910f9fd3e43b813a2125580154c66bff50354",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_44_GML.zip",
+   "bytes": 326134,
+   "sha256": "91ba6e8dcf98c81f24c86f7d3cd5a475a8d5e70943ccfe0096623961a7ad61b6",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_45_GML.zip",
+   "bytes": 455834,
+   "sha256": "0d0de7c00d0689ee0ef54c9f9bbbdd75cb1f09f642fb1277bdba9bdd99ee04f0",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_46_GML.zip",
+   "bytes": 341102,
+   "sha256": "e4c76c4fd09a0743ee6eca1137eabbe8e1c3d95faf6aba8d1928bbe4b028f779",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
+   "file": "data/raw/roads/N12-21_47_GML.zip",
+   "bytes": 379164,
+   "sha256": "2bd43d8fe57984b9c546ca933c5e3905516b5776d490f0864cc39b28b1beed9e",
+   "source": "https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)",
+   "script": "build-bcp-roads"
+  },
+  {
    "file": "data/raw/ssw/001402078.xlsx",
    "bytes": 180427,
    "sha256": "81ac781345cf6e14098afa93e69677252e893b644794960178afe60bd893ba78",
