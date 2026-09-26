@@ -11,6 +11,7 @@
   import NewsCallout from './NewsCallout.svelte';
   import { buildSat, placeCards, type Mask, type NewsGroup } from '../lib/newsmap';
   import { placeKey, type NewsLite, type Related } from '../lib/related';
+  import { TILE_LAYERS, tileImage, tileUrl, visibleTiles, type TileLayer } from '../lib/tiles';
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
@@ -31,7 +32,7 @@
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
-        onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null,
+        onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -89,6 +90,11 @@
     /** 1 km cells drawn on a canvas: centres in viewBox units (x0, y0, x1, y1 …), a colour per cell
      *  (null = not drawn) and the cell size in viewBox units */
     raster?: { xy: Float32Array; color: (i: number) => string | null; size: number; version: unknown } | null;
+    /** 地理院タイル under the map (thematic layers come with the pale map beneath them) */
+    tileLayer?: TileLayer | null;
+    /** opacity of the area fills (lowered when map tiles are shown) */
+    fillOpacity?: number;
+    dark?: boolean;
     /** industrial zoning paths (viewBox units) per class: 1 準工業, 2 工業, 3 工業専用 */
     zoning?: Record<string, string> | null;
     /** the next click on the map picks a point (viewBox units) instead of an area */
@@ -336,6 +342,68 @@
   });
   const selMuniShape = $derived(selMuni ? muniByCode.get(selMuni) ?? null : null);
 
+  // ------------------------------------------------------------ 地理院タイル
+  let baseCanvas: HTMLCanvasElement | undefined = $state();
+  let themeCanvas: HTMLCanvasElement | undefined = $state();
+  let tileTick = $state(0);
+  let tileFrame = 0;
+  /** zoomed out too far for a thematic layer (its tiles start at a larger scale) */
+  let tilesTooFar = $state(false);
+  const P0 = $derived(geo.P([0, 0])), Pk = $derived(geo.P([1, 0])[0] - geo.P([0, 0])[0]);
+  const toPlanar = (vx: number, vy: number): [number, number] => [(vx - P0[0]) / Pk, -(vy - P0[1]) / Pk];
+  function drawTiles(cv: HTMLCanvasElement | undefined, layer: TileLayer | null, W: number, H: number, tr: ZoomTransform, f: typeof fit) {
+    if (!cv) return;
+    const dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    const ctx = cv.getContext('2d');
+    if (!ctx || !layer || !geo.layout) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // the visible map rectangle in planar metres, and the insets on screen
+    const [vx0, vy0] = tr.invert([(0 - f.ox) / f.s, (0 - f.oy) / f.s]), [vx1, vy1] = tr.invert([(W - f.ox) / f.s, (H - f.oy) / f.s]);
+    const [x0, y1] = toPlanar(vx0, vy0), [x1, y0] = toPlanar(vx1, vy1);
+    const inView = geo.insets.filter((r) => r.x < vx1 && r.x + r.w > vx0 && r.y < vy1 && r.y + r.h > vy0);
+    const insetKeys = inView.map((r) => r.key).filter((k): k is 'okinawa' | 'ogasawara' => k === 'okinawa' || k === 'ogasawara');
+    const k = tr.k * f.s, ox = f.ox + tr.x * f.s, oy = f.oy + tr.y * f.s;
+    const scr = (p: [number, number]) => { const [vx, vy] = geo.P(p); return [ox + vx * k, oy + vy * k]; };
+    const { tiles, tooFar } = visibleTiles(layer, geo.layout, { x0, y0, x1, y1 }, insetKeys, k * geo.unitsPerMetre * dpr);
+    if (layer.thematic) tilesTooFar = tooFar;
+    if (tooFar && layer.thematic) return;
+    const insetRects = geo.insets.map((r) => ({ key: r.key, x: ox + r.x * k, y: oy + r.y * k, w: r.w * k, h: r.h * k }));
+    for (const space of ['main', 'okinawa', 'ogasawara'] as const) {
+      const list = tiles.filter((t) => t.space === space);
+      if (!list.length) continue;
+      ctx.save();
+      ctx.beginPath();
+      if (space === 'main') { ctx.rect(0, 0, W, H); for (const r of insetRects) ctx.rect(r.x, r.y, r.w, r.h); ctx.clip('evenodd'); }
+      else { const r = insetRects.find((q) => q.key === space); if (r) { ctx.rect(r.x, r.y, r.w, r.h); ctx.clip(); } }
+      for (const t of list) {
+        const img = tileImage(tileUrl(layer, t.z, t.x, t.y), () => (tileTick++));
+        if (!img) continue;
+        const pts = t.grid.map(scr), n = t.n, cell = 256 / n;
+        for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+          const a = pts[j * (n + 1) + i], b = pts[j * (n + 1) + i + 1], c = pts[(j + 1) * (n + 1) + i];
+          // a piece of the image → its three projected corners (a hair larger to hide seams)
+          ctx.setTransform(dpr * (b[0] - a[0]) / cell, dpr * (b[1] - a[1]) / cell, dpr * (c[0] - a[0]) / cell, dpr * (c[1] - a[1]) / cell, dpr * a[0], dpr * a[1]);
+          // drawn half a source pixel larger on every side, so neighbouring pieces overlap instead of leaving hairlines
+          ctx.drawImage(img, i * cell, j * cell, cell, cell, -0.5, -0.5, cell + 1, cell + 1);
+        }
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      }
+      ctx.restore();
+    }
+  }
+  $effect(() => {
+    const layer = tileLayer, tr = transform, f = fit, W = boxW, H = boxH;
+    void tileTick;
+    cancelAnimationFrame(tileFrame);
+    tileFrame = requestAnimationFrame(() => {
+      const base = layer?.thematic ? TILE_LAYERS[0] : layer;
+      drawTiles(baseCanvas, base ?? null, W, H, tr, f);
+      drawTiles(themeCanvas, layer?.thematic ? layer : null, W, H, tr, f);
+    });
+    return () => cancelAnimationFrame(tileFrame);
+  });
+
   // ------------------------------------------------------------ 1 km raster (reach maps)
   let rasterCanvas: HTMLCanvasElement | undefined = $state();
   let rasterFrame = 0;
@@ -499,7 +567,13 @@
   const reduceMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 </script>
 
-<div class="map" class:picking={pickPoint} bind:this={wrap}>
+<div class="map" class:picking={pickPoint} class:tiled={!!tileLayer} bind:this={wrap} style:--fo={fillOpacity}>
+  {#if tileLayer}
+    <canvas class="tiles" class:inv={dark && (tileLayer.thematic ? TILE_LAYERS[0] : tileLayer).invertDark} bind:this={baseCanvas}
+            style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+    <canvas class="tiles" bind:this={themeCanvas} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+    {#if tilesTooFar}<p class="tiles-hint">{t(lang, 'tilesZoomIn')}</p>{/if}
+  {/if}
   <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <svg
     bind:this={svg}
@@ -747,6 +821,15 @@
 
 <style>
   .map { position: relative; }
+  .tiles { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+  .tiles.inv { filter: invert(0.92) hue-rotate(180deg) brightness(0.9) contrast(0.9); }
+  .map.tiled > svg:first-of-type { position: relative; z-index: 1; }
+  .map.tiled .areas path { fill-opacity: var(--fo); }
+  .map.tiled .overlay, .map.tiled .raster { z-index: 2; }
+  .map.tiled .zoom { z-index: 3; }
+  .map.tiled .inset { stroke: var(--ink-2); }
+  .tiles-hint { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); z-index: 6; margin: 0; padding: 4px 10px; font-size: 12px;
+                background: color-mix(in oklab, var(--surface) 92%, transparent); border: 1px solid var(--line-strong); border-radius: 999px; }
   svg {
     display: block;
     width: 100%;

@@ -25,6 +25,10 @@
   import { NowTheme, type Diesel } from './themes/now.svelte';
   import { live, WARN, INT_COLOR } from './lib/live.svelte';
   import { Router, loadGrid, type Network } from './lib/travel';
+  import { TILE_LAYERS } from './lib/tiles';
+  import { pointInfo, groundRisk, type PointInfo } from './lib/pointinfo';
+  import { unproject } from './lib/project';
+  import PointPanel from './panels/PointPanel.svelte';
   import { project as projectLL } from './lib/project';
   import MuniProfile from './components/MuniProfile.svelte';
   import { shortlist, type ShortItem } from './lib/shortlist.svelte';
@@ -202,6 +206,39 @@
     };
     return { xy, color, size: 1000 * geo!.unitsPerMetre, version: [g, app.lmet, app.dark] };
   });
+  /** a map point (viewBox units) -> lon/lat, insets undone */
+  function toLonLat([x, y]: [number, number]): [number, number] | null {
+    if (!geo?.layout) return null;
+    const inset = geo.insets.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    const P0 = geo.P([0, 0]), k = geo.P([1, 0])[0] - P0[0];
+    const planar: [number, number] = [(x - P0[0]) / k, -(y - P0[1]) / k];
+    return unproject(planar, geo.layout, inset ? (inset.key as 'okinawa' | 'ogasawara') : 'main');
+  }
+  function onpointAny(xy: [number, number]) {
+    if (!s.inspectArmed) return onpoint(xy);
+    const ll = toLonLat(xy);
+    s.inspectArmed = false;
+    if (!ll) return;
+    s.inspectLoading = true;
+    s.inspect = null;
+    pointInfo(ll[0], ll[1]).then((i) => (s.inspect = i)).finally(() => (s.inspectLoading = false));
+  }
+  /** elevation and landform at the selected DPL site */
+  let siteInfo = $state.raw<{ name: string; info: PointInfo } | null>(null);
+  $effect(() => {
+    const st = app.site >= 0 ? sites[app.site] : null;
+    if (!st || siteInfo?.name === st.name) return;
+    pointInfo(st.lon, st.lat).then((info) => (siteInfo = { name: st.name, info })).catch(() => {});
+  });
+  function pointRows(i: PointInfo): [string, string][] {
+    const r = groundRisk(i);
+    return [
+      [tt('elevation'), i.elev !== null ? `${fmtNum(L, i.elev, 1)} m` : '–'],
+      ...(i.natural ? [[tt('landformNatural'), i.natural[L]] as [string, string]] : []),
+      ...(i.artificial ? [[tt('landformArtificial'), i.artificial[L]] as [string, string]] : []),
+      ...(r ? [[tt('groundRisk'), tt(`risk_${r}` as Key)] as [string, string]] : []),
+    ];
+  }
   /** a click on the map while picking: the nearest populated 1 km cell becomes the origin */
   function onpoint([x, y]: [number, number]) {
     const g = lt?.grid, xy = gridXY;
@@ -355,7 +392,14 @@
   }
   function onnewsplace(code: string) { onpick(code); }
   $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
-  const pois = $derived.by(() => [...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois]);
+  const pois = $derived.by(() => [...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois, ...inspectPois]);
+  const inspectPois = $derived.by((): Poi[] => {
+    const i = s.inspect;
+    if (!i || !geo?.layout) return [];
+    return [{ key: 'inspect', kind: 'origin', xy: geo.P(projectLL(i.lon, i.lat, geo.layout).p), r: 6, label: tt('pointInfo'), major: true,
+              tip: { title: tt('pointInfo'), rows: pointRows(i) } }];
+  });
+  const tileLayer = $derived(TILE_LAYERS.find((l) => l.key === app.base) ?? null);
   // ------------------------------------------------------------ industrial zoning (A29) of the focused prefecture
   let zoningIndex = $state.raw<{ source: { ja: string; en: string; url: string } } | null>(null);
   let zoningData = $state.raw<Map<number, Record<string, [number, number][][][]>>>(new Map());
@@ -803,6 +847,31 @@
       {/if}
     {/if}
     <div class="ctl">
+      <label class="lab" for="basemap">{tt('baseMap')}</label>
+      <div class="base-row">
+        <select id="basemap" class="sel" value={app.base} onchange={(e) => {
+          const was = TILE_LAYERS.find((l) => l.key === app.base), next = TILE_LAYERS.find((l) => l.key === e.currentTarget.value);
+          // thematic maps are colourful: a lighter fill over them by default
+          if (next?.thematic && !was?.thematic && app.fillOp === 0.5) app.fillOp = 0.25;
+          else if (!next?.thematic && was?.thematic && app.fillOp === 0.25) app.fillOp = 0.5;
+          app.base = e.currentTarget.value; }}>
+          <option value="">{tt('baseNone')}</option>
+          {#each [['base', L === 'ja' ? '地図・写真' : 'Maps & photos'], ['relief', L === 'ja' ? '地形' : 'Relief'], ['ground', L === 'ja' ? '地盤・土地の成り立ち' : 'Ground']] as [g, label] (g)}
+            <optgroup {label}>{#each TILE_LAYERS.filter((l) => l.group === g) as l (l.key)}<option value={l.key}>{l[L]}</option>{/each}</optgroup>
+          {/each}
+        </select>
+        <button type="button" class="btn chip" aria-pressed={s.inspectArmed} onclick={() => (s.inspectArmed = !s.inspectArmed)} title={tt('inspectHint')}>
+          <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden="true"><path d="M6 13.5S1 8.6 1 5.4a5 5 0 0 1 10 0C11 8.6 6 13.5 6 13.5z" fill="none" stroke="currentColor" stroke-width="1.5" /><circle cx="6" cy="5.4" r="1.7" fill="currentColor" /></svg>
+          {tt('inspectPoint')}</button>
+        {#if tileLayer}
+          <label class="fo"><span class="sr-only">{tt('fillStrength')}</span>
+            <span aria-hidden="true" class="small">{tt('fillStrength')}</span>
+            <input type="range" min="0" max="1" step="0.1" value={app.fillOp} oninput={(e) => (app.fillOp = Number(e.currentTarget.value))} />
+          </label>
+        {/if}
+      </div>
+    </div>
+    <div class="ctl">
       <span class="lab">{tt('layers')}</span>
       <div class="toggles">
         <button type="button" class="btn chip" aria-pressed={app.showDpl} onclick={() => (app.showDpl = !app.showDpl)}>
@@ -868,7 +937,8 @@
           onnewshover={(k) => (newsFocus = k)}
           onnewspin={(k) => { if (!newsPins.includes(k)) newsPins = [...newsPins, k].slice(-4); }}
           {relatedFor} {timelineFor} {locateNews} bind:newsOpen={app.newsOpen}
-          {raster} pickPoint={s.pickArmed && !!lt?.grid} {onpoint} {zoning}
+          {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed} onpoint={onpointAny} {zoning}
+          tileLayer={tileLayer} fillOpacity={tileLayer ? app.fillOp : 1} dark={app.dark}
         />
         {#if nationalNews && newsCards}
           <button type="button" class="btn national" aria-pressed={newsPins.includes('jp')} onclick={() => onnews('jp')}>
@@ -915,7 +985,8 @@
             {#if zoningIndex}<a href={zoningIndex.source.url}>{zoningIndex.source[L]}</a>{/if}
           </p>
         {/if}
-        <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a></p>
+        <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
+          {#if tileLayer} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{tileLayer[L]}{tileLayer.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}</p>
       </div>
     </div>
 
@@ -935,6 +1006,7 @@
         {@const p = app.pref}
         {@const r = p && !mapMuni ? rank(view, p) : 0}
         {@const tr = view.trend}
+        <PointPanel />
         <section class="panel readout">
           {#if mt && app.muni && mt.indexOf(app.muni) >= 0}
             {@const mr = mt.ranks.get(app.muni)}
@@ -1035,7 +1107,7 @@
         {#if app.site >= 0 && sites[app.site] && muni?.sites[sites[app.site].name]}
           <section class="panel">
             <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L}
-                      extra={hubRows(sites[app.site].name)} />
+                      extra={[...hubRows(sites[app.site].name), ...(siteInfo?.name === sites[app.site].name ? pointRows(siteInfo.info) : [])]} />
             <p class="memo"><button type="button" class="btn" onclick={() => shortlist.toggle('site', String(app.site))}>{shortlist.has('site', String(app.site)) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button>
               {#if lt}<button type="button" class="btn" onclick={() => showReach(`site:${sites[app.site].name}`)}>{tt('isoFrom')}</button>{/if}</p>
           </section>

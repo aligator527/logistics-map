@@ -146,3 +146,7 @@
 .zone-note .zk { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
 
 .offline { margin: 0; padding: 6px clamp(16px, 3vw, 32px); font-size: 12.5px; background: var(--surface-2); border-bottom: 1px solid var(--line); color: var(--ink-2); }
+
+.base-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.base-row .fo { display: inline-flex; align-items: center; gap: 6px; }
+.base-row input[type='range'] { width: 110px; accent-color: var(--blue); }

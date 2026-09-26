@@ -22,6 +22,11 @@ test('site, data and live sources load', async ({ page, request, baseURL }, info
   await expect(page.locator('aside')).toContainText(/更新|Updated/, { timeout: 30_000 });
   await expect(page.locator('aside')).not.toContainText(/取得できません|could not be loaded/);
 
+  // 地理院タイル and the elevation API answer (background maps, 地点を調べる)
+  expect((await request.get('https://cyberjapandata.gsi.go.jp/xyz/pale/12/3638/1612.png')).ok(), 'GSI tile').toBe(true);
+  const elev = await (await request.get('https://cyberjapandata2.gsi.go.jp/general/dem/scripts/getelevation.php?lon=139.8&lat=35.7&outtype=JSON')).json();
+  expect(typeof elev.elevation, 'GSI elevation API').toBe('number');
+
   // news: fresh enough, and preview images actually load
   const news = await (await request.get(new URL('data/news.json', baseURL).toString())).json();
   const age = (Date.now() - Date.parse(news.generated)) / 864e5;

@@ -99,6 +99,9 @@ class AppState {
   showFac = $state(false);
   /** industrial zoning (用途地域) of the focused prefecture */
   showZone = $state(false);
+  /** 地理院タイル under the map ('' = none) and the opacity of the area fills over it */
+  base = $state('');
+  fillOp = $state(0.5);
   /** selected DPL site (index into dpl.sites) — -1 = none */
   site = $state(-1);
 
@@ -182,6 +185,8 @@ class AppState {
     if (this.showHubs) p.set('hb', '1');
     if (this.showFac) p.set('fc', '1');
     if (this.showZone) p.set('zn', '1');
+    if (this.base) p.set('bm', this.base);
+    if (this.base && this.fillOp !== 0.5) p.set('fo', String(this.fillOp));
     if (this.view !== 'map') p.set('v', this.view);
     return p.toString();
   }
@@ -249,6 +254,9 @@ class AppState {
     this.showHubs = p.get('hb') === '1';
     this.showFac = p.get('fc') === '1';
     this.showZone = p.get('zn') === '1';
+    this.base = /^[a-z]{2,12}$/.test(p.get('bm') ?? '') ? p.get('bm')! : '';
+    const fo = Number(p.get('fo'));
+    this.fillOp = p.has('fo') && fo >= 0 && fo <= 1 ? fo : 0.5;
     this.view = p.get('v') === 'table' ? 'table' : 'map';
   }
 }

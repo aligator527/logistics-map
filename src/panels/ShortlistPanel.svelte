@@ -8,6 +8,7 @@
   import { fmtNum, fmtCompact } from '../lib/scale';
   import { WARN_COLORS } from '../themes/now.svelte';
   import Dossier, { type DossierTable } from '../components/Dossier.svelte';
+  import { pointInfo, groundRisk, type PointInfo } from '../lib/pointinfo';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -90,6 +91,16 @@
 
   // ------------------------------------------------------------ side-by-side comparison (printable)
   let compareOpen = $state(false);
+  /** elevation and landform at the shortlisted DPL sites (fetched when the comparison opens) */
+  let siteInfos = $state.raw(new Map<string, PointInfo>());
+  $effect(() => {
+    if (!compareOpen) return;
+    for (const it of shortlist.items) {
+      const st = it.kind === 'site' ? sites[Number(it.code)] : null;
+      if (!st || siteInfos.has(st.name)) continue;
+      pointInfo(st.lon, st.lat).then((i) => (siteInfos = new Map(siteInfos).set(st.name, i))).catch(() => {});
+    }
+  });
   const median = (a: number[]) => { const v = a.filter(isFinite).sort((x, y) => x - y); return v.length ? v[v.length >> 1] : NaN; };
   /** best column(s) of a row: highest (dir 1) or lowest (dir −1) finite value */
   const bestOf = (vals: number[], dir: 1 | -1 | undefined) => {
@@ -132,6 +143,17 @@
         row(tt('pop30'), items.map((it) => ct(it)?.pop30 ?? NaN), (v) => `${fmtCompact(L, v)}${L === 'ja' ? '人' : ''}`, 1),
         row(tt('nearestIc'), items.map((it) => ct(it)?.ic ?? NaN), (v) => `${fmtNum(L, v, 1)} km`, -1),
         ...hk.map((k) => ({ label: k, cells: items.map((it) => hubsOf(it)[k] ?? '–') })),
+        ...(() => {
+          const info = (it: ShortItem) => (it.kind === 'site' ? siteInfos.get(sites[Number(it.code)]?.name ?? '') : undefined);
+          const rank = { low: 1, mid: 2, high: 3 } as const;
+          return [
+            row(tt('elevation'), items.map((it) => info(it)?.elev ?? NaN), (v) => `${fmtNum(L, v, 1)} m`, 1),
+            { label: tt('landformNatural'), cells: items.map((it) => (it.kind === 'site' ? info(it)?.natural?.[L] ?? '…' : '–')) },
+            { label: tt('landformArtificial'), cells: items.map((it) => (it.kind === 'site' ? (info(it) ? info(it)!.artificial?.[L] ?? '–' : '…') : '–')) },
+            { ...row(tt('groundRisk'), items.map((it) => { const i = info(it); const r = i ? groundRisk(i) : null; return r ? rank[r] : NaN; }),
+                (v) => tt(v === 1 ? 'risk_low' : v === 2 ? 'risk_mid' : 'risk_high'), -1) },
+          ];
+        })(),
       ] });
     }
     if (live.warnTime) groups.push({ title: tt('cmpLive'), rows: [{ label: tt('liveWarn'), cells: items.map((it) => { const a = shortAlert(it); return a.level >= 2 ? `${nt?.levelName(a.level) ?? a.level}：${a.text}` : '–'; }) }] });

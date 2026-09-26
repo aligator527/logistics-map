@@ -40,3 +40,52 @@ export function project(lon: number, lat: number, L: Layout | undefined): { p: [
   if (S) { x = S.c[0] + (x - S.c[0]) * S.k + S.d[0]; y = S.c[1] + (y - S.c[1]) * S.k + S.d[1]; }
   return { p: [x, y], space };
 }
+
+/** inverse of lcc() (Snyder 15-10, 7-9 iterated) — main map space only */
+export function lccInverse(x: number, y: number): [number, number] {
+  const dy = r0 - y;
+  const rho = Math.sign(n) * Math.hypot(x, dy);
+  const th = Math.atan2(x, dy);
+  const t = (rho / (a * F)) ** (1 / n);
+  let phi = Math.PI / 2 - 2 * Math.atan(t);
+  for (let i = 0; i < 8; i++) {
+    const es = e * Math.sin(phi);
+    phi = Math.PI / 2 - 2 * Math.atan(t * ((1 - es) / (1 + es)) ** (e / 2));
+  }
+  return [(th / n + l0) / rad, phi / rad];
+}
+
+/** like project(), but in a given space (a map tile is drawn whole in the space of its centre) */
+export function projectIn(lon: number, lat: number, L: Layout, space: Space): [number, number] {
+  let [x, y] = lcc(lon, lat);
+  let S: { c: [number, number]; k: number; d: [number, number] } | null = null;
+  if (space === 'okinawa') {
+    S = L.okinawa;
+    if (lon > 130.5) { x += L.okinawa.daito[0]; y += L.okinawa.daito[1]; }
+    else if (lon < 125.6) { x += L.okinawa.sakishima[0]; y += L.okinawa.sakishima[1]; }
+  } else if (space === 'ogasawara') S = L.ogasawara;
+  if (S) { x = S.c[0] + (x - S.c[0]) * S.k + S.d[0]; y = S.c[1] + (y - S.c[1]) * S.k + S.d[1]; }
+  return [x, y];
+}
+/** the geographic box shown in each inset (for picking map tiles) */
+export const INSET_BOX: Record<'okinawa' | 'ogasawara', [number, number, number, number]> = {
+  okinawa: [122.0, 23.8, 131.6, 28.0],
+  ogasawara: [139.0, 24.0, 142.4, 28.0],
+};
+
+/** planar metres (as laid out on the map) -> lon/lat; insets are undone first. For the Okinawa inset
+ *  the Daitō / Sakishima shifts are tried in turn and the one that projects back onto the point wins. */
+export function unproject(p: [number, number], L: Layout, space: Space): [number, number] {
+  if (space === 'main' || space === 'outside') return lccInverse(p[0], p[1]);
+  const S = space === 'okinawa' ? L.okinawa : L.ogasawara;
+  const x = S.c[0] + (p[0] - S.d[0] - S.c[0]) / S.k, y = S.c[1] + (p[1] - S.d[1] - S.c[1]) / S.k;
+  if (space === 'ogasawara') return lccInverse(x, y);
+  let best: [number, number] = lccInverse(x, y), bd = Infinity;
+  for (const sh of [[0, 0], L.okinawa.daito, L.okinawa.sakishima] as [number, number][]) {
+    const ll = lccInverse(x - sh[0], y - sh[1]);
+    const back = projectIn(ll[0], ll[1], L, 'okinawa');
+    const d = Math.hypot(back[0] - p[0], back[1] - p[1]);
+    if (d < bd) { bd = d; best = ll; }
+  }
+  return best;
+}

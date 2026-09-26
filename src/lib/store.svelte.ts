@@ -64,6 +64,10 @@ class Store {
   /** reach map: the next map click picks the origin; the 1 km grid is being loaded */
   pickArmed = $state(false);
   gridLoading = $state(false);
+  /** 地点を調べる: the next map click inspects a point (elevation, landform) */
+  inspectArmed = $state(false);
+  inspect = $state.raw<import('./pointinfo').PointInfo | null>(null);
+  inspectLoading = $state(false);
 
   // ------------------------------------------------------------ which view is on
   readonly nowWarn = $derived.by(() => app.layer === 'now' && !!this.nt && this.nt.isWarn);

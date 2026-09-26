@@ -136,3 +136,11 @@ test('shared shortlist link offers the list', async ({ page }) => {
   await banner.getByRole('button', { name: '追加する' }).click();
   await expect(page.locator('aside ul.short li')).toHaveCount(2);
 });
+
+test('background map layer and fill strength', async ({ page }) => {
+  const errors = await open(page, 'bm=pale&r=13');
+  await expect(page.locator('canvas.tiles').first()).toBeAttached();
+  await expect(page.locator('#basemap')).toHaveValue('pale');
+  await expect(page.locator('.base-row input[type=range]')).toBeVisible();
+  expect(errors).toEqual([]);
+});

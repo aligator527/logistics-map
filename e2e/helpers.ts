@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-/** Offline third parties (JMA live data, PR TIMES images) — the site must cope with both failing —
+/** Offline third parties (JMA live data, PR TIMES images, GSI tiles and APIs) — the site must cope with both failing —
  *  and collect console errors. */
 export async function open(page: Page, hash = '', opts: { theme?: 'light' | 'dark' } = {}) {
   const errors: string[] = [];
@@ -9,7 +9,7 @@ export async function open(page: Page, hash = '', opts: { theme?: 'light' | 'dar
     // failed third-party requests are expected here (blocked on purpose)
     if (m.type() === 'error' && !/Failed to load resource|net::ERR_FAILED/.test(m.text())) errors.push(m.text());
   });
-  await page.route(/bosai|jma\.go\.jp|prcdn\.freetls\.fastly\.net/, (r) => r.abort());
+  await page.route(/bosai|jma\.go\.jp|prcdn\.freetls\.fastly\.net|gsi\.go\.jp/, (r) => r.abort());
   await page.addInitScript((theme) => {
     try { localStorage.setItem('lang', 'ja'); if (theme) localStorage.setItem('theme', theme); } catch { /* ignore */ }
   }, opts.theme ?? 'light');
