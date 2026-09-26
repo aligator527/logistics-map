@@ -1,0 +1,33 @@
+# Daily check of the published site with the real third parties (JMA, PR TIMES images, data
+# files): e2e/live.spec.ts. A failure here means a source changed or went away, not the code.
+name: Site check
+
+on:
+  schedule:
+    - cron: '30 22 * * *'   # 07:30 JST, after the news update
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test --project=desktop
+        env:
+          CI: '1'
+          LIVE_URL: https://aligator527.github.io/logistics-map/
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: site-check-report
+          path: playwright-report
+          retention-days: 14

@@ -108,7 +108,7 @@
   li a { font-size: 13.5px; line-height: 1.45; color: var(--ink); text-decoration: none; display: block; }
   .ex { margin: 2px 0 0; font-size: 12px; line-height: 1.45; color: var(--ink-2);
         display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .new { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg); background: var(--clay); border-radius: 3px; padding: 0 4px; margin-right: 6px; vertical-align: 1px; }
+  .new { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink); background: var(--surface); border: 1px solid var(--clay); border-radius: 3px; padding: 0 3px; margin-right: 6px; vertical-align: 1px; }
   .pref.map { font-weight: 600; color: var(--ink); }
   li a:hover { text-decoration: underline; }
   .line { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 3px; font-size: 11.5px; color: var(--muted); }

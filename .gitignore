@@ -5,3 +5,5 @@ dist/
 # large downloads / intermediates, re-created by the scripts in scripts/
 data/raw/
 data/geo/
+test-results/
+playwright-report/

@@ -1,4 +1,5 @@
-# Type check, data tests (published JSON vs. hand-verified official figures) and build.
+# Type check, data tests (published JSON vs. hand-verified official figures), build, and
+# end-to-end checks of the built site in a browser (desktop and phone, light and dark, axe).
 name: CI
 
 on:
@@ -22,3 +23,23 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+        env:
+          CI: '1'
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 14

@@ -30,6 +30,7 @@ jobs:
           node-version: 22
       # the fetcher only needs Node's fetch/TextDecoder: no npm install
       - run: node scripts/fetch-news.mjs
+      - run: node scripts/check-data.mjs public/data/news.json
       - id: commit
         run: |
           if git diff --quiet -- public/data/news.json; then

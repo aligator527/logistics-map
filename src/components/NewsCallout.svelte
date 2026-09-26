@@ -165,7 +165,7 @@
   .body { min-width: 0; display: grid; align-content: start; gap: 3px; }
   .place { margin: 0; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; padding-right: 18px; }
   .place-btn { border: 0; background: none; padding: 0; font: inherit; color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
-  .new { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--bg); background: var(--clay); border-radius: 3px; padding: 0 4px; }
+  .new { font-size: 9.5px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink); background: var(--surface); border: 1px solid var(--clay); border-radius: 3px; padding: 0 3px; }
   h3 { margin: 0; font-size: 13px; line-height: 1.35; font-weight: 600;
        display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   h3 a { color: inherit; text-decoration: none; }

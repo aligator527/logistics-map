@@ -44,6 +44,8 @@ jobs:
       - run: npm run etl:jobs
       - run: npm run etl:diesel
       - run: npm test
+      # stop before committing when a file looks broken rather than updated (layout change etc.)
+      - run: node scripts/check-data.mjs
       - id: commit
         run: |
           if git diff --quiet -- public/data; then

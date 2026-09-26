@@ -29,9 +29,12 @@
     "etl:diesel": "node scripts/etl-diesel.mjs",
     "jma-areas": "node scripts/build-jma-areas.mjs",
     "etl:hazard": "node scripts/etl-hazard.mjs",
-    "network": "node scripts/build-network.mjs"
+    "network": "node scripts/build-network.mjs",
+    "e2e": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.63.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@tsconfig/svelte": "^5.0.8",
     "@types/d3-geo": "^3.1.1",
