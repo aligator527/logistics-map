@@ -1,198 +1,12 @@
-# 総合物流マップ — Japan Logistics Map (Фазы 1–3)
+# 総合物流マップ — Japan Logistics Map
 
-Инструмент первичного скрининга локаций для логистики: где в Японии строить или арендовать склад.
-Статический сайт (Vite + Svelte 5, своя SVG-карта, без бэкенда), архитектура как у
+A first-pass site-screening tool for logistics real estate: where in Japan to build or lease a warehouse.
+A static site (Vite + Svelte 5, a custom SVG map, no backend), built on the same architecture as
 [zairyu-map](https://github.com/aligator527/zairyu-map).
 
-Четыре темы на одной карте (倉庫 / 貨物流動 / 労働力 / 立地スコア) и лента новостей, общие для всех: DPL, дороги и IC,
-сравнение двух префектур, таблица, EN/日本語, темы, `#hash`.
+**Live:** https://aligator527.github.io/logistics-map/ — Japanese and English UI, light and dark themes, works on phones.
 
-**Муниципалитеты, реальное время, новости на карте:**
-- **市区町村** — обозреватель 18 муниципальных показателей (1 898 единиц): прогноз населения 2035/2050 и рабочего возраста
-  (1-км сетка R6), 65+, 30-км население, IC, цена и динамика цены 工業地, 工業系用途地域, доли 市街化区域 / 市街化調整区域,
-  道路貨物・倉庫・冷蔵倉庫 (経済センサス 2021), 就業者の流入比, рабочая сила в 30 км, J-SHIS. Профиль с рангами,
-  сравнение A/B двух муниципалитетов, топ по префектуре. Плюс доли жителей в зонах 洪水 (0,5 м+ и 3 м+), 高潮, 津波 и
-  土砂災害警戒区域 и время в пути до контейнерного порта (≥ 100 тыс. TEU), грузового аэропорта (≥ 10 тыс. т) и грузовой
-  станции; эти риски на уровне муниципалитета заменили в муниципальном 立地スコア унаследованные префектурные.
-- **到達圏** — изохроны от муниципалитета или DPL-объекта: время в пути до всех муниципалитетов, население в пределах
-  30/60/90/120/180 мин, число DPL-объектов, ближайшие порты / аэропорты / грузовые станции по времени. Оценка для
-  грузовика, а не маршрутизатор (см. «Время в пути»).
-- **現況** (в браузере, JSON 気象庁 с CORS): предупреждения по муниципалитетам в новой системе уровней (`warning/data/r8`,
-  проверка `map_time.json` каждые 90 с; соответствие областей JMA муниципалитетам — `public/data/jma-areas.json`,
-  `npm run jma-areas`), землетрясения за 7 дней (震度3+), тайфуны (позиция, 強風域, траектория; вне области карты — только
-  в панели). Цена дизеля по префектурам — еженедельно (`npm run etl:diesel`; сайт 資源エネルギー庁 за AWS WAF: если
-  запрос отклонён, остаются прежние данные, check-sources сообщит). JARTIC и перекрытия NEXCO не подключены: нет CORS
-  или открытых данных.
-- **Новости на карте** — значки-«пузыри» с числом материалов за 90 дней у муниципалитета (по заголовку, объекту DPL или,
-  если в заголовке места нет, по выдержке без скобок с адресом головного офиса) или префектуры; точка‑индикатор — есть
-  новое за 7 дней. На широкой карте 2–3 свежих места сразу получают карточки‑выноски: карточка ставится над морем
-  (маска суши на canvas, жадный подбор места без суши и других карточек, линия‑выноска с изломом), клик по значку
-  закрепляет карточку, «全国のニュース» показывает общенациональные. Карточка: превью (og:image PR TIMES с их CDN, у МЛИТ —
-  плашка источника), заголовок, выдержка до 110 знаков, дата и источник, «記事を読む ↗», «地図でこの地域を見る», листание при
-  нескольких новостях. На узкой карте — лента карточек под картой, от точки центральной карточки идёт линия. Наведение
-  на новость в боковом списке подсвечивает место; фильтр тем общий для списка и карты.
-- **Источники новостей**: 国土交通省, e-Gov и пресс‑релизы девелоперов логистической недвижимости на PR TIMES (大和ハウス,
-  プロロジス, 三井不動産, 野村不動産, 東急不動産, 日鉄興和不動産, シーアールイー, 阪急阪神不動産, 霞ヶ関キャピタル, 東京流通センター) —
-  только логистические заголовки. Отраслевые СМИ по-прежнему выключены. Хранятся заголовок, ссылка, выдержка и URL
-  картинки; тексты статей и сами картинки не копируются.
-- **Досягаемость, углублённо:** режим «2024年ルール» (日帰り往復 / 片道1日 / 2日以上・中継 по 改善基準告示: 13 ч
-  на смену, 9 ч за рулём, 30 мин отдыха на 4 ч, погрузка по 1 ч); покрытие сети сразу от всех DPL или от списка
-  кандидатов с крупнейшими местами за пределами 2 ч; расчёт по сетке населения 1 км (`public/geo/grid.bin.gz`, ~360 КБ,
-  холст поверх карты); точка отправления — любая точка карты.
-- **立地スコア — устойчивость:** 200 розыгрышей весов (каждый ±50%): диапазон рангов и доля попаданий в топ‑10,
-  ◆ у устойчивых лидеров.
-- **Список кандидатов** (в браузере): CSV, «候補を比較» — таблица «место × показатель» с выделением лучшего и печатью,
-  «リンクで共有» (ссылка со списком, у получателя — «добавить / заменить»), уведомления браузера при 警報 у кандидатов
-  (пока открыта страница).
-- **指定河川洪水予報** — реки с 氾濫注意報〜特別警報 (bosai `flood/data/r8/flood_xml.json`), уровень переносится на
-  прибрежные муниципалитеты.
-- **用語** — ~30 японских терминов с пояснениями: подсказки в легенде и справке, список по теме.
-- **PWA:** манифест, иконки, service worker — сайт открывается офлайн с последними загруженными данными. Если в списке что-то есть, данные JMA
-  опрашиваются на любой вкладке, и у кандидатов с действующим 注意報 / 警報 появляется значок уровня.
-
-**Земля и объекты:**
-- **工業系用途地域** —準工業・工業・工業専用 зоны (国土数値情報 A29, 2019) для выбранной префектуры (`npm run zoning`,
-  файл на префектуру 20–300 КБ). По условиям данных под картой указано, что границы приблизительны.
-- **他社の物流施設** — реестр объектов из пресс‑релизов девелоперов (`public/data/facilities.json`, пополняется
-  ежедневно, записи не удаляются): этапы с датами, 延床面積, место по тегам или названию.
-
-**Фон и грунт (地理院タイル):**
-- «背景地図»: 淡色地図・標準地図・写真, 陰影起伏図・色別標高図・傾斜量図, 治水地形分類図・明治期の低湿地・土地条件図
-  (тематические — поверх бледной карты). Тайлы Web Mercator ставятся в нашу проекцию Ламберта кусочно‑аффинно
-  (тайл делится на до 8×8 частей по пересчитанным углам, врезки Окинавы/Огасавары отдельно); заливка тем над ними
-  полупрозрачная («塗りの濃さ»), в тёмной теме бледные карты затемняются фильтром. Источник под картой — «地理院タイル».
-- «地点を調べる»: клик по карте → 標高 (API высот 国土地理院) и 地形分類 (GeoJSON‑тайлы 自然地形 / 人工地形,
-  класс по цветовой группе из `style.js` GSI) с оценкой 良好 / やや注意 / 注意 и ссылкой в 地理院地図. То же — в карточке
-  DPL и в «候補を比較».
-
-**Анализ, выгрузка, удобство:**
-- **地点カルテ** — для любой точки (клик «地点を調べる» или поиск адреса через геокодер 国土地理院): адрес, 標高, 地形分類,
-  глубины 洪水 / 高潮 / 津波 / 土砂 из тайлов ハザードマップポータル, время до IC, порта, аэропорта, грузовой станции,
-  население в 30/60/120 мин, объекты DPL и других девелоперов в 20 км, показатели муниципалитета, действующие
-  предупреждения; печать / PDF.
-  Точку можно добавить в список кандидатов (`q<lon,lat>` в ссылке).
-- **立地シミュレーション** — жадный подбор 1–5 мест (муниципалитеты с 工業系用途地域 ≥ 20 га и долей жителей в зоне
-  洪水 < 50%, по желанию в одной префектуре), каждое следующее даёт наибольший прирост населения в пределах заданного
-  времени; уже имеющиеся места — нет / DPL / список кандидатов. Считается в Web Worker (< 1 с).
-- **Паромы** — 22 линии дальнего следования (苫小牧・小樽・新潟・敦賀・名古屋・大阪・北九州 и т.д.), посадка + 90 мин;
-  включаются/выключаются в панели 到達圏 (`nf=1`). Ж/д перевозки в маршрутизации не моделируются: нет открытого
-  расписания 貨物列車 по контейнерам.
-- **Спрос** — 世帯数, 転入超過率 2025 (住民基本台帳), 所得 на налогоплательщика (課税状況), занятые в рознице и
-  通信販売 (経済センサス), 5- и 10-летнее изменение цены 工業地 (L01), индекс цены земли префектура vs страна.
-- **コスト試算** — аренда земли по цене 工業地, персонал по 最低賃金 префектуры (часы, смена, надбавка), топливо по
-  цене дизеля; входные данные хранятся в браузере, строки добавляются в «候補を比較».
-- **保存・書き出し** — сохранённые виды (`#hash` в localStorage), PNG карты (тайлы и холсты + SVG со встроенными
-  стилями), GeoJSON / KML: изохроны, список кандидатов, реестр объектов других девелоперов.
-- **Крупный масштаб** — приближение до уровня отдельных зданий (≈ z17.5 地理院タイル, ~1 м/пиксель). С z10.5 для
-  префектур на экране догружаются подробные границы муниципалитетов и линии скоростных дорог (`public/geo/detail/NN.json`,
-  N03/N06 с упрощением 5 м, 60–600 КБ gzip, `npm run detail`); обзорная карта по‑прежнему 180 м. Между z11.5 и z14.5
-  заливка плавно уходит в цветные контуры; если фон не выбран, с z11.5 сам подключается 淡色地図 (выбор в «背景地図» не
-  меняется). Линейка масштаба; вид карты в ссылке (`mv=z/широта/долгота`); колесо зумит без Ctrl после клика по карте
-  (до клика — подсказка, страница прокручивается как обычно); двойной клик / двойной тап — приблизить (Shift — отдалить).
-- **距離・面積を測る** — точки кликами по карте: длина ломаной (по сфере), замкнутая фигура — периметр и площадь в м², га и 坪.
-  Замкнутый участок можно добавить в список кандидатов («区画»): контур на карте, площадь в «候補を比較», стоимость
-  земли по его площади (вместо допущения из コスト試算), GeoJSON/KML‑полигон, в ссылке‑шаринге (`g<lon,lat_…>`).
-- **建物** (с z15) — здания из 国土地理院最適化ベクトルタイル (слой BldA; 堅ろう・高層 темнее). **筆界** (с z16) — границы
-  участков из 法務省 登記所備付地図データ 2025 (тайлы KotobaMedia `tiles.kmproj.com`, CORS открыт, для некоммерческого
-  использования свободно): при наведении — 地番, 大字・丁目, 精度区分; с z17 номера на карте. В данных только карты в
-  公共座標 — около половины участков страны; где их нет, карта так и пишет. Это не подтверждение границ.
-  Геометрия тайла проецируется один раз и хранится как Path2D, при панорамировании меняется только трансформация холста.
-- **1kmメッシュ** на карте досягаемости: ячейки рисуются своей формой (45″×30″), при наведении — население, время, класс
-  по правилам 2024 года.
-- **ガイド** — 4 сценария по шагам (поиск участка, 2024年問題, риски, рынок складов): каждый шаг переключает карту.
-**Решения (2026-09):**
-- **絞り込み (воронка)** — жёсткие условия по муниципальным показателям (≥ / ≤, ползунок по распределению страны),
-  применяются по очереди: «1 898 → 1 230 → … → 190», не прошедшие гаснут на карте, условия в ссылке (`fx=`), список
-  прошедших с ☆, симуляция может брать кандидатов только из них. Пример «物流用地» одной кнопкой.
-- **配送費 по 標準的な運賃** — таблица 告示 2024 (10 регионов 運輸局 × 4 класса машин, `src/lib/fares.ts`, округление вверх по
-  полосам как в Q&A МЛИТ): рейсы из площадки в муниципалитеты в пределах времени, пропорционально выбранному спросу
-  (население, домохозяйства, розница, EC, 製造品出荷額, опт); реальные дорожные км по быстрейшему пути; CO₂ по 改良トンキロ法
-  (ガイドライン Ver.3.2). Строки в «候補を比較». Не входят: платные дороги, ожидание, погрузка, надбавки.
-- **Скорости грузовиков** — 道路交通センサス 2021 (箇所別基本表): участки IC→IC (大型車, день и час пик) кладутся на граф по
-  именам IC с проверкой длины (±30%) — 73% км измерено, 20% средняя по трассе, остальное прежние 80/65/60/45 км/ч.
-  Переключатель «混雑時の速度».
-- **通行止め** — клик по скоростной дороге закрывает участок между IC/JCT (`cl=`), показатель «所要時間の増加», население,
-  выпадающее из 日帰り圏, самые пострадавшие муниципалитеты.
-- **立地シミュレーション: 総コスト最小** — жадный p-median: рейсы по 標準的運賃 от ближайшей площадки + постоянные затраты
-  площадки (земля × годовая ставка + персонал); таблица по шагам и ★ оптимальное число площадок. Паромы в этом режиме
-  выключены (тарифов паромов в таблице нет).
-- **B2B-спрос** — 製造品出荷額等 2024 (経済構造実態調査 2025, 参考表; X = скрыто), занятые в 製造業 и 卸売業 (経済センサス 2021);
-  новые районы 浜松 получают городское значение пропорционально населению.
-- **緊急輸送道路 (N10 2024) и 重要物流道路 (N12 2021)** — слой на карте, расстояние от центра населения, строки в 地点カルテ.
-  Обе лицензии 「非商用」: линии объединены по классу и упрощены (обработанный продукт с указанием источника).
-  **大型車誘導区間** не показаны: открытых данных нет, а тайлы 道路情報便覧 без разрешения на повторное использование.
-- **Статусы кандидатов** (候補・現地調査・交渉中・保留・見送り) и заметки — в сравнении, CSV и ссылке‑шаринге (статус).
-- **意思決定レポート** — печать/PDF: снимок карты, предпосылки (воронка, скорости, закрытия, допущения затрат), кандидаты со
-  статусами и заметками, полное сравнение, источники.
-- **Закреплённые показатели** (📌 в 指標) в 概要; **история** (← → и кнопки браузера) по выбору места/темы/показателя;
-  **2 карты рядом** (`lk2=`) с точной синхронизацией; **データの鮮度** в подвале (время данных, график обновлений, статус).
-- **Плавность** — во время жеста тяжёлые слои (SVG заливки, тайлы, растры) двигаются CSS‑трансформацией как один слой и
-  перерисовываются в конце; при приближении рисуются только видимые муниципалитеты.
-
-- **Боковая панель** — вкладки 概要 / 指標 (или 重み・内訳) / 到達圏・計算 / 候補 (число, точка при 警報) / ニュース (число
-  свежих); показываются только те, что есть у темы, выбранная хранится в ссылке (`tb=`), карта досягаемости открывается
-  на 到達圏・計算. На широком экране панель прилипает под панелью настроек и прокручивается сама, карта остаётся на месте;
-  ширина перетаскивается (или ←→ на разделителе) и запоминается, «»» прячет панель. 市区町村の指標 — по 2 ключевых
-  показателя в группе + текущий, «+n» раскрывает, фильтр по названию; веса — в два столбца, описания во всплывающей
-  подсказке; 内訳 — одна строка на критерий.
-- **Телефон** — настройки свёрнуты под «表示設定», внизу — полоса с выбранным местом, значением и «詳細 ↓».
-- **Скорость** — тяжёлые расчёты (сетка 1 км, устойчивость скоринга, симуляция) в Web Worker, темы муниципалитетов,
-  маршрутизатор и досье грузятся отдельными чанками, муниципальные данные — в `requestIdleCallback`; Lighthouse
-  (mobile) ≈ 70.
-- **Клавиатура** — стрелки на карте перебирают префектуры, внутри префектуры — муниципалитеты; Enter выбирает.
-- **Реестр объектов** — адрес 所在地 геокодируется (国土地理院), результат отбрасывается, если противоречит месту из
-  названия; ручные поправки — `data/facilities-overrides.json`.
-
-**Инфраструктура и удобство:**
-- **港・空港** — аэропорты (国土数値情報 C28 + 空港管理状況調書 2025, грузы и доля международных), размер знака ∝ √груза;
-  у каждого DPL — ближайший грузовой аэропорт. Порты (C02 + 港湾統計 2025, тонны и TEU) и грузовые ж/д станции (P31)
-  есть только в **некоммерческих** источниках. Сайт сейчас некоммерческий, поэтому `npm run etl:multimodal`
-  собирает их (флаг `--noncommercial`); для коммерческого деплоя уберите флаг в package.json.
-- **Поиск** по префектурам, муниципалитетам (ja/en, без макронов) и объектам DPL.
-- **立地メモ** — сводка по выбранной префектуре/муниципалитету из всех тем (печать / PDF).
-- **CI и тесты данных** (`npm test`): опубликованные JSON сверяются с контрольными значениями из источников.
-- **Автообновление** (`update-data.yml`, еженедельно): 倉庫統計季報, 特定技能, 有効求人倍率 — коммит только если тесты прошли
-  и данные изменились; `npm run check-sources` сообщает о новых выпусках ручных источников (物流センサス 第12回,
-  水害統計, 国土数値情報 L01/L02/N06/N03, J-SHIS, возраст снимка DPL).
-- Первая отрисовка — только префектуры (`pref.topo.json`), муниципалитеты догружаются.
-
-**Дополнения после Фазы 3:**
-- **立地の条件 для DPL** — у каждого объекта: население в 10/30/60 км (1-км сетка 国勢調査 2020), ближайшая IC,
-  рабочая сила (輸送・運搬) в 30 км, занятые в логистике в 20 км, цена 工業地 в 10 км — рядом с медианой всех
-  DPL; на карте — кольца 10/30/60 км.
-- **Муниципальный скоринг** (立地スコア → 市区町村, 1 898 единиц): 30/60-км население, логистический кластер,
-  расстояние до IC, цена 工業地, площадь 工業系用途地域, рабочая сила в 30 км, J-SHIS в центре населения;
-  求人倍率 и 土砂/水害 — значения префектуры (помечены). Все расстояния — от центра, взвешенного по населению.
-- **Цена земли** — критерий 「コスト」 в обоих скорингах (地価公示 2026 + 地価調査 2026, 用途区分 工業地).
-
-**Фаза 3:**
-- **立地スコア** — 11 критериев (рынок: 倉庫ストック, 空き, 到着, 発送; доступ: IC на км²; труд: 求人倍率
-  водителей и 運搬 (меньше — лучше), 特定技能; риски: 地震, 土砂, 水害). Каждый критерий → процентильный ранг
-  0–100 среди 47 префектур (устойчив к выбросам), итог — взвешенное среднее. Веса 0–5 ползунками, 5 пресетов,
-  разбор по критериям для префектуры, сравнение A/B; веса и пресет — в `#hash` (`pr=…` или `sw=key-w.…`).
-- **Риски** — J-SHIS 2024 (震度6弱+ за 30 лет, медиана по центроидам муниципалитетов), 土砂災害警戒区域 на км²,
-  水害被害額 2014–2023 (среднее) на км². Для каждого объекта DPL — J-SHIS в точке и глубина 洪水/高潮
-  (想定最大規模) по тайлам ハザードマップポータル.
-- **Новости** — только заголовки и ссылки, ежедневно через GitHub Actions (`update-news.yml`), архив 180 дней,
-  теги тем и префектур (для DPL — по названию объекта). Источники: 国交省 報道発表, e-Gov パブコメ,
-  Daiwa House через PR TIMES. Отраслевые СМИ (LNEWS, 物流ウィークリー, LOGISTICS TODAY) описаны в
-  `scripts/fetch-news.mjs`, но выключены до получения разрешения; МХЛВ и Google News не используются (их условия
-  запрещают такое использование).
-
-**Фаза 2:**
-- **貨物流動** — 物流センサス 2005/2010/2015/2021: хороплет (県外への発送 / 県外からの到着 / 純流入 / 県内),
-  дуги OD (по стране — 30 крупнейших потоков между несоседними префектурами, опционально с соседними;
-  у выбранной префектуры — 8 главных направлений и 8 источников; в сравнении — A↔B), 年間 или 3日間,
-  разрез по виду транспорта (только 3日間) или по 品類.
-- **労働力** — 有効求人倍率 для 自動車運転 / 運搬 по префектурам (FY2012–2025, разрыв классификации в
-  FY2023 отмечен), 特定技能1号 по сферам (2023-06 … 2025-12), региональная оценка дефицита
-  перевозок 2024 (NX総研) в тултипах, сравнении и панели. 物流倉庫 — отдельная карточка: сфера с 2026-04,
-  в данных ISA пока не учтена; колонка подхватится ETL автоматически, когда появится.
-
-**Фаза 1:** хороплет по префектурам (所管面積 / 入庫高 / 保管残高 / 空面積率, значение или 前年同期比)
-со слайдером по 61 кварталу, муниципальные границы при зуме в префектуру, объекты DPL (Daiwa House),
-скоростные дороги и IC/JCT, режим сравнения двух префектур, таблица-альтернатива карте,
-EN/日本語, светлая/тёмная тема, mobile-first, клавиатура, reduced motion. Состояние хранится в `#hash`.
+The site is **non-commercial**. Several sources are used under non-commercial terms (see [Licences](#licences-and-limits)).
 
 ```bash
 npm install
@@ -200,143 +14,218 @@ npm run dev          # http://localhost:5173
 npm run build        # -> dist/
 ```
 
-## Данные
+## What it does
 
-| слой | источник | скрипт | результат |
+### Subjects on one map
+Six subjects share one map, the DPL sites (Daiwa House logistics parks), expressways and interchanges, a
+prefecture comparison mode, a table view and the news layer. The whole state lives in the URL `#hash`.
+
+- **倉庫 (warehouses)** — prefecture choropleth of commercial warehouse statistics (所管面積 / 入庫高 / 保管残高 /
+  空面積率, value or year-on-year), with a slider over 61 quarters.
+- **貨物流動 (freight flows)** — 物流センサス 2005/2010/2015/2021: outbound / inbound / net / intra-prefecture,
+  origin–destination arcs (the 30 largest flows nationally, or the top 8 destinations and sources of a prefecture),
+  annual or 3-day basis, by transport mode (3-day only) or commodity.
+- **労働力 (labour)** — job-opening ratios for drivers and handling workers by prefecture (FY2012–2025; the 2023
+  classification break is marked), specified skilled workers (特定技能1号) by field, and the regional 2024 capacity
+  shortfall estimate (NX総研).
+- **市区町村 (municipalities)** — an explorer of about 40 metrics for all 1,898 municipalities and designated-city wards:
+  population outlook (2035/2050, working age, 65+), population within 30 km, demand (households, migration, income,
+  retail and e-commerce employees, manufacturing shipments, wholesale), access (interchanges, ports, cargo airports,
+  rail freight stations, emergency and key logistics roads), land (industrial land price and its 5/10-year change,
+  industrial zoning, urbanisation area shares), industry (road freight, warehousing, cold storage employees), labour
+  (transport workers within 30 km, commuting) and hazards (J-SHIS earthquake, shares of residents in flood, deep flood,
+  storm-surge, tsunami and landslide zones). Profile with ranks, A/B comparison, top lists per prefecture.
+- **立地スコア (site score)** — 11 criteria per prefecture (market, access, labour, risk) or a municipal score; each
+  criterion becomes a 0–100 percentile rank and the total is a weighted mean. Weights 0–5, five presets, breakdown per
+  place, and a stability check: 200 random re-weightings (±50% each) give each place's rank range and share of top-10
+  finishes (◆ marks robust leaders).
+- **現況 (live)** — JMA warnings per municipality (new level system, polled every 90 s), earthquakes of the last 7 days,
+  typhoons, designated-river flood forecasts, and weekly diesel prices per prefecture.
+
+### Decisions
+- **絞り込み (screening funnel)** — hard conditions on municipal metrics (≥ / ≤, sliders move along the national
+  distribution), applied in order: "1,898 → 1,230 → … → 190". Municipalities that fail are greyed out on the map; the
+  conditions are in the link (`fx=`); the passing list can be starred into the shortlist and used as the only candidates
+  of the simulation. A warehouse-site example is one click away.
+- **到達圏 (reach)** — truck travel time from a municipality, a DPL site, all DPL sites, the shortlist or any point on the
+  map: population within 30–180 minutes, the 2024 driving rules (day trip / one day / two days or relay, from the
+  改善基準告示: 13 h on duty, 9 h driving, 30 min rest per 4 h, 1 h handling at each end), nearest ports, airports and
+  rail freight stations, and a 1 km population grid (cells drawn at their true 45″ × 30″ shape; hover shows population,
+  time and trip class).
+- **通行止め (road closures)** — click an expressway to close the stretch between two interchanges (`cl=`): extra travel
+  time per municipality, people dropping out of day-trip reach, the places hit hardest.
+- **混雑時 (rush hour)** — switch to rush-hour truck speeds (road census, 7–9 and 17–19 h).
+- **配送費 (delivery cost)** — yearly cost of delivery runs from a site at the MLIT **standard freight rates**
+  (標準的な運賃, 2024 notice: 10 regions × 4 vehicle classes, distance bands rounded up as in the MLIT Q&A). Runs go to
+  the municipalities within a chosen time, in proportion to a chosen demand (population, households, retail, e-commerce,
+  manufacturing shipments, wholesale), over the real road distance of the quickest path. CO₂ by the improved ton-km
+  method (METI/MLIT guideline Ver.3.2). Tolls, waiting, handling and surcharges are not included.
+- **コスト試算 (site cost)** — land purchase at the industrial land price, staff at the prefecture's minimum wage, fuel at
+  the diesel price; the assumptions are kept in the browser.
+- **立地シミュレーション (site simulation)**, two objectives:
+  - *reach the most people*: greedy maximum coverage — the N municipalities whose sites reach the most people within a
+    time limit, on top of existing sites (none / DPL / shortlist);
+  - *lowest total cost*: greedy p-median — delivery runs at the standard fares from the nearest site plus a fixed yearly
+    cost per site (land at a yearly rate + staff); every step is shown and ★ marks the number of sites with the lowest
+    total. Ferries are off in this mode (ferry fares are not in the table).
+  Candidates can be restricted to industrial zoning ≥ 20 ha, flood share < 50%, one prefecture or the screened set.
+  Runs in a Web Worker (about a second).
+- **Shortlist (候補)** — prefectures, municipalities, DPL sites, map points and measured plots; status (candidate / site
+  visit / negotiating / on hold / dropped) and notes; side-by-side comparison with the best value marked in each row;
+  CSV; a share link (with statuses); browser notifications when a candidate gets a JMA warning.
+- **意思決定レポート (decision report)** — printable / PDF: a picture of the map, the assumptions (screening, speeds,
+  closures, cost settings), the candidates with status and notes, the full comparison and the sources.
+- **地点カルテ (site memo)** for any point (map click or address search via the GSI geocoder): address, elevation,
+  landform, flood / storm-surge / tsunami / landslide depth at the point, industrial zoning, travel times, population
+  in 30/60/120 minutes, distance to emergency and key logistics roads, a link to the official large-vehicle route map of
+  the prefecture, DPL and other developers' facilities within 20 km, the municipality's metrics and live warnings.
+- **立地メモ (area memo)** — a printable summary of a prefecture or municipality across all subjects.
+
+### The map
+- **Close zoom** — down to single buildings (about z17.5 of the GSI tiles, ~1 m per pixel). From z10.5, detailed
+  municipal boundaries and expressway lines (simplified to 5 m, `public/geo/detail/NN.json`, 60–600 KB gzipped) are
+  loaded for the prefectures on screen; the overview stays at 180 m. Between z11.5 and z14.5 the fill fades into coloured
+  outlines, and without a chosen background the pale GSI map comes in on its own.
+- **Background maps (地理院タイル)** — pale, standard and aerial maps, hillshade, elevation and slope, flood-control
+  landform, Meiji-era wetlands and land-condition maps. Web Mercator tiles are placed into the map's Lambert projection
+  piecewise-affinely (each tile split into up to 8 × 8 pieces, the Okinawa and Ogasawara insets separately).
+- **Buildings (建物, from z15)** — GSI optimised vector tiles (layer BldA). **Land parcels (筆界, from z16)** — the MOJ
+  registry maps 2025 (tiles by KotobaMedia): lot number, district and accuracy class on hover, lot numbers on the map
+  from z17. Only maps in public coordinates are in the data — about half of Japan; where there are none, the map says so.
+  Tile geometry is projected once and kept as `Path2D`.
+- **Emergency transport roads (N10) and key logistics roads (N12)** — a layer, distances per municipality and in the
+  site memo.
+- **Industrial zoning (A29)** and **other developers' facilities** — a registry built from developer press releases
+  (stages with dates, floor area, geocoded address checked against the place in the name; manual fixes in
+  `data/facilities-overrides.json`).
+- **Ports, airports, rail freight stations** — sized by cargo; nearest cargo airport for every DPL site.
+- **News on the map** — bubbles with the number of items per place over 90 days; on wide maps the freshest places get
+  callout cards over the sea (a land mask on a canvas picks free spots, leader lines with a bend); related news
+  (same facility, series, company, place, topic) and a facility timeline; on narrow maps a card strip under the map.
+- **Measuring** — distances and areas (m², ha, 坪); a closed shape can be saved to the shortlist as a plot (its area then
+  replaces the assumed plot size in the cost estimate).
+- **Scale bar**, the view in the URL (`mv=zoom/lat/lon`), wheel zoom after a click on the map, double click / double tap
+  to zoom, keyboard navigation (arrows walk prefectures, then municipalities; Enter selects).
+- **Side by side** (`lk2=`) — a second map with another municipal metric, sharing the exact view while moving.
+- **Smooth panning** — during a gesture the heavy layers (area SVG, tile and raster canvases) move as one composited
+  layer by a CSS transform and are redrawn when it ends; zoomed in, only the areas on screen are drawn.
+
+### Interface
+- **Side panel** with tabs — 概要 (overview), 絞り込み (screening), 指標 / 重み・内訳 (metrics or weights), 到達圏・計算
+  (reach and costs), 候補 (shortlist, with a count and a warning dot), ニュース (news, with a count of fresh items). Only
+  the tabs a subject has are shown; the chosen tab is in the URL (`tb=`). On wide screens the panel sticks under the
+  controls and scrolls on its own while the map stays in view; its width can be dragged (or set with the arrow keys on
+  the splitter) and it can be hidden.
+- **Pinned metrics** (📌) on the overview tab; **view history** (← → and the browser buttons) over places, subjects and
+  metrics; **saved views**; export to **PNG**, **GeoJSON** and **KML**.
+- **ガイド** — four step-by-step scenarios (finding a site, the 2024 driving rules, hazards, the warehouse market).
+- **Phones** — controls fold under 表示設定; a bar at the bottom keeps the selection and its value in sight.
+- **Glossary** of about 30 Japanese logistics terms, shown as hints in legends and help texts.
+- **PWA** — installable, opens offline with the last loaded data.
+- **Data freshness** (in the footer) — for every source: as-of date, update cadence, next expected release and status.
+- **Performance** — heavy calculations (1 km grid, score stability, simulation) in Web Workers; municipal themes, the
+  router and the memo load as separate chunks; prefectures paint first and municipalities follow; Lighthouse (mobile)
+  about 70.
+
+## Data
+
+| Layer | Source | Script | Output |
 |---|---|---|---|
-| Склады | МЛИТ 倉庫統計季報, .xls по кварталам ([страница](https://www.mlit.go.jp/seisakutokatsu/freight/seisakutokatsu_freight_mn2_000007_2.html)) | `npm run etl:warehouse` | `public/data/warehouse.json` |
-| Границы | 国土数値情報 N03 (2026-01-01), та же сборка, что в zairyu-map (там 2025) | `npm run geo` | `public/geo/japan.topo.json` |
-| Названия (EN) | Wikidata, `data/labels/wikidata_lg_codes.csv` | `npm run labels` | `public/geo/muni-en.json` |
-| Дороги, IC | 国土数値情報 N06 高速道路時系列 (FY2025) | `npm run roads` | `public/geo/roads.json` |
-| DPL | Daiwa House, 物件一覧 (XML со страницы списка) | `npm run etl:dpl` | `public/data/dpl.json` |
+| Warehouses | MLIT 倉庫統計季報, quarterly .xls ([page](https://www.mlit.go.jp/seisakutokatsu/freight/seisakutokatsu_freight_mn2_000007_2.html)) | `npm run etl:warehouse` | `public/data/warehouse.json` |
+| Boundaries | 国土数値情報 N03 (2026-01-01) | `npm run geo` | `public/geo/japan.topo.json` |
+| Detailed boundaries and expressways | N03 + N06, simplified to 5 m, per prefecture | `npm run detail` | `public/geo/detail/NN.json` |
+| English names | Wikidata, `data/labels/wikidata_lg_codes.csv` | `npm run labels` | `public/geo/muni-en.json` |
+| Expressways, interchanges | 国土数値情報 N06 (FY2025) | `npm run roads` | `public/geo/roads.json` |
+| DPL sites | Daiwa House property list (XML) | `npm run etl:dpl` | `public/data/dpl.json` |
+| Freight flows | MLIT 全国貨物純流動調査 (物流センサス), tables I-3-1/2/3, 2005–2021 | `npm run etl:census` | `public/data/census/{index,YYYY}.json` |
+| Job-opening ratios | MHLW 職業安定業務統計, tables 4 and 5 (e-Stat) | `npm run etl:jobs` | `public/data/jobs.json` |
+| Specified skilled workers | ISA, table 5 | `npm run etl:ssw` | `public/data/ssw.json` |
+| Flow arc anchors | prefectural offices | `npm run anchors` | `public/geo/anchors.json` |
+| Earthquake hazard | J-SHIS API (Y2024), 1,898 points + DPL sites | `npm run etl:risk` | `public/data/risk.json` |
+| Landslide zones (prefecture) | MLIT 砂防部, snapshot `data/risk/sabo.csv` | ↑ | ↑ |
+| Flood damage | 水害統計 table 2, 2014–2023 (e-Stat) | `npm run etl:suigai` → `etl:risk` | `data/risk/suigai.json` |
+| Hazard shares per municipality | ハザードマップポータル tiles on the 1 km grid | `npm run etl:hazard` → `etl:muni` | `public/data/muni.json` |
+| 1 km population grid | 国土数値情報 mesh1000r6 (CC BY 4.0) | `npm run etl:mesh` | `data/raw/mesh/pop2020.json` |
+| Municipal metrics | the grid + L01/L02 2026 + 都市計画現況調査 + census 2020 + economic census 2021 + N06 + J-SHIS | `npm run etl:muni` | `public/data/muni.json` |
+| Demand, wages, land trend | 住民基本台帳, 課税状況, economic census 2021, 経済構造実態調査 2025 (2024 shipments), minimum wages, L01 | `npm run etl:demand` | `public/data/muni.json` |
+| Industrial zoning | 国土数値情報 A29 (2019) | `npm run zoning` | `public/geo/zoning/NN.json` |
+| Road network, travel times | N06 + 道路交通センサス 2021 speeds + ferries | `npm run network` | `public/geo/network.json`, `grid.bin.gz` |
+| Emergency / key logistics roads | 国土数値情報 N10 (2024), N12 (2021) | `npm run bcp-roads` | `public/geo/logiroads.json` |
+| Ports, airports, rail stations | 国土数値情報 C28 / C02 / P31, 港湾統計, 空港管理状況調書 | `npm run etl:multimodal` | `public/data/multimodal.json` |
+| News, facility registry | RSS (see below) | `npm run news` | `public/data/news.json`, `facilities.json` |
 
-| Потоки грузов | МЛИТ 全国貨物純流動調査 (物流センサス), таблицы I-3-1/2/3, 2005–2021 | `npm run etl:census` | `public/data/census/{index,YYYY}.json` |
-| 有効求人倍率 | МХЛВ 職業安定業務統計, 雇用関係指標（年度）第4・5表 (e-Stat) | `npm run etl:jobs` | `public/data/jobs.json` |
-| 特定技能 | ISA 特定技能在留外国人数の公表, 第5表 (1号/2号) | `npm run etl:ssw` | `public/data/ssw.json` |
-| Точки привязки дуг | 県庁所在地 (координаты в скрипте) | `npm run anchors` | `public/geo/anchors.json` |
+`npm run data` rebuilds everything. Large inputs (`data/raw`, `data/geo`) are not committed; `data/raw-manifest.json`
+records each file's size, SHA-256, source page and the script that reads it (`npm run raw:verify`, `npm run raw:update`).
 
-| Риски: землетрясение | J-SHIS API (Y2024), 1 898 точек + 146 DPL | `npm run etl:risk` | `public/data/risk.json` |
-| Риски: оползни | МЛИТ 砂防部, снимок `data/risk/sabo.csv` (PDF зашифрован — обновлять вручную) | ↑ | ↑ |
-| Риски: наводнения | 水害統計 表-2, 2014–2023 (e-Stat) | `npm run etl:suigai` → `etl:risk` | `data/risk/suigai.json` |
-| IC по префектурам, площади | N06 + точка-в-полигоне | `npm run roads` | `public/geo/prefstats.json` |
-| Новости | RSS (см. выше) | `npm run news` | `public/data/news.json` |
-| 1-км сетка населения | 国土数値情報 mesh1000r6 (PTN_2020, CC BY 4.0), 139 МБ | `npm run etl:mesh` | `data/raw/mesh/pop2020.json` |
-| Муниципальные показатели, DPL-окружение | сетка + L01/L02 2026 + 都市計画現況調査 R7 + 国勢調査2020 第12表 + 経済センサス2021 第9-1B表 + N06 + J-SHIS | `npm run etl:muni` | `public/data/muni.json` |
+### Notes on the sources
+- **Warehouse statistics** — 普通倉庫 classes 1–3: floor area, used and empty area (end of quarter), inbound (sum of three
+  months) and stock (end of the last month). Columns are found by their headings because they shift between issues.
+  Where the source total disagrees with the sum of prefectures (2010-Q2 area, 2018-Q3 stock) the sum is used and noted.
+  Publication lags a lot: April–June 2025 was published on 2026-09-03; each issue's date is shown next to the metric.
+- **DPL** — the page refuses non-browser clients, so the data is a saved XML snapshot (`data/dpl/datas03.xml`). It is the
+  leasing catalogue, not the whole portfolio. 31 sites without coordinates are geocoded by address (marked approximate).
+- **Freight census** — rows are origin prefectures, columns destinations (tonnes); the 2021 (.xlsx) and 2005–2015 (.xls)
+  layouts differ, so tables are found by prefecture names. Checked: 3-day total 2021 = 20,722,421 t. The 12th survey
+  (fieldwork October 2025) will be added as a new round.
+- **Job-opening ratios** — openings (table 4) ÷ applicants (table 5), full-time incl. part-time, by the office that took the
+  opening (Tokyo is inflated by head offices). National FY2022–2025 = 2.38 / 2.62 / 2.61 / 2.58, as published by MHLW.
+- **Municipal data** — the grid sums to exactly 126,146,099 (census 2020). Industrial land price: 816 municipalities have
+  their own points, 454 take the median within 15 km, 628 the prefecture median (marked). Zoning of designated-city wards
+  is the city's split by ward area. Hamamatsu's wards were redrawn in 2024: earlier figures are shared by population.
+- **Travel times** — `scripts/build-network.mjs` builds a graph from N06 sections in service. Truck speeds come from the
+  2021 road census (箇所別基本表): IC-to-IC stretches (大型車, daytime and rush hour) are laid on the graph by interchange
+  names, accepted when the path length agrees within 30% — 73% of expressway km are measured, 20% take their route's
+  average, the rest keep flat speeds (80 / 65 / 60 / 45 km/h by road type). Access legs are straight lines × 1.3 at
+  30 km/h (40 in Hokkaido) up to 80 km, only through interchanges; ordinary-road trips up to 30 km. Roads never cross the
+  sea: both ends must be on the same "land piece". 22 long-distance ferry routes (sailing time + 90 min check-in) can be
+  switched off. Dijkstra runs in the browser (`src/lib/travel.ts`, about 5 ms). It is an estimate, not a route planner:
+  truck restrictions and live traffic are not modelled.
+- **Standard freight rates** — the table in `src/lib/fares.ts` was transcribed from the gazette (an image), each column
+  checked for steady steps. The 2025 law replaces the standard rates with binding 適正原価 by about 2028.
+- **Hazards** — shares of residents in hazard zones sample every populated 1 km cell 4 × 4 on the Hazard Map Portal tiles
+  at z12 (~31% of residents nationally in 0.5 m+ flood zones; MLIT estimates about 28%). J-SHIS depends strongly on the
+  ground at the point, so a prefecture is the median of its municipalities. Raw J-SHIS answers are cached locally and not
+  committed (their terms forbid redistributing raw data); only derived values are published.
 
-`npm run data` пересобирает всё. Крупные исходники (`data/raw`, `data/geo`) не коммитятся:
-- `data/geo/N03-20260101.shp` — из `N03-20260101_GML.zip` (国土数値情報, 800 МБ);
-- `data/geo/N06-25/` — распаковать `N06-25_GML.zip` с https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N06-2025.html;
-- `data/raw/*.xls` ETL скачивает сам (с паузой между запросами, повторно не качает).
+## Checks
+- `npm test` — published data against hand-checked official figures (including routing, fares and demand);
+  `npm run check` — types.
+- `npm run e2e` — Playwright on the built site (desktop and phone, light and dark, axe accessibility checks). Third
+  parties (JMA, PR TIMES images, GSI, parcel tiles) are blocked on purpose: the site must survive their failure; a real
+  parcel tile is served from `e2e/fixtures/`.
+- Visual regression (`VISUAL=1`) runs in the Playwright container in CI; baselines are regenerated by the
+  `visual-baselines.yml` workflow (then run CI by hand). Web fonts are blocked in tests so screenshots are stable.
+- Daily `site-check.yml` opens the published site with the real sources and runs `tests-live/*.test.mjs`.
+- `npm run check-sources` reports new releases of the hand-updated sources (freight census, flood statistics, 国土数値情報
+  layers, J-SHIS, the large-vehicle route maps, the age of the DPL snapshot …).
+- Before an automatic data commit, `scripts/check-data.mjs` stops the job if a file shrank, a series got shorter or many
+  numbers moved by more than 30%.
+- Weekly `update-data.yml` refreshes the warehouse statistics, specified skilled workers and job-opening ratios; daily
+  `update-news.yml` refreshes the news and the facility registry.
 
-### 倉庫統計季報 (ETL)
-- Метрики — **普通倉庫 1〜3類**:
-  лист 「１．倉庫利用状況」 → 所管面積 / 在貨面積 / 空面積 (千㎡, на конец квартала);
-  лист 「２．普通倉庫 県別入庫・残高」 → 入庫高 = сумма 3 месяцев, 保管残高 = конец последнего месяца (千トン).
-  空面積率 = 空面積 / 所管面積.
-- Структура листов стабильна с 2010 года, но колонки сдвигаются (например, 2024 Q4 — две таблицы рядом),
-  поэтому колонки ищутся по заголовкам, а не по позициям.
-- Нюансы источника: в 2019-Q2 опечатка «令和元年年４月分»; 合計 в 2010-Q2 (所管面積) и 2018-Q3
-  (残高 за август) не сходится с суммой префектур — для этих случаев берётся сумма префектур,
-  случаи записаны в `notes` и показаны на сайте.
-- Задержка публикации большая: выпуск за апрель–июнь 2025 вышел 2026-09-03. Дата публикации
-  каждого выпуска (лист 裏紙) показывается рядом с метрикой.
+## Licences and limits
+- The site is non-commercial. Ports (C02) and rail freight stations (P31) are included under non-commercial terms
+  (`etl:multimodal --noncommercial`; drop the flag for a commercial deployment). **Emergency transport roads (N10)** and
+  **key logistics roads (N12)** are also 非商用: they are published only as class-merged, simplified lines with the source
+  named. Parcel tiles (KotobaMedia) are free for non-commercial use.
+- **Large-vehicle routes (大型車誘導区間)** are not drawn: there is no open data, and the official condition maps (PDF) may
+  only be read, not reused. The site memo links to the prefecture's map instead.
+- News: headlines, links, a short excerpt (≤ 110 characters) and the preview image URL only — no article text or copied
+  images. Sources: MLIT press releases, e-Gov public comments and logistics developers' own PR TIMES feeds. Trade media
+  (LNEWS, 物流ウィークリー, LOGISTICS TODAY) are wired in `scripts/fetch-news.mjs` but disabled until permission is given;
+  MHLW and Google News are not used (their terms do not allow it).
+- Live traffic (JARTIC) and NEXCO closures are not used: no CORS or open feeds. The diesel price page sits behind a WAF;
+  when a request is refused the previous data stays.
+- Figures are estimates from open data for a first screening, not quotes, legal boundaries or route permits.
 
-### DPL
-Страница отвечает 403 не-браузерным клиентам, поэтому данные — снимок XML
-`https://www.daiwahouse.co.jp/business/logistics/dproject/xml/datas03.xml` в `data/dpl/datas03.xml`
-(дата в `data/dpl/snapshot.json`). Обновление: открыть список в браузере, сохранить XML, поправить
-даты, `npm run etl:dpl`. Это каталог аренды (募集中 / 即入居可 / 開発予定 / 契約済), а не весь портфель.
-Координаты из XML; у 31 объекта их нет — они геокодированы по адресу через GSI (помечены как примерные).
-Муниципалитет — обратный геокодер GSI. Ответы кэшируются в `data/dpl/geocode.json`.
-«Работает» = 竣工 не позже текущего месяца; остальное — «開発中・計画».
+## Design
+Palette "concrete / container / floor marking": concrete-grey neutrals, a container-blue sequential scale (7 quantile
+classes, OKLCH, monotonic lightness; in the dark theme more = lighter), amber only for DPL and selection A. Year-on-year
+uses a diverging clay ← grey → blue scale. Comparison: A is a solid amber outline, B a dashed ink outline, both with
+letter labels (not colour alone). Text contrast ≥ 5:1. Flow arcs: outbound in ink, inbound in terracotta, width ∝
+√volume, bending to the right of their direction, arrowhead at the destination.
 
-### Дороги
-Только участки и узлы, действующие сейчас (設置期間 終了 = 9999). Классы: 高速自動車国道 и 本四 /
-прочие автомагистрали / 都市高速. IC появляются с зума ×3, スマートIC — с ×5, подписи — с ×8.
-Все точечные слои проецируются `scripts/lib/project.mjs` (та же LCC-проекция и те же врезки Окинавы и
-Огасавары, что у границ; параметры врезок пишутся в `meta.layout` TopoJSON).
-
-### 物流センサス
-- Строки = 発都道府県, колонки = 着都道府県, тонны; диагональ (県内) хранится, для дуг отбрасывается.
-  Разметка 2021 (.xlsx, e-Stat) и 2005–2015 (.xls, mlit.go.jp) разная — таблица ищется по названиям
-  префектур, листы — по NFKC-имени (в старых файлах полуширинная катакана 「ﾄﾗｯｸ計」).
-- Сверка: 3日間 合計 2021 = 20 722 421 т; 埼玉→東京 123 445 т (3日間) / 12 604 191 т (年間).
-- 年間 по видам транспорта не существует; 品類 в 年間 рассчитан по структуре 3日間 (примечание источника).
-  Мелкие ячейки (ж/д, авиа, Окинава) — выборочные оценки с большим шумом.
-- 第12回 (полевой этап 2025-10) пока без результатов — добавится новой строкой в `ROUNDS`.
-
-### 有効求人倍率 / 特定技能
-- Ratio = 月間有効求人数 (第4表) ÷ 月間有効求職者数 (第5表, 性計・年齢計), «パート含む常用», по 受理地
-  (Токио завышен головными офисами). Сверено с МХЛВ: по стране FY2022–2025 = 2.38/2.62/2.61/2.58.
-- 2012–2022: 66自動車運転の職業 / 75運搬の職業; 2023〜: 61自動車運転従事者 / 70運搬従事者.
-- 特定技能: по месту жительства, 速報値. 2号 в ранних периодах перечисляет только префектуры с >0.
-  自動車運送業 — с 2024-12 (151 чел. на 2025-12, в большинстве префектур 0).
-
-### Муниципальные данные — нюансы
-- Сетка: сумма ровно 126 146 099 (国勢調査 2020). Ячейки 福島県 浜通り в источнике объединены кодом 「07999」,
-  а старые районы 浜松市 (до 2024) не совпадают с текущими — такие ячейки отнесены к муниципалитетам по
-  попаданию в полигон.
-- Цена 工業地: 816 муниципалитетов со своими точками, 454 — медиана точек в 15 км, 628 — медиана префектуры
-  (помечено в тултипе).
-- 用途地域: таблица 都市計画現況調査 по названиям (итоговые строки 都市計画区域 пропускаются); для районов
-  政令市 площадь города делится пропорционально площади района. Без 用途地域 = 0.
-- Рабочая сила и 経済センサス: районы 浜松市 2024 года получают городской итог пропорционально населению.
-- J-SHIS: в центре населения; если он на воде (大津市 — 琵琶湖) — в самой населённой ячейке.
-
-### Время в пути (`npm run network`)
-Скорости скоростных дорог — из 道路交通センサス 2021 (`data/raw/roadcensus/kasyoNN.csv`, `scripts/lib/roadcensus.mjs`), см.
-выше; ниже — прежняя модель, которая осталась для участков без данных и для подъездов.
-`scripts/build-network.mjs` собирает граф из N06: действующие участки со скоростью по типу дороги (高速自動車国道 и
-本四 80 км/ч, 一般国道の自動車専用道路 65, прочие 60, 都市高速 45); концы участков, разошедшиеся < 30 м, склеиваются;
-разрывы между кусками сети (函館新道 ↔ 道央道 и т.п.) соединяются обычными дорогами. Въезд и съезд только через
-IC / スマートIC или тупик участка, подъезд — прямая × 1,3 при 30 км/ч (Хоккайдо 40) до 80 км. Поездка только по
-обычным дорогам — до 30 км. Обычная дорога не пересекает море: концы должны лежать на одном «участке суши»
-(муниципалитеты с общей границей или населёнными клетками 1 км ближе 2,5 км друг к другу), а линия подъезда — не дальше
-3 км от населённых клеток. Поэтому 佐渡, Идзу и т.п. без паромов недоступны, а 天草 (мосты) доступен. Dijkstra
-выполняется в браузере (`src/lib/travel.ts`, около 5 мс). Паромы — отдельные рёбра между терминалами (время в пути + 90 мин на посадку), их можно выключить.
-Пробки и ограничения для грузовиков не учитываются.
-
-### Риски — нюансы
-- Доли жителей в зонах риска (`npm run etl:hazard`, затем `etl:muni`): каждая населённая клетка 1 км семплируется сеткой 4×4
-  по тайлам ハザードマップポータル на z12 (≈ 31 м/пиксель; около 7 тыс. тайлов на слой, кэш в `data/raw/hazard`),
-  доля клетки внутри зоны × население. По стране получается ~31% жителей в зоне 洪水 0,5 м+ (MLIT оценивает около 28%
-  при любой глубине; на z12 зоны немного расширяются). Покрытие рек и 津波 по префектурам неравномерное.
-- J-SHIS отвечает по 250-м сетке и сильно зависит от грунта в точке (Мито: 48% у префектуры, 81% у мэрии),
-  поэтому префектура = медиана по всем муниципалитетам. 404 (вне сетки, 北方領土) = нет данных.
-  Сырые ответы кэшируются в `data/raw/risk` и не коммитятся: условия J-SHIS запрещают перераспространять
-  сырые данные; публикуются только производные значения с указанием источника.
-- Тайлы ハザードマップポータル: z16, окно 5×5 пикселей, цвет → класс глубины по легенде (проверено на реальных
-  тайлах до 5–10 м). Покрытие рек префектурного управления зависит от префектуры.
-- Нанкайский 推進地域 не используется: без парных списков (日本海溝 и т.д.) он несбалансирован.
-
-## Проверки
-- `npm test` — данные против выверенных вручную официальных цифр; `npm run check` — типы.
-- `npm run e2e` — Playwright на собранном сайте (десктоп и телефон, светлая и тёмная тема, axe, выноски
-  новостей, досягаемость, CSV). JMA и картинки PR TIMES в тестах отключены: сайт обязан переживать их отказ.
-- Ежедневно `.github/workflows/site-check.yml` открывает опубликованный сайт с настоящими источниками и запускает
-  `tests-live/*.test.mjs` (реальные тайлы 地形分類: коды и названия классов не поменялись).
-- Визуальная регрессия (`VISUAL=1`, скриншоты карты в светлой/тёмной теме на десктопе и телефоне) — в контейнере
-  `mcr.microsoft.com/playwright` в CI; эталоны обновляются вручную workflow `visual-baselines.yml`. Веб‑шрифты в тестах
-  заблокированы, чтобы снимки не зависели от их загрузки.
-- `npm run check-sources` также следит за A29, N06, 1-км сеткой и слоями 地形分類.
-- Перед автокоммитом данных `scripts/check-data.mjs` останавливает job, если файл уменьшился, ряд стал короче
-  или много чисел изменилось больше чем на 30%.
-- `npm run raw:verify` сверяет исходные файлы в `data/raw`, `data/geo` с `data/raw-manifest.json`
-  (размер, SHA-256, страница-источник, скрипт); `npm run raw:update` — после намеренной замены файлов.
-
-## Дизайн
-Палитра «бетон / контейнер / разметка пола»: бетонно-серые нейтрали, шкала — «контейнерный» синий
-(7 квантильных классов, OKLCH, монотонная яркость, в тёмной теме «больше = светлее»), янтарь только для
-DPL и выделения A. Для 前年同期比 — расходящаяся шкала глина ← серый → синий. Сравнение: A — сплошной
-янтарный контур, B — пунктир цвета текста, плюс буквенные метки (не только цвет). Контраст текста ≥ 5:1.
-
-## Деплой
-- **Vercel**: импортировать репозиторий (настройки в `vercel.json`).
-- **GitHub Pages**: `.github/workflows/deploy-pages.yml`; Settings → Pages → Source = GitHub Actions.
-  Пути относительные (`base: './'`), так что сайт работает из подпапки.
-
-Дуги потоков: `--flow-out` (цвет текста) — отправка, `--flow-in` (терракота) — приход; толщина ∝ √объёма,
-дуга изгибается вправо по направлению (A→B и B→A не совпадают), стрелка у получателя.
-
-## Дальше
-Фаза 3 — риски, скоринг локации с весами, лента новостей.
+## Deploy
+- **GitHub Pages**: `.github/workflows/deploy-pages.yml`; Settings → Pages → Source = GitHub Actions. Paths are relative
+  (`base: './'`), so the site works from a subfolder.
+- **Vercel**: import the repository (settings in `vercel.json`).
