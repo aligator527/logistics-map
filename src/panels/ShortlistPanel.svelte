@@ -8,7 +8,7 @@
   import { downloadCsv } from '../lib/csv';
   import { fmtNum, fmtCompact } from '../lib/scale';
   import { WARN_COLORS } from '../lib/warncolors';
-  import type { DossierTable } from '../components/Dossier.svelte';
+  import type { DossierTable, DossierSection } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
   import { estimate, costs, transport } from '../lib/costs.svelte';
   const statusName = (st: Status | undefined) => tt(`st_${st ?? 'cand'}` as Key);
@@ -123,6 +123,31 @@
 
   // ------------------------------------------------------------ side-by-side comparison (printable)
   let compareOpen = $state(false);
+  // 意思決定レポート: the comparison plus the premises, the candidates' status and a picture of the map
+  let report = $state<{ image: string } | null>(null);
+  async function openReport() {
+    let image = '';
+    try {
+      const el = document.querySelector<HTMLElement>('.mapcol .map');
+      if (el) image = (await (await import('../lib/exporters')).renderMap(el)).toDataURL('image/jpeg', 0.85);
+    } catch { /* the report works without the picture */ }
+    report = { image };
+    compareOpen = true;
+  }
+  const reportLead = $derived.by((): DossierSection[] => {
+    if (!report) return [];
+    const out: DossierSection[] = [];
+    const scr = s.screened;
+    const ci = costs.inputs;
+    out.push({ title: tt('rpPremises'), rows: [
+      [tt('rpView'), `${s.view?.legend.title ?? ''}`],
+      ...(scr ? [[tt('screenTitle'), `${scr.steps.map((st) => `${st.label} ${st.rule.op === 'ge' ? '≥' : '≤'} ${lt?.metrics.find((m) => m.key === st.rule.key)?.fmt(st.rule.v) ?? st.rule.v}`).join('、')} → ${fmtNum(L, scr.keep.size, 0)} / ${fmtNum(L, scr.total, 0)}`] as [string, string]] : []),
+      [tt('rpRouting'), [app.peak ? tt('peakSpeed') : tt('rpDaytime'), app.ferries ? tt('ferries') : '', app.closures.length ? `${tt('closedCount')} ${app.closures.length}` : ''].filter(Boolean).join('・')],
+      [tt('rpCost'), `${tt('costPlot')} ${fmtCompact(L, ci.plot)}㎡・${tt('costStaff')} ${ci.staff}・${tt('trRuns')} ${ci.runs}×${ci.days}${L === 'ja' ? '日' : ' days'}・${tt('trLoad')} ${ci.load}%`],
+    ], note: tt('rpNote') });
+    out.push({ title: tt('rpCandidates'), list: shortlist.items.map((it) => ({ label: `${shortLabel(it)}（${statusName(it.status)}）`, value: it.note ? it.note.replace(/\s+/g, ' ').slice(0, 80) : undefined })) });
+    return out;
+  });
   /** elevation and landform at the shortlisted DPL sites (fetched when the comparison opens) */
   let siteInfos = $state.raw(new Map<string, PointInfo>());
   $effect(() => {
@@ -228,6 +253,7 @@
     {#if shortlist.items.length}
       <span class="acts">
         <button type="button" class="linkish" onclick={() => (compareOpen = true)}>{tt('compareShort')}</button>
+        <button type="button" class="linkish" onclick={openReport}>{tt('rpTitle')}</button>
         <button type="button" class="linkish" onclick={copyLink}>{copied ? tt('shareCopied') : tt('shareLink')}</button>
         {#if canNotify}<button type="button" class="linkish" aria-pressed={notify} onclick={toggleNotify} title={tt('notifyHint')}>{notify ? tt('notifyOn') : tt('notifyOff')}</button>{/if}
         <button type="button" class="linkish" onclick={exportShortlist}>{tt('exportCsv')}</button>
@@ -287,8 +313,13 @@
 </section>
 {#if compareOpen && compareTable}
   {#await import('../components/Dossier.svelte') then { default: Dossier }}
-  <Dossier title={tt('compareShortTitle')} subtitle={tt('compareShortSub')} sections={[]} table={compareTable}
-           sources={compareSources} lang={L} onclose={() => (compareOpen = false)} />
+  {#if report}
+    <Dossier title={tt('rpTitle')} subtitle={tt('rpSub')} sections={[]} lead={reportLead} image={report.image} table={compareTable}
+             sources={compareSources} lang={L} onclose={() => { compareOpen = false; report = null; }} />
+  {:else}
+    <Dossier title={tt('compareShortTitle')} subtitle={tt('compareShortSub')} sections={[]} table={compareTable}
+             sources={compareSources} lang={L} onclose={() => (compareOpen = false)} />
+  {/if}
   {/await}
 {/if}
 

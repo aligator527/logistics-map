@@ -4,6 +4,7 @@
   import { t, type Key } from '../lib/i18n';
   import { fmtDate } from '../lib/data';
   import type { ExtraCriteria } from '../themes/score.svelte';
+  import DataFreshness from './DataFreshness.svelte';
   const L = $derived(app.lang);
   const tt = (k: Key) => t(app.lang, k);
   const p = $derived(app.pref);
@@ -54,6 +55,7 @@
     <dt>{tt('boundaries')}</dt>
     <dd>{tt('boundarySource')}</dd>
   </dl>
+  <DataFreshness />
   {#if hubs?.noncommercial}<p class="next">{tt('noncommercialNote')}</p>{/if}
   <details id="method" class="method">
     <summary>{tt('method')}</summary>

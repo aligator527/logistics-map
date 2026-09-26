@@ -41,8 +41,8 @@ async function svgImage(svg: SVGSVGElement, w: number, h: number) {
     return img;
   } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
 }
-/** the map area as a PNG: map tiles and the 1 km raster (canvases) and the map's SVG layers, as on screen */
-export async function savePng(el: HTMLElement, base: string) {
+/** the map area drawn on one canvas: map tiles and the 1 km raster (canvases) and the map's SVG layers, as on screen */
+export async function renderMap(el: HTMLElement): Promise<HTMLCanvasElement> {
   const box = el.getBoundingClientRect(), k = Math.min(2, devicePixelRatio || 1);
   const cv = document.createElement('canvas');
   cv.width = Math.round(box.width * k); cv.height = Math.round(box.height * k);
@@ -66,6 +66,11 @@ export async function savePng(el: HTMLElement, base: string) {
       ctx.drawImage(await svgImage(node as SVGSVGElement, r.width, r.height), x, y, r.width, r.height);
     }
   }
+  return cv;
+}
+/** the map area as a PNG file */
+export async function savePng(el: HTMLElement, base: string) {
+  const cv = await renderMap(el);
   const a = Object.assign(document.createElement('a'), { href: cv.toDataURL('image/png'), download: `${base}.png` });
   document.body.appendChild(a); a.click(); a.remove();
 }
