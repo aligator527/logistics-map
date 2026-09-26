@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { Label } from '../lib/data';
-  export interface NewsItem { t: string; link: string; date: string; src: string; topics: string[]; prefs: number[] }
+  export interface NewsItem { t: string; link: string; date: string; src: string; topics: string[]; prefs: number[]; munis: string[] }
   export interface News {
     generated: string;
     sources: (Label & { key: string; url: string; terms: string })[];

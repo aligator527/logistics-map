@@ -11,6 +11,13 @@
   import { LabourTheme } from './themes/labour.svelte';
   import { PRESETS, ScoreTheme, type ExtraCriteria, type PrefStats } from './themes/score.svelte';
   import { MUNI_PRESETS, MuniScoreTheme } from './themes/muniscore.svelte';
+  import { LocalTheme } from './themes/local.svelte';
+  import { NowTheme, type Diesel } from './themes/now.svelte';
+  import { live, WARN } from './lib/live.svelte';
+  import { project as projectLL } from './lib/project';
+  import MuniProfile from './components/MuniProfile.svelte';
+  import { shortlist, type ShortItem } from './lib/shortlist.svelte';
+  import { downloadCsv } from './lib/csv';
   import { pad2, type Ctx, type ThemeView } from './themes/types';
   import MapView, { type Marker, type Poi } from './components/MapView.svelte';
   import Legend from './components/Legend.svelte';
@@ -84,9 +91,18 @@
   let lb = $state.raw<LabourTheme | null>(null);
   let sc = $state.raw<ScoreTheme | null>(null);
   let msc = $state.raw<MuniScoreTheme | null>(null);
+  let lt = $state.raw<LocalTheme | null>(null);
+  let nt = $state.raw<NowTheme | null>(null);
+  let diesel = $state.raw<Diesel | null>(null);
+  const nowWarn = $derived(app.layer === 'now' && !!nt && nt.isWarn);
   const muniLevel = $derived(app.layer === 'score' && app.slevel === 'muni' && !!msc);
+  const localLevel = $derived(app.layer === 'local' && !!lt);
+  /** the map shows municipalities (municipal score or the municipal data explorer) */
+  const mapMuni = $derived(muniLevel || localLevel || nowWarn);
+  /** the active municipal theme */
+  const mt = $derived(muniLevel ? msc : localLevel ? lt : null);
   const view = $derived<ThemeView | null>(app.layer === 'flows' ? fl : app.layer === 'labour' ? lb
-    : app.layer === 'score' ? (muniLevel ? msc : sc) : wh);
+    : app.layer === 'score' ? (muniLevel ? msc : sc) : app.layer === 'local' ? lt : app.layer === 'now' ? nt : wh);
   /** the active score theme (prefecture or municipal) */
   const scv = $derived(muniLevel ? msc! : sc);
 
@@ -98,6 +114,7 @@
     sswFields: ssw.fields.map((f) => f.key),
     jobPeriods: jobs.periods.map((p) => p.id),
     criteria: [...new Set([...sc.keys, ...(msc?.keys ?? [])])],
+    localMetrics: lt?.metrics.map((m) => m.key) ?? [],
   } : null);
 
   // ------------------------------------------------------------ boot
@@ -116,6 +133,7 @@
       loadMunis(g).then((full) => (geo = full)).catch((e) => console.warn('munis', e));
       // roads are secondary: the map works without them
       loadRoads().then((r) => (roads = r)).catch((e) => console.warn('roads', e));
+      diesel = await fetch(`${import.meta.env.BASE_URL}data/diesel.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       fetch(`${import.meta.env.BASE_URL}data/muni.json`).then((r) => (r.ok ? r.json() : null)).then((d) => {
         if (!d) return;
         muni = d;
@@ -123,6 +141,12 @@
         const t = new MuniScoreTheme(d, j, extra, ctx);
         t.setNamer(muniLabel);
         msc = t;
+        const l = new LocalTheme(d, ctx);
+        l.setNamer(muniLabel);
+        lt = l;
+        const nw = new NowTheme(diesel, d.codes, ctx);
+        nw.setNamer(muniLabel);
+        nt = nw;
         // the hash may carry municipal weights that were not known at boot
         app.fromHash(location.hash, lists!);
       }).catch((e) => console.warn('muni', e));
@@ -150,6 +174,12 @@
     if (location.hash.slice(1) !== h) history.replaceState(null, '', h ? `#${h}` : location.pathname + location.search);
   });
   $effect(() => { document.documentElement.lang = L; document.title = `${tt('title')} · ${L === 'ja' ? 'Japan Logistics Map' : '総合物流マップ'}`; });
+  // JMA live data: polled only while the live theme is open
+  $effect(() => {
+    if (app.layer !== 'now') return;
+    live.start();
+    return () => live.stop();
+  });
   // census tables (~70 KB each) are loaded when the flow theme (or the score, which uses them) is opened
   $effect(() => { if ((app.layer === 'flows' || app.layer === 'score') && fl) fl.load(); });
 
@@ -174,7 +204,78 @@
       .sort((x, y) => Number(x.built) - Number(y.built) || (x.i === app.site ? 1 : 0) - (y.i === app.site ? 1 : 0));
   });
   const roadLayer = $derived(geo && roads ? roadPaths(geo, roads) : null);
-  const pois = $derived.by((): Poi[] => {
+  /** JMA seismic-intensity colours: fill, text */
+  const INT_COLOR: Record<string, [string, string]> = {
+    '3': ['#0041ff', '#fff'], '4': ['#fae696', '#111'], '5-': ['#ffe600', '#111'], '5+': ['#ff9900', '#111'],
+    '6-': ['#ff2800', '#fff'], '6+': ['#a50021', '#fff'], '7': ['#b40068', '#fff'],
+  };
+  const toMap = (lon: number, lat: number) => geo!.P(projectLL(lon, lat, geo!.layout).p);
+  const livePois = $derived.by((): Poi[] => {
+    if (!geo || app.layer !== 'now') return [];
+    const out: Poi[] = [];
+    for (const q of live.quakes) {
+      const [fill, ink] = INT_COLOR[q.maxi] ?? INT_COLOR['3'];
+      out.push({ key: `q${q.eid}`, kind: 'quake', xy: toMap(q.lon, q.lat), r: 5 + Math.max(0, (q.mag ?? 3) - 3) * 2.5, color: fill, ink,
+                 badge: q.maxi.replace('-', '弱').replace('+', '強'), label: q.name, major: ['5-', '5+', '6-', '6+', '7'].includes(q.maxi),
+                 tip: { title: q.name, sub: new Date(q.at).toLocaleString(L === 'ja' ? 'ja-JP' : 'en-GB', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+                        big: `${tt('maxInt')} ${q.maxi.replace('-', '弱').replace('+', '強')}`,
+                        rows: [[tt('magnitude'), q.mag !== null ? `M${q.mag}` : '–'], [tt('depth'), q.depth !== null ? `${q.depth} km` : '–']], source: tt('jmaSource') } });
+    }
+    for (const t of live.typhoons) {
+      if (!t.pos || projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside') continue;
+      out.push({ key: `t${t.id}`, kind: 'typhoon', xy: toMap(t.pos[1], t.pos[0]), r: 9, label: `${tt('typhoon')}${Number(t.number.slice(2)) || ''}${L === 'ja' ? '号' : ''}`, major: true,
+                 tip: { title: `${tt('typhoon')} ${Number(t.number.slice(2)) || ''}${L === 'ja' ? '号' : ''} ${t.name[L === 'ja' ? 'jp' : 'en']}`, sub: `${t.location} · ${t.time.slice(5, 16).replace('T', ' ')}`,
+                        big: `${t.pressure} hPa`, rows: [[L === 'ja' ? '最大風速' : 'Max wind', `${t.wind} m/s`], [L === 'ja' ? '最大瞬間風速' : 'Gust', `${t.gust} m/s`],
+                                                      [L === 'ja' ? '進路' : 'Course', `${t.course} ${t.speed} km/h`]], source: tt('jmaSource') } });
+    }
+    return out;
+  });
+  /** typhoon tracks (past solid, forecast dashed), split where they jump into / out of an inset */
+  const tracks = $derived.by(() => {
+    if (!geo || app.layer !== 'now') return [];
+    const out: { key: string; d: string; kind: 'past' | 'forecast' }[] = [];
+    for (const t of live.typhoons) {
+      // only the part of the track in the same map space as the storm now (the Okinawa inset is
+      // enlarged and moved, so points outside it would be drawn somewhere misleading)
+      const here = t.pos ? projectLL(t.pos[1], t.pos[0], geo.layout).space : 'main';
+      for (const [kind, pts] of [['past', t.pos ? [...t.past, t.pos] : t.past], ['forecast', t.pos ? [t.pos, ...t.forecast] : t.forecast]] as const) {
+        let d = '', pen = false;
+        for (const [lat, lon] of pts) {
+          const { p, space } = projectLL(lon, lat, geo.layout);
+          if (space !== here || space === 'outside') { pen = false; continue; }
+          const [x, y] = geo.P(p);
+          d += `${pen ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`;
+          pen = true;
+        }
+        if (d) out.push({ key: `${t.id}${kind}`, d, kind });
+      }
+    }
+    return out;
+  });
+  /** news markers: municipality when tagged, else prefecture (last 90 days) */
+  const newsPois = $derived.by((): Poi[] => {
+    if (!geo || !news || !app.showNews) return [];
+    const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    const groups = new Map<string, typeof news.items>();
+    for (const it of news.items) {
+      if (it.date < since) continue;
+      const keys = it.munis.length ? it.munis : it.prefs.map((p) => pad2(p));
+      for (const k of keys) (groups.get(k) ?? groups.set(k, []).get(k)!).push(it);
+    }
+    const out: Poi[] = [];
+    for (const [k, items] of groups) {
+      let xy: [number, number] | null = null;
+      if (k.length === 5 && muni) { const i = muni.codes.indexOf(k); const c = (muni as unknown as { xy?: [number, number][] }).xy?.[i]; if (c) xy = geo.P(c); }
+      if (!xy && k.length === 2) xy = geo.anchors[Number(k) - 1];
+      if (!xy) continue;
+      out.push({ key: `n${k}`, kind: 'news', xy, r: 6, badge: String(items.length), label: '', major: false, code: k,
+                 tip: { title: k.length === 5 ? muniLabel(k) : pname(Number(k)), sub: `${items.length} ${tt('newsOnMap')}`,
+                        rows: items.slice(0, 4).map((it) => [it.date.slice(5), it.t.length > 34 ? it.t.slice(0, 33) + '…' : it.t] as [string, string]) } });
+    }
+    return out;
+  });
+  const pois = $derived.by(() => [...hubPois, ...livePois, ...newsPois]);
+  const hubPois = $derived.by((): Poi[] => {
     if (!geo || !hubs || !app.showHubs) return [];
     const maxT = { air: 0, port: 0, rail: 1 };
     for (const h of hubs.items) if (h.t && h.t > maxT[h.kind]) maxT[h.kind] = h.t;
@@ -200,8 +301,17 @@
     return out;
   }
 
-  /** 10 / 30 / 60 km around the selected DPL site */
-  const rings = $derived.by(() => {
+  /** 10 / 30 / 60 km around the selected DPL site; typhoon gale areas in the live theme */
+  const rings = $derived.by(() => [...siteRings, ...typhoonRings]);
+  const typhoonRings = $derived.by(() => {
+    if (!geo || app.layer !== 'now') return [];
+    return live.typhoons.filter((t) => t.pos && t.galeKm && projectLL(t.pos[1], t.pos[0], geo!.layout).space !== 'outside').map((t) => {
+      const { p, space } = projectLL(t.pos![1], t.pos![0], geo!.layout);
+      const k = geo!.unitsPerMetre * (space === 'okinawa' ? geo!.insetScale.okinawa : space === 'ogasawara' ? geo!.insetScale.ogasawara : 1);
+      return { xy: geo!.P(p), r: t.galeKm * 1000 * k, label: `${tt('galeArea')} ${t.number}` };
+    });
+  });
+  const siteRings = $derived.by(() => {
     if (!geo || app.site < 0 || !sites[app.site] || !app.showDpl) return [];
     const s = sites[app.site];
     const k = geo.unitsPerMetre * (s.pref === 47 ? geo.insetScale.okinawa : 1);
@@ -375,6 +485,45 @@
     return { title: `${pname(p)}${app.muni && muniShape.get(app.muni) ? ` · ${L === 'ja' ? muniShape.get(app.muni)!.name : muniShape.get(app.muni)!.nameEn}` : ''}`, sections, sources: [...new Set(sources)] };
   });
 
+  // ------------------------------------------------------------ shortlist & CSV
+  function shortLabel(it: ShortItem) {
+    if (it.kind === 'pref') return pname(Number(it.code));
+    if (it.kind === 'muni') return muniLabel(it.code);
+    return sites[Number(it.code)]?.name ?? it.code;
+  }
+  const shortKind = (it: ShortItem) => tt(it.kind === 'pref' ? 'byPref' : it.kind === 'muni' ? 'byMuni' : 'dplIn');
+  function openShort(it: ShortItem) {
+    app.stopCompare();
+    if (it.kind === 'pref') { app.muni = ''; app.site = -1; app.pref = Number(it.code); }
+    else if (it.kind === 'muni') { app.site = -1; app.pref = Number(it.code.slice(0, 2)); app.muni = it.code; }
+    else { const i = Number(it.code); if (sites[i]) { app.site = i; app.pref = sites[i].pref; } }
+  }
+  function exportShortlist() {
+    const lm = lt?.metrics ?? [];
+    const head = ['kind', 'code', 'name', 'prefecture', ...(sc ? [tt('layerScore') + '（' + tt('byPref') + '）'] : []),
+      ...(msc ? [tt('layerScore') + '（' + tt('byMuni') + '）'] : []), ...lm.map((m) => m[L]), tt('pop30'), tt('nearestIc'), tt('nearestAir')];
+    const rows = shortlist.items.map((it) => {
+      const pc = it.kind === 'pref' ? Number(it.code) : it.kind === 'muni' ? Number(it.code.slice(0, 2)) : sites[Number(it.code)]?.pref ?? 0;
+      const mc = it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : '';
+      const mi = mc && lt ? lt.indexOf(mc) : -1;
+      const ct = it.kind === 'site' ? muni?.sites[sites[Number(it.code)]?.name ?? ''] : undefined;
+      const hb = it.kind === 'site' ? hubs?.sites[sites[Number(it.code)]?.name ?? '']?.air : undefined;
+      return [it.kind, it.code, shortLabel(it), pname(pc), ...(sc ? [sc.result.total[pc - 1]?.toFixed(1)] : []),
+        ...(msc ? [mi >= 0 && msc ? msc.result.total[msc.indexOf(mc)]?.toFixed(1) : ''] : []),
+        ...lm.map((m) => (mi >= 0 ? m.get(mi) : '')), ct?.pop30 ?? '', ct ? `${ct.icName ?? ''} ${ct.ic ?? ''}` : '', hb ? `${hb.n} ${hb.km}` : ''];
+    });
+    downloadCsv(`shortlist-${new Date().toISOString().slice(0, 10)}.csv`, [head, ...rows]);
+  }
+  function exportTable() {
+    if (!view) return;
+    const cols = view.table.columns;
+    const areas = mt
+      ? mt.codes.map((c, i) => ({ id: i, label: muniLabel(c), code: c })).filter((x) => !app.pref || Number(x.code.slice(0, 2)) === app.pref)
+      : Array.from({ length: 47 }, (_, i) => ({ id: i + 1, label: pname(i + 1), code: pad2(i + 1) }));
+    downloadCsv(`${app.layer}-${new Date().toISOString().slice(0, 10)}.csv`,
+      [['code', tt('area'), ...cols.map((c) => c.label)], ...areas.map((a) => [a.code, a.label, ...cols.map((c) => { const v = c.get(a.id); return isFinite(v) ? v : ''; })])]);
+  }
+
   function clearFocus() {
     app.pref = 0;
     app.site = -1;
@@ -398,7 +547,9 @@
     { value: 'warehouse', label: tt('layerWarehouse') },
     { value: 'flows', label: tt('layerFlows') },
     { value: 'labour', label: tt('layerLabour') },
+    { value: 'local', label: tt('layerLocal') },
     { value: 'score', label: tt('layerScore') },
+    { value: 'now', label: tt('layerNow') },
   ] as { value: Layer; label: string }[]);
   const cutOptions = $derived(census ? [
     { group: '', items: [{ key: 'all', label: tt('allGoods'), disabled: false }] },
@@ -499,6 +650,32 @@
                   title={tt('nearHint')}>{tt('near')}</button>
         </div>
       {/if}
+    {:else if app.layer === 'now'}
+      <div class="ctl">
+        <span class="lab">{tt('nowMode')}</span>
+        <Segmented label={tt('nowMode')} value={app.nmet}
+                   options={[{ value: 'warn', label: tt('liveWarn') }, ...(diesel ? [{ value: 'diesel', label: tt('diesel') }] : [])] as { value: 'warn' | 'diesel'; label: string }[]}
+                   onchange={(v) => { app.nmet = v; app.muni = ''; }} />
+      </div>
+      {#if app.nmet === 'warn'}
+        <div class="ctl">
+          <span class="lab">{tt('liveWarn')}</span>
+          <button type="button" class="btn chip" aria-pressed={app.nlog} title={tt('logisticsOnlyHint')} onclick={() => (app.nlog = !app.nlog)}>{tt('logisticsOnly')}</button>
+        </div>
+      {/if}
+    {:else if app.layer === 'local'}
+      {#if lt}
+        <label class="ctl">
+          <span class="lab">{tt('localMetric')}</span>
+          <select class="sel" value={app.lmet} onchange={(e) => (app.lmet = e.currentTarget.value)}>
+            {#each ['people', 'access', 'land', 'industry', 'labour', 'risk'] as g (g)}
+              <optgroup label={tt(`lg_${g}` as Key)}>
+                {#each lt.metrics.filter((m) => m.group === g) as m (m.key)}<option value={m.key}>{m[L]}</option>{/each}
+              </optgroup>
+            {/each}
+          </select>
+        </label>
+      {/if}
     {:else if app.layer === 'score'}
       {#if msc}
         <div class="ctl">
@@ -547,12 +724,17 @@
         <button type="button" class="btn chip" aria-pressed={app.showRoads} onclick={() => (app.showRoads = !app.showRoads)}>
           <svg width="16" height="10" aria-hidden="true"><path d="M1 5h14" stroke="currentColor" stroke-width="2" /></svg>{tt('layerRoads')}
         </button>
+        {#if news}
+          <button type="button" class="btn chip" aria-pressed={app.showNews} onclick={() => (app.showNews = !app.showNews)}>
+            <svg width="16" height="12" aria-hidden="true"><rect x="1" y="1.5" width="14" height="9" rx="4.5" class="k-news" /></svg>{tt('layerNews')}
+          </button>
+        {/if}
         {#if hubs}
           <button type="button" class="btn chip" aria-pressed={app.showHubs} onclick={() => (app.showHubs = !app.showHubs)}>
             <svg width="12" height="12" aria-hidden="true"><rect x="1.5" y="1.5" width="9" height="9" rx="3" class="k-hub" /></svg>{tt('layerHubs')}
           </button>
         {/if}
-        <button type="button" class="btn chip" aria-pressed={app.compare} disabled={muniLevel}
+        <button type="button" class="btn chip" aria-pressed={app.compare} disabled={mapMuni}
                 onclick={() => (app.compare ? app.stopCompare() : app.startCompare())}>
           <span class="ab" aria-hidden="true">A</span><span class="ab b" aria-hidden="true">B</span>{tt('compare')}
         </button>
@@ -569,6 +751,7 @@
         {#if app.pref && !app.compare}
           <button type="button" class="linkish" onclick={clearFocus}>← {tt('backToJapan')}</button>
         {/if}
+        {#if app.view === 'table'}<button type="button" class="btn" onclick={exportTable}>{tt('exportCsv')}</button>{/if}
         <div class="search-slot"><PlaceSearch {places} lang={L} onpick={onplace} /></div>
         {#if app.layer === 'flows' && fl.loading}<span class="small" role="status">{tt('loadingFlows')}</span>{/if}
       </div>
@@ -577,21 +760,27 @@
         <MapView
           bind:this={mapView}
           {geo} values={view.values} classes={view.classes} lang={L} {highlight}
-          level={muniLevel ? 'muni' : 'pref'} selMuni={app.muni && !app.compare ? app.muni : null}
+          level={mapMuni ? 'muni' : 'pref'} selMuni={app.muni && !app.compare ? app.muni : null}
+          muniA={localLevel ? app.ma || null : null} muniB={localLevel ? app.mb || null : null}
           focus={app.pref ? pad2(app.pref) : null}
           compare={app.compare} a={app.a} b={app.b}
           {markers} site={app.site}
           roads={roadLayer} showRoads={app.showRoads}
-          flows={view.flows} {rings} {pois} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
+          flows={view.flows} {rings} {pois} {tracks} mutedMarkers={app.layer === 'flows'} zoomFocus={app.layer !== 'flows' && (app.layer !== 'score' || muniLevel)}
           prefTip={view.prefTip} {muniTip} {siteTip}
           {onpick} onclear={clearFocus} {onsite}
         />
       {:else}
-        {#if muniLevel && msc}
-          <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={msc.indexOf(app.muni)}
-                       areas={msc.codes.map((c, i) => ({ id: i, code: c })).filter((x) => !app.pref || Number(x.code.slice(0, 2)) === app.pref)
+        {#if nowWarn && nt && muni}
+          <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={muni.codes.indexOf(app.muni)}
+                       areas={muni.codes.map((c, i) => ({ id: i, code: c })).filter((x) => live.level(x.code, app.nlog) > 0 && (!app.pref || Number(x.code.slice(0, 2)) === app.pref))
                                 .map((x) => ({ id: x.id, label: muniLabel(x.code) }))}
-                       onpick={(i) => onpick(msc!.codes[i])} />
+                       onpick={(i) => onpick(muni!.codes[i])} />
+        {:else if mt}
+          <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={mt.indexOf(app.muni)}
+                       areas={mt.codes.map((c, i) => ({ id: i, code: c })).filter((x) => !app.pref || Number(x.code.slice(0, 2)) === app.pref)
+                                .map((x) => ({ id: x.id, label: muniLabel(x.code) }))}
+                       onpick={(i) => onpick(mt!.codes[i])} />
         {:else}
           <RegionTable {names} columns={view.table.columns} primary={view.table.primary} lang={L} focus={app.pref}
                        compare={app.compare} a={app.a} b={app.b} onpick={(c) => onpick(String(c))} />
@@ -602,7 +791,8 @@
         <Legend classes={view.classes} lang={L} title={view.legend.title} fmt={view.legend.fmt} hint={view.legend.hint}
                 flows={app.view === 'map' ? view.legend.flows : null}
                 showDpl={app.showDpl} showRoads={app.showRoads} compare={app.compare}
-                hubs={app.showHubs && hubs ? [...new Set(hubs.items.map((h) => h.kind))] : []} bind:highlight />
+                hubs={app.showHubs && hubs ? [...new Set(hubs.items.map((h) => h.kind))] : []}
+                categories={app.layer === 'now' && nt ? nt.categories : null} bind:highlight />
         {#if app.layer === 'flows' && view.flows.length}
           <p class="src">{!app.pref && !app.compare ? `${tt(app.near ? 'arcsNationalNear' : 'arcsNational')}${L === 'ja' ? '。' : '. '}` : ''}{tt('flowArcNote')}</p>
         {/if}
@@ -624,23 +814,30 @@
         {/if}
       {:else}
         {@const p = app.pref}
-        {@const r = p && !muniLevel ? rank(view, p) : 0}
+        {@const r = p && !mapMuni ? rank(view, p) : 0}
         {@const tr = view.trend}
         <section class="panel readout">
-          {#if muniLevel && msc && app.muni}
-            {@const mr = msc.ranks.get(app.muni)}
+          {#if mt && app.muni && mt.indexOf(app.muni) >= 0}
+            {@const mr = mt.ranks.get(app.muni)}
             <p class="eyebrow">{muniLabel(app.muni)} · {view.periodLabel}</p>
-            <p class="kpi tnum">{view.fmt(msc.muniValue(app.muni))}</p>
-            <p class="kpi-sub">{view.legend.title}{#if mr} · {tt('rank')} <strong class="tnum">{mr}</strong> / {msc.ranks.size}{/if}</p>
+            <p class="kpi tnum">{view.fmt(mt.muniValue(app.muni))}</p>
+            <p class="kpi-sub">{view.legend.title}{#if mr} · {tt('rank')} <strong class="tnum">{mr}</strong> / {mt.ranks.size}{/if}</p>
+            <p class="memo">
+              <button type="button" class="btn" onclick={() => shortlist.toggle('muni', app.muni)}>{shortlist.has('muni', app.muni) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button>
+              {#if localLevel}
+                <button type="button" class="btn" onclick={() => (app.ma = app.muni)} disabled={app.ma === app.muni}>{tt('setA')}</button>
+                <button type="button" class="btn" onclick={() => (app.mb = app.muni)} disabled={app.mb === app.muni}>{tt('setB')}</button>
+              {/if}
+            </p>
           {:else}
           <p class="eyebrow">{p ? pname(p) : tt('japan')} · {view.periodLabel}</p>
-          {#if muniLevel && msc}
+          {#if mt}
             {#if p}
               <p class="kpi tnum">{view.fmt(view.value(p))}</p>
               <p class="kpi-sub">{tt('medianOfMunis')}</p>
             {:else}
-              {@const bi = msc.result.total.reduce((b, v, i, a) => (isFinite(v) && (b < 0 || v > a[b]) ? i : b), -1)}
-              <p class="kpi tnum">{bi >= 0 ? `${muniLabel(msc.codes[bi])} ${view.fmt(msc.result.total[bi])}` : '–'}</p>
+              {@const best = [...mt.values].filter(([, v]) => isFinite(v)).sort((x, y) => y[1] - x[1])[0]}
+              <p class="kpi tnum">{best ? `${muniLabel(best[0])} ${view.fmt(best[1])}` : '–'}</p>
             {/if}
           {:else if app.layer === 'score' && !p}
             {@const best = topBars(view)[0]}
@@ -659,9 +856,14 @@
           {#if app.layer === 'warehouse'}<p class="help">{tt(`mh_${app.metric}`)}</p>
           {:else if app.layer === 'flows'}<p class="help">{census.source.note[L]}</p>
           {:else if app.layer === 'score'}<p class="help">{tt(muniLevel ? 'muniScoreHint' : 'scoreHint')}</p>
+          {:else if app.layer === 'now'}<p class="help">{app.nmet === 'warn' ? tt('warnL3Count') : tt('dieselHint')}</p>
+          {:else if app.layer === 'local'}<p class="help">{lt?.metric.hint[L] ?? ''}</p>
           {:else}<p class="help">{app.lmetric === 'jobs' ? jobs.source.note[L] : ssw.source.note[L]}</p>{/if}
           {/if}
-          {#if p}<p class="memo"><button type="button" class="btn" onclick={openDossier}>{tt('makeDossier')}</button></p>{/if}
+          {#if p}<p class="memo">
+            <button type="button" class="btn" onclick={openDossier}>{tt('makeDossier')}</button>
+            <button type="button" class="btn" onclick={() => shortlist.toggle('pref', String(p))}>{shortlist.has('pref', String(p)) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button>
+          </p>{/if}
         </section>
 
         {#if app.layer === 'warehouse' && p}
@@ -689,6 +891,88 @@
                 </button>
               {/each}
             </div>
+          </section>
+        {/if}
+
+        {#if app.layer === 'now' && nt}
+          {#if nt.isWarn}
+            {@const lv = (muni?.codes ?? []).map((c) => ({ c, v: live.level(c, app.nlog) })).filter((x) => x.v > 0 && (!p || Number(x.c.slice(0, 2)) === p))}
+            <section class="panel">
+              <div class="head-row">
+                <p class="eyebrow">{tt('warnCounts')}{p ? ` · ${pname(p)}` : ''}</p>
+                <span class="small" role="status">{live.loading ? '…' : live.warnTime ? `${tt('liveUpdated')} ${new Date(live.warnTime).toLocaleTimeString(L === 'ja' ? 'ja-JP' : 'en-GB', { hour: '2-digit', minute: '2-digit' })}` : ''}</span>
+              </div>
+              {#if live.error}<p class="src">{tt('liveError')}: {live.error}</p>{/if}
+              <ul class="lvls">
+                {#each [5, 4, 3, 2] as l (l)}
+                  <li><span class="lv-sw" style:background={nt.categories?.[l - 1]?.color}></span>{nt.levelName(l)} <strong class="tnum">{lv.filter((x) => x.v === l).length}</strong></li>
+                {/each}
+              </ul>
+              <BarList ranked={false} bars={lv.filter((x) => x.v >= 3).sort((a, b) => b.v - a.v || a.c.localeCompare(b.c)).slice(0, 15).map((x) => ({
+                key: x.c, label: muniLabel(x.c),
+                value: nt!.kinds(x.c).filter((k) => (WARN[k]?.level ?? 2) >= 3).map((k) => WARN[k]?.[L] ?? k).join('・'),
+                pct: (x.v / 5) * 100, onclick: () => onpick(x.c) }))} />
+              <p class="src note">{tt('warnHint')}</p>
+            </section>
+          {:else if diesel}
+            {@const k = diesel.dates.length - 1}
+            {@const order = Array.from({ length: 47 }, (_, i) => i + 1).filter((c) => isFinite(nt!.price(c))).sort((a, b) => nt!.price(b) - nt!.price(a))}
+            <section class="panel">
+              <p class="eyebrow">{tt('diesel')} · {diesel.dates[k]}</p>
+              <BarList bars={[...order.slice(0, 5), ...order.slice(-5)].map((c) => ({ key: String(c), label: pname(c), value: `${nt!.yen(nt!.price(c))} (${nt!.signedYen(nt!.change(c, 1))})`,
+                                                                                         pct: ((nt!.price(c) - nt!.price(order.at(-1)!) + 1) / (nt!.price(order[0]) - nt!.price(order.at(-1)!) + 1)) * 100, onclick: () => onpick(pad2(c)) }))} />
+              <p class="src note">{tt('dieselStale')}</p>
+            </section>
+          {/if}
+          <section class="panel">
+            <p class="eyebrow">{tt('typhoon')}</p>
+            {#if live.typhoons.length}
+              <ul class="plain">
+                {#each live.typhoons as t (t.id)}
+                  <li><strong>{tt('typhoon')} {Number(t.number.slice(2)) || ''}{L === 'ja' ? '号' : ''} {t.name[L === 'ja' ? 'jp' : 'en']}</strong> — {t.location}, {t.pressure} hPa,
+                    {L === 'ja' ? '最大風速' : 'max wind'} {t.wind} m/s, {t.course} {t.speed} km/h{t.galeKm ? ` · ${tt('galeArea')} ${t.galeKm} km` : ''}
+                    {#if t.pos && geo && projectLL(t.pos[1], t.pos[0], geo.layout).space === 'outside'}<span class="small">（{tt('offMap')}）</span>{/if}</li>
+                {/each}
+              </ul>
+            {:else}<p class="src">{tt('noTyphoon')}</p>{/if}
+          </section>
+          <section class="panel">
+            <p class="eyebrow">{tt('quakes')}</p>
+            {#if live.quakes.length}
+              <ul class="plain">
+                {#each live.quakes.slice(0, 10) as q (q.eid)}
+                  <li><span class="int" style:background={INT_COLOR[q.maxi]?.[0]} style:color={INT_COLOR[q.maxi]?.[1]}>{q.maxi.replace('-', '弱').replace('+', '強')}</span>
+                    {q.name} · {new Date(q.at).toLocaleString(L === 'ja' ? 'ja-JP' : 'en-GB', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}{q.mag !== null ? ` · M${q.mag}` : ''}</li>
+                {/each}
+              </ul>
+            {:else}<p class="src">{tt('noQuakes')}</p>{/if}
+            <p class="src note">{tt('jmaSource')}</p>
+          </section>
+        {/if}
+
+        {#if localLevel && lt}
+          {#if app.muni && lt.indexOf(app.muni) >= 0}
+            <section class="panel">
+              <p class="eyebrow">{tt('profile')} · {muniLabel(app.muni)}</p>
+              <MuniProfile rows={lt.profile(app.muni)} lang={L} current={app.lmet} onmetric={(k) => (app.lmet = k)} />
+            </section>
+          {/if}
+          {#if app.ma || app.mb}
+            <section class="panel">
+              <p class="eyebrow">{tt('compareMunis')}</p>
+              <ComparePanel {names} lang={L} a={1} b={2} rows={lt.compareRows}
+                            labels={[app.ma ? muniLabel(app.ma) : '', app.mb ? muniLabel(app.mb) : '']}
+                            onset={() => {}} onswap={() => ([app.ma, app.mb] = [app.mb, app.ma])}
+                            onclear={(slot) => (slot === 'a' ? (app.ma = '') : (app.mb = ''))} />
+            </section>
+          {/if}
+          {@const met = lt.metric}
+          {@const topM = lt.codes.map((c, i) => ({ c, v: lt!.raw[i] })).filter((x) => isFinite(x.v) && (!p || Number(x.c.slice(0, 2)) === p))
+            .sort((a, b) => (met.better === -1 ? a.v - b.v : b.v - a.v)).slice(0, 10)}
+          <section class="panel">
+            <p class="eyebrow">{tt('topMunis')}{p ? ` · ${pname(p)}` : ''} · {met[L]}</p>
+            <BarList bars={topM.map((x) => ({ key: x.c, label: muniLabel(x.c), value: met.fmt(x.v),
+                                              pct: (Math.abs(x.v) / Math.max(...topM.map((y) => Math.abs(y.v)), 1e-9)) * 100, neg: x.v < 0, onclick: () => onpick(x.c) }))} />
           </section>
         {/if}
 
@@ -772,6 +1056,7 @@
           <section class="panel">
             <SiteCard name={sites[app.site].name} c={muni.sites[sites[app.site].name]} median={muni.siteMedian} lang={L}
                       extra={hubRows(sites[app.site].name)} />
+            <p class="memo"><button type="button" class="btn" onclick={() => shortlist.toggle('site', String(app.site))}>{shortlist.has('site', String(app.site)) ? `★ ${tt('inShort')}` : `☆ ${tt('addShort')}`}</button></p>
           </section>
         {/if}
         {#if p && (app.layer === 'warehouse' || app.showDpl)}
@@ -780,12 +1065,36 @@
             <SiteList sites={sitesIn(p)} lang={L} selected={app.site} {onsite} />
             <p class="src">{dplSource}</p>
           </section>
-        {:else if !p && app.layer !== 'flows' && !muniLevel}
+        {:else if !p && app.layer !== 'flows' && !mapMuni && app.layer !== 'now'}
           <section class="panel">
             <p class="eyebrow">{app.layer === 'score' ? tt('ranking') : tt('top')}</p>
             <BarList bars={topBars(view)} />
           </section>
         {/if}
+        <section class="panel">
+          <div class="head-row">
+            <p class="eyebrow">{tt('shortlist')}{shortlist.items.length ? `（${shortlist.items.length}）` : ''}</p>
+            {#if shortlist.items.length}
+              <span class="acts">
+                <button type="button" class="linkish" onclick={exportShortlist}>{tt('exportCsv')}</button>
+                <button type="button" class="linkish" onclick={() => shortlist.clear()}>{tt('clearAll')}</button>
+              </span>
+            {/if}
+          </div>
+          {#if shortlist.items.length}
+            <ul class="short">
+              {#each shortlist.items as it (it.kind + it.code)}
+                <li>
+                  <button type="button" class="linkish" onclick={() => openShort(it)}>{shortLabel(it)}</button>
+                  <span class="kind">{shortKind(it)}</span>
+                  <button type="button" class="btn ghost x" aria-label={tt('remove')} onclick={() => shortlist.toggle(it.kind, it.code)}>×</button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="src">{tt('shortEmpty')}</p>
+          {/if}
+        </section>
         {#if news}
           <section class="panel">
             <p class="eyebrow">{tt('news')}</p>
@@ -893,6 +1202,7 @@
   .chip[aria-pressed='true'] .ab { background: var(--bg); }
   .k-built { fill: var(--mark); stroke: var(--mark-ring); stroke-width: 1.4; }
   .k-hub { fill: var(--surface); stroke: var(--hub); stroke-width: 1.6; }
+  .k-news { fill: currentColor; }
 
   .grid {
     display: grid; gap: 24px 32px;
@@ -916,7 +1226,17 @@
   .help { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
   .head-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   .head-row .eyebrow { margin-bottom: 10px; }
-  .memo { margin: 12px 0 0; }
+  .lvls { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; }
+  .lvls li { display: inline-flex; align-items: center; gap: 6px; }
+  .lv-sw { width: 14px; height: 10px; border-radius: 2px; border: 1px solid var(--line-strong); display: inline-block; }
+  .plain { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+  .int { display: inline-block; min-width: 30px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; margin-right: 6px; }
+  .memo { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+  .acts { display: inline-flex; gap: 12px; }
+  .short { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .short li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); }
+  .short .kind { font-size: 11.5px; color: var(--muted); }
+  .short .x { min-height: 32px; padding: 0 8px; }
   .note-card { border: 1px solid var(--line); border-left: 3px solid var(--mark); border-radius: var(--radius); padding: 12px 14px; background: var(--surface); font-size: 13px; }
   .note-card p { margin: 0; }
   .note-card p + p { margin-top: 8px; color: var(--ink-2); }

@@ -13,7 +13,7 @@
     "geo": "node scripts/build-geo.mjs",
     "roads": "node scripts/build-roads.mjs",
     "labels": "node scripts/build-labels.mjs",
-    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run etl:mesh && npm run etl:muni && npm run etl:multimodal && npm run news",
+    "data": "npm run etl:warehouse && npm run geo && npm run labels && npm run anchors && npm run roads && npm run etl:dpl && npm run etl:census && npm run etl:ssw && npm run etl:jobs && npm run etl:suigai && npm run etl:risk && npm run etl:mesh && npm run etl:muni && npm run etl:multimodal && npm run jma-areas && npm run etl:diesel && npm run news",
     "etl:census": "node scripts/etl-census.mjs",
     "etl:ssw": "node scripts/etl-ssw.mjs",
     "etl:jobs": "node scripts/etl-jobs.mjs",
@@ -25,7 +25,9 @@
     "etl:muni": "node scripts/etl-muni.mjs",
     "test": "node --test 'tests/*.test.mjs'",
     "check-sources": "node scripts/check-sources.mjs",
-    "etl:multimodal": "node scripts/etl-multimodal.mjs --noncommercial"
+    "etl:multimodal": "node scripts/etl-multimodal.mjs --noncommercial",
+    "etl:diesel": "node scripts/etl-diesel.mjs",
+    "jma-areas": "node scripts/build-jma-areas.mjs"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.1",

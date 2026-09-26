@@ -1,5 +1,6 @@
 # Weekly data refresh for the sources that can be fetched unattended:
-#   倉庫統計季報 (MLIT, quarterly), 特定技能 (ISA, half-yearly), 有効求人倍率 (MHLW, yearly).
+#   倉庫統計季報 (MLIT, quarterly), 特定技能 (ISA, half-yearly), 有効求人倍率 (MHLW, yearly),
+#   軽油価格 (資源エネルギー庁, weekly on Wednesdays — kept as is if the site blocks the request).
 # The data tests must pass before anything is committed, so a changed spreadsheet layout stops
 # here instead of reaching the site. The job summary lists the manual sources that have news
 # (scripts/check-sources.mjs). Commits made with GITHUB_TOKEN do not trigger other workflows, so
@@ -8,7 +9,7 @@ name: Update data
 
 on:
   schedule:
-    - cron: '0 18 * * 1'   # Tuesday 03:00 JST
+    - cron: '0 18 * * 3'   # Thursday 03:00 JST (the diesel survey is published on Wednesdays)
   workflow_dispatch:
 
 permissions:
@@ -41,6 +42,7 @@ jobs:
       - run: npm run etl:warehouse
       - run: npm run etl:ssw
       - run: npm run etl:jobs
+      - run: npm run etl:diesel
       - run: npm test
       - id: commit
         run: |
@@ -50,7 +52,7 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add public/data
-            git commit -m "Update data (warehouse / SSW / job ratios)"
+            git commit -m "Update data (warehouse / SSW / job ratios / diesel)"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi

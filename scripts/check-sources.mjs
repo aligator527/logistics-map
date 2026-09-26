@@ -93,6 +93,9 @@ for (const [name, have, url] of [
   add('倉庫統計季報 (auto)', 'ok', `latest ${w.quarters.at(-1).id}, published ${w.quarters.at(-1).published}`);
   add('特定技能 (auto)', 'ok', `latest ${s.periods.at(-1).id}; fields: ${Object.keys(s.s1).includes('warehouse') ? '物流倉庫 is counted' : '物流倉庫 not counted yet'}`);
   add('有効求人倍率 (auto)', 'ok', `latest FY${j.periods.at(-1).id}`);
+  const d = read('public/data/diesel.json');
+  const age = Math.round((Date.now() - new Date(d.dates.at(-1)).getTime()) / 864e5);
+  add('軽油価格 (auto)', age > 16 ? 'CHECK' : 'ok', `latest week ${d.dates.at(-1)} (${age} days ago)${age > 16 ? ' — the site may be blocking automated downloads (AWS WAF); save the latest …s5.xlsx from a browser into data/raw/diesel/' : ''}`);
 }
 
 const md = ['### Data sources', '', '| source | state | note |', '|---|---|---|',

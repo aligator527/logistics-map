@@ -16,7 +16,7 @@
 <script lang="ts">
   import { prefName, t, type Lang } from '../lib/i18n';
 
-  let { names, lang, a, b, rows, onset, onswap }: {
+  let { names, lang, a, b, rows, onset, onswap, labels = null, onclear }: {
     names: string[];          // Japanese prefecture names, index 0..46
     lang: Lang;
     a: number;
@@ -24,13 +24,32 @@
     rows: CompareRow[];
     onset: (slot: 'a' | 'b', code: number) => void;
     onswap: () => void;
+    /** municipal comparison: fixed names instead of the prefecture pickers ('' = empty slot) */
+    labels?: [string, string] | null;
+    onclear?: (slot: 'a' | 'b') => void;
   } = $props();
 
-  const name = (c: number) => prefName(lang, c, names[c - 1]);
+  const name = (c: number) => (labels ? labels[c === a ? 0 : 1] : prefName(lang, c, names[c - 1]));
   const options = $derived(names.map((n, i) => ({ code: i + 1, label: prefName(lang, i + 1, n) })));
 </script>
 
 <div class="cmp">
+  {#if labels}
+    <div class="pick">
+      {#each [0, 1] as k (k)}
+        <div class="slot">
+          <span class="ab" class:b={k === 1}>{k ? 'B' : 'A'}</span>
+          <span class="nm">{labels[k] || t(lang, 'pickMuniHint')}</span>
+          {#if labels[k] && onclear}
+            <button type="button" class="btn ghost x" aria-label={t(lang, 'remove')} onclick={() => onclear!(k ? 'b' : 'a')}>×</button>
+          {/if}
+        </div>
+        {#if k === 0}
+          <button type="button" class="btn ghost swap" onclick={onswap} disabled={!labels[0] || !labels[1]} aria-label={t(lang, 'swap')} title={t(lang, 'swap')}>⇅</button>
+        {/if}
+      {/each}
+    </div>
+  {:else}
   <div class="pick">
     <label>
       <span class="ab">A</span>
@@ -52,6 +71,7 @@
       </select>
     </label>
   </div>
+  {/if}
 
   {#if !a || !b}
     <p class="hint">{t(lang, 'compareHint')}</p>
@@ -97,6 +117,9 @@
     border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface);
   }
   .swap { padding: 0 8px; }
+  .slot { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 40px; }
+  .slot .nm { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  .x { min-height: 32px; padding: 0 8px; }
   .swap:disabled { opacity: 0.4; }
   .hint { margin: 0; color: var(--muted); font-size: 13px; }
   table { border-collapse: collapse; width: 100%; font-size: 13px; }

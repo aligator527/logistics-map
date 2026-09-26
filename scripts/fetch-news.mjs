@@ -62,8 +62,45 @@ const PREFS = ['北海道', '青森', '岩手', '宮城', '秋田', '山形', '�
   '岡山', '広島', '山口', '徳島', '香川', '愛媛', '高知', '福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄'];
 // DPL facility names -> prefecture (「DPL札幌南Ⅴ 着工」 → 北海道)
 const dpl = existsSync(resolve(root, 'public/data/dpl.json'))
-  ? JSON.parse(readFileSync(resolve(root, 'public/data/dpl.json'), 'utf8')).sites.map((s) => ({ name: norm(s.name), pref: s.pref }))
+  ? JSON.parse(readFileSync(resolve(root, 'public/data/dpl.json'), 'utf8')).sites.map((s) => ({ name: norm(s.name), pref: s.pref, muni: s.muni }))
   : [];
+// Municipality names -> codes. Designated cities (「横浜市」) point at their most populated ward.
+// Names shared by several prefectures (府中市, 伊達市, 中央区 …) only count when the title also
+// names the prefecture. Longest names first, and matched text is blanked out, so 「つくばみらい市」
+// is not read as 「つくば市」.
+const munis = (() => {
+  const topoFile = resolve(root, 'public/geo/japan.topo.json'), muniFile = resolve(root, 'public/data/muni.json');
+  if (!existsSync(topoFile)) return [];
+  const geoms = JSON.parse(readFileSync(topoFile, 'utf8')).objects.muni.geometries;
+  const md = existsSync(muniFile) ? JSON.parse(readFileSync(muniFile, 'utf8')) : null;
+  const popOf = (c) => (md ? md.m.pop[md.codes.indexOf(c)] ?? 0 : 0);
+  const byName = new Map();
+  const add = (name, code) => (byName.get(name) ?? byName.set(name, []).get(name)).push(code);
+  const cityBest = new Map();
+  for (const g of geoms) {
+    const code = String(g.id), n = g.properties.n;
+    const w = n.match(/^(.+?市)(.+区)$/);
+    if (w) {
+      add(w[2], code);                      // ward alone (「中央区」): ambiguous unless the prefecture is named
+      const k = `${code.slice(0, 2)}|${w[1]}`;
+      if (!cityBest.has(k) || popOf(code) > popOf(cityBest.get(k).code)) cityBest.set(k, { name: w[1], code });
+    } else add(n, code);
+  }
+  for (const { name, code } of cityBest.values()) add(name, code);
+  return [...byName].map(([name, codes]) => ({ name, codes })).sort((a, b) => b.name.length - a.name.length);
+})();
+function munisOf(title, prefs) {
+  let s = title;
+  const out = new Set();
+  for (const { name, codes } of munis) {
+    if (name.length < 2 || !s.includes(name)) continue;
+    const cand = codes.length === 1 ? codes : codes.filter((c) => prefs.includes(Number(c.slice(0, 2))));
+    if (cand.length === 1) out.add(cand[0]);
+    s = s.split(name).join('　'.repeat(name.length));
+  }
+  return [...out].sort();
+}
+
 function prefsOf(title) {
   const out = new Set();
   PREFS.forEach((p, i) => {
@@ -73,6 +110,16 @@ function prefsOf(title) {
   });
   for (const d of dpl) if (title.includes(d.name)) out.add(d.pref);
   return [...out].sort((a, b) => a - b);
+}
+
+function tagsOf(title) {
+  const prefs = prefsOf(title);
+  const ms = munisOf(title, prefs);
+  // DPL facility names carry their municipality (longest name first: 「DPL新横浜II」 before 「DPL新横浜」)
+  for (const d of [...dpl].sort((a, b) => b.name.length - a.name.length)) if (d.muni && title.includes(d.name) && !ms.includes(d.muni)) { ms.push(d.muni); break; }
+  // a municipality implies its prefecture
+  for (const c of ms) if (!prefs.includes(Number(c.slice(0, 2)))) prefs.push(Number(c.slice(0, 2)));
+  return { topics: TOPICS.filter((tp) => tp.re.test(title)).map((tp) => tp.key), prefs: prefs.sort((a, b) => a - b), munis: ms };
 }
 
 // ------------------------------------------------------------------ fetch + parse (RSS 1.0 / 2.0)
@@ -116,12 +163,11 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
     const kept = items.filter((it) => src.keep(it));
     for (const it of kept) {
       byLink.set(it.link, {
+        ...tagsOf(it.title),
         t: it.title,
         link: it.link,
         date: it.date.toISOString().slice(0, 10),
         src: src.key,
-        topics: TOPICS.filter((tp) => tp.re.test(it.title)).map((tp) => tp.key),
-        prefs: prefsOf(it.title),
       });
     }
     report.push(`${src.key}: ${kept.length}/${items.length}`);
@@ -129,6 +175,9 @@ for (const src of SOURCES.filter((s) => s.enabled)) {
     report.push(`${src.key}: FAILED (${e.message}) — keeping previous items`);
   }
 }
+// tags are recomputed for the whole archive, so improvements to the rules apply to old items too
+for (const [k, it] of byLink) byLink.set(k, { ...it, ...tagsOf(it.t) });
+
 const cutoff = new Date(Date.now() - KEEP_DAYS * 864e5).toISOString().slice(0, 10);
 const items = [...byLink.values()].filter((it) => it.date >= cutoff)
   .sort((a, b) => b.date.localeCompare(a.date) || a.t.localeCompare(b.t)).slice(0, MAX_ITEMS);

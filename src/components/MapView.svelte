@@ -11,12 +11,18 @@
 
   export interface Marker { i: number; xy: [number, number]; built: boolean; label: string }
   /** freight hub (airport / port / rail station): r = marker radius in screen px */
-  export interface Poi { key: string; kind: 'air' | 'port' | 'rail'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip }
+  export interface Poi {
+    key: string; kind: 'air' | 'port' | 'rail' | 'quake' | 'typhoon' | 'news'; xy: [number, number]; r: number; label: string; major: boolean; tip: Tip;
+    /** fill (earthquake intensity) and text inside the marker (intensity, news count) */
+    color?: string; badge?: string; ink?: string;
+    /** click: select this prefecture / municipality */
+    code?: string;
+  }
   /** flow arc between two anchors (viewBox units); w = stroke width in screen px */
   export interface Flow { key: string; o: [number, number]; d: [number, number]; w: number; kind: 'out' | 'in' | 'all'; tip: Tip }
 
   let { geo, values, classes, lang, focus, a = 0, b = 0, compare = false, highlight = null,
-        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [],
+        markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -41,6 +47,11 @@
     level?: 'pref' | 'muni';
     /** selected municipality (muni level) */
     selMuni?: string | null;
+    /** polylines in map space (typhoon tracks): d in viewBox units */
+    tracks?: { key: string; d: string; kind: 'past' | 'forecast' }[];
+    /** municipal comparison outlines */
+    muniA?: string | null;
+    muniB?: string | null;
     /** freight hubs (airports, ports, rail freight stations) */
     pois?: Poi[];
     /** radius rings around a point (viewBox units), e.g. a DPL site's 10 / 30 / 60 km */
@@ -238,7 +249,12 @@
     if (!tg) { pinned = null; if (!compare) onclear(); return; }
     if (tg.site !== null) { onsite(tg.site); pinned = touch ? siteTip(tg.site) : null; return; }
     if (tg.flow !== null) { pinned = touch && flows[tg.flow] ? flows[tg.flow].tip : null; return; }
-    if (tg.poi !== null) { pinned = touch && pois[tg.poi] ? pois[tg.poi].tip : null; return; }
+    if (tg.poi !== null) {
+      const h = pois[tg.poi];
+      if (h?.code) onpick(h.code);
+      pinned = touch && h ? h.tip : null;
+      return;
+    }
     if (tg.joint !== null) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
     if (tg.muni) { const r = tipFor(tg); pinned = touch && r ? r.tip : null; return; }
     if (tg.code) { onpick(tg.code); pinned = touch ? prefTip(tg.code) : null; }
@@ -334,6 +350,9 @@
       {#each rings as g (g.label)}
         <circle class="ring" cx={g.xy[0]} cy={g.xy[1]} r={g.r} />
       {/each}
+      {#each tracks as tr (tr.key)}
+        <path class="track {tr.kind}" d={tr.d} />
+      {/each}
       {#if hoverShape}
         <path class="hover" d={hoverShape.d} />
       {/if}
@@ -343,6 +362,8 @@
       {#if selMuniShape}
         <path class="focus sel-muni" d={selMuniShape.d} />
       {/if}
+      {#if muniB && muniByCode.get(muniB)}<path class="sel-b" d={muniByCode.get(muniB)!.d} />{/if}
+      {#if muniA && muniByCode.get(muniA)}<path class="sel-a" d={muniByCode.get(muniA)!.d} />{/if}
       {#if compare}
         {#if b && prefByCode.get(pad2(b))}<path class="sel-b" d={prefByCode.get(pad2(b))!.d} />{/if}
         {#if a && prefByCode.get(pad2(a))}<path class="sel-a" d={prefByCode.get(pad2(a))!.d} />{/if}
@@ -389,11 +410,20 @@
         {:else if h.kind === 'port'}
           <rect class="pm" x={-h.r} y={-h.r} width={h.r * 2} height={h.r * 2} rx={h.r * 0.35} />
           <path class="glyph line" transform="scale({h.r / 6})" d="M0-3.6V3.6M-2.4-1.4H2.4M-3.4 1.4Q0 4.8 3.4 1.4" />
-        {:else}
+        {:else if h.kind === 'rail'}
           <rect class="pm" x={-h.r} y={-h.r * 0.7} width={h.r * 2} height={h.r * 1.4} rx="1.5" />
           <path class="glyph line" transform="scale({h.r / 6})" d="M-3.6 0H3.6" />
+        {:else if h.kind === 'quake'}
+          <circle class="qk" r={h.r} fill={h.color} />
+          {#if h.badge}<text class="qk-t" text-anchor="middle" dy="0.35em" style:fill={h.ink}>{h.badge}</text>{/if}
+        {:else if h.kind === 'typhoon'}
+          <circle class="ty" r={h.r} />
+          <path class="ty-g" transform="scale({h.r / 8})" d="M0-5A5 5 0 0 1 5 0 M0 5A5 5 0 0 1-5 0 M-1.8 0a1.8 1.8 0 1 0 3.6 0a1.8 1.8 0 1 0-3.6 0" />
+        {:else}
+          <rect class="nw" x={-h.r - 3} y={-h.r} width={2 * h.r + 6} height={2 * h.r} rx={h.r} />
+          <text class="nw-t" text-anchor="middle" dy="0.35em">{h.badge}</text>
         {/if}
-        {#if h.major && transform.k >= 2.5}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
+        {#if h.major && (transform.k >= 2.5 || h.kind === 'typhoon' || h.kind === 'quake')}<text x={h.r + 4} dy="0.35em">{h.label}</text>{/if}
       </g>
     {/each}
     {#each rings as g (g.label)}
@@ -516,6 +546,15 @@
   .poi .glyph.line { fill: none; stroke: var(--hub); stroke-width: 1.3; stroke-linecap: round; vector-effect: non-scaling-stroke; }
   .poi:hover .pm { stroke-width: 2.6; }
   .poi text { font-weight: 500; font-size: 11px; fill: var(--hub); }
+  .qk { stroke: var(--mark-ring); stroke-width: 1.2; fill-opacity: 0.9; }
+  .qk-t { font-size: 10px; font-weight: 700; fill: #111; stroke: none; paint-order: normal; pointer-events: none; }
+  .ty { fill: color-mix(in oklab, var(--clay) 30%, transparent); stroke: var(--clay); stroke-width: 1.6; }
+  .ty-g { fill: none; stroke: var(--clay); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+  .track { fill: none; stroke: var(--clay); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
+  .track.forecast { stroke-dasharray: 5 4; }
+  .nw { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }
+  .nw-t { font-size: 10.5px; font-weight: 700; fill: var(--bg); stroke: none; pointer-events: none; }
+  .overlay .poi.news text.nw-t, .overlay .poi.quake text.qk-t { paint-order: normal; stroke: none; }
   .ring { fill: var(--mark); fill-opacity: 0.05; stroke: var(--accent); stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
   .ring-label { font-size: 11px; font-weight: 600; fill: var(--accent); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; pointer-events: none; }
   .flow { cursor: pointer; }

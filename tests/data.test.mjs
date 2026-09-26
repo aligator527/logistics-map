@@ -103,10 +103,28 @@ test('multimodal: airports and cargo (commercial-safe build has no ports / rail)
   if (!m.noncommercial) assert.ok(m.items.every((x) => x.kind === 'air'), 'C02 / P31 are non-commercial sources');
 });
 
+test('municipal explorer fields and diesel', () => {
+  const m = load('data/muni.json');
+  const i = m.codes.indexOf('11203');
+  for (const k of ['pop2050', 'work2050', 'old2025', 'commute', 'truck', 'wh', 'cold', 'landChg', 'urban', 'control', 'area']) {
+    assert.equal(m.m[k].length, 1898, k);
+  }
+  near(m.m.truck[i], 8821, 1, '川口市 道路貨物運送業 (2021)');
+  near(m.m.urban[i], 5467, 5, '川口市 市街化区域 ha');
+  assert.equal(m.xy.length, 1898);
+  const d = load('data/diesel.json');
+  assert.ok(d.dates.length >= 52 && d.prefs.every((r) => r.length === 47));
+  const k = d.dates.indexOf('2026-09-14');
+  if (k >= 0) { assert.equal(d.japan[k], 159.3); assert.equal(d.prefs[k][12], 156.8, '東京'); }
+  const a = load('data/jma-areas.json');
+  assert.deepEqual(a['1310100'], ['13101'], '千代田区');
+  assert.ok(a['0110000'].length === 10, '札幌市 → 10 wards');
+});
+
 test('news: headlines and links only', { skip: !existsSync(new URL('../public/data/news.json', import.meta.url)) }, () => {
   const n = load('data/news.json');
   for (const it of n.items) {
-    assert.deepEqual(Object.keys(it).sort(), ['date', 'link', 'prefs', 'src', 't', 'topics']);
+    assert.deepEqual(Object.keys(it).sort(), ['date', 'link', 'munis', 'prefs', 'src', 't', 'topics']);
     assert.match(it.link, /^https:\/\//);
     assert.match(it.date, /^\d{4}-\d{2}-\d{2}$/);
   }

@@ -6,12 +6,12 @@ import { METRICS, type Metric, type Mode } from './data';
 
 export type Theme = 'system' | 'light' | 'dark';
 /** subject shown on the map */
-export type Layer = 'warehouse' | 'flows' | 'labour' | 'score';
+export type Layer = 'warehouse' | 'flows' | 'labour' | 'score' | 'local' | 'now';
 export type FlowBasis = 'annual' | 'day3';
 export type FlowMetric = 'out' | 'in' | 'net' | 'intra';
 export type LabourMetric = 'ssw' | 'jobs';
 /** lists the hash is validated against */
-export interface HashLists { quarters: string[]; flowYears: number[]; flowCuts: string[]; sswPeriods: string[]; sswFields: string[]; jobPeriods: string[]; criteria: string[] }
+export interface HashLists { quarters: string[]; flowYears: number[]; flowCuts: string[]; sswPeriods: string[]; sswFields: string[]; jobPeriods: string[]; criteria: string[]; localMetrics: string[] }
 
 function readStored<T extends string>(key: string, allowed: readonly T[]): T | null {
   try {
@@ -72,6 +72,17 @@ class AppState {
   slevel = $state<'pref' | 'muni'>('pref');
   /** selected municipality (5-digit code, municipal score) — '' = none */
   muni = $state('');
+  /** municipal data explorer: indicator key */
+  lmet = $state('pop2050');
+  /** 現況: weather warnings (municipalities) or diesel price (prefectures) */
+  nmet = $state<'warn' | 'diesel'>('warn');
+  /** warnings that matter for road freight only (no 雷・乾燥・霜 …) */
+  nlog = $state(true);
+  /** news markers on the map */
+  showNews = $state(false);
+  /** municipal comparison: two 5-digit codes ('' = empty slot) */
+  ma = $state('');
+  mb = $state('');
 
   showDpl = $state(true);
   showRoads = $state(true);
@@ -130,6 +141,16 @@ class AppState {
       if (this.lmetric === 'jobs' && lists.jobPeriods.length && this.jp !== lists.jobPeriods.length - 1) p.set('jp', lists.jobPeriods[this.jp]);
       if (this.lmetric === 'jobs' && this.occ !== 'driver') p.set('jo', this.occ);
     }
+    if (this.layer === 'now') {
+      if (this.nmet !== 'warn') p.set('nm', this.nmet);
+      if (!this.nlog) p.set('na', '1');
+    }
+    if (this.showNews) p.set('nw', '1');
+    if (this.layer === 'local') {
+      if (this.lmet !== 'pop2050') p.set('lk', this.lmet);
+      if (this.muni) p.set('mu', this.muni);
+      if (this.ma || this.mb) p.set('mc', `${this.ma}-${this.mb}`);
+    }
     if (this.layer === 'score') {
       if (this.slevel === 'muni') p.set('sl', 'muni');
       if (this.slevel === 'muni' && this.muni) p.set('mu', this.muni);
@@ -153,7 +174,15 @@ class AppState {
     const p = new URLSearchParams(hash.replace(/^#/, ''));
     const quarters = lists.quarters;
     const tl = p.get('t');
-    this.layer = tl === 'flows' || tl === 'labour' || tl === 'score' ? tl : 'warehouse';
+    this.layer = tl === 'flows' || tl === 'labour' || tl === 'score' || tl === 'local' || tl === 'now' ? tl : 'warehouse';
+    this.nmet = p.get('nm') === 'diesel' ? 'diesel' : 'warn';
+    this.nlog = p.get('na') !== '1';
+    this.showNews = p.get('nw') === '1';
+    const lk = p.get('lk') ?? 'pop2050';
+    this.lmet = lists.localMetrics.length && !lists.localMetrics.includes(lk) ? 'pop2050' : lk;
+    const [ma, mb] = (p.get('mc') ?? '').split('-');
+    this.ma = /^\d{5}$/.test(ma ?? '') ? ma : '';
+    this.mb = /^\d{5}$/.test(mb ?? '') ? mb : '';
     // score weights: "sw=stock-3.demand-2…" (hand-edited) or a preset name in "sp"
     const sw = p.get('sw');
     this.weights = {};

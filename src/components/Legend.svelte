@@ -2,7 +2,7 @@
   import type { Classes } from '../lib/scale';
   import { t, type Lang } from '../lib/i18n';
 
-  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, hubs = [], highlight = $bindable(null) }: {
+  let { classes, lang, title, fmt: f, hint, showDpl, showRoads, compare, flows = null, hubs = [], categories = null, highlight = $bindable(null) }: {
     classes: Classes;
     lang: Lang;
     title: string;
@@ -14,6 +14,8 @@
     compare: boolean;
     /** flow arcs on the map: out/in of a prefecture, or the largest flows */
     flows?: 'focus' | 'all' | null;
+    /** categorical legend (e.g. warning levels) instead of class breaks */
+    categories?: { color: string; label: string }[] | null;
     /** kinds of freight hubs on the map */
     hubs?: ('air' | 'port' | 'rail')[];
     highlight?: number | null;
@@ -28,7 +30,16 @@
 
 <div class="legend">
   <p class="title">{title}</p>
-  {#if classes.breaks.length}
+  {#if categories}
+    <ul class="cats">
+      {#each categories as c, i (c.label)}
+        <li><button type="button" class="sw cat" style:background={c.color} aria-pressed={highlight === i}
+                    onpointerenter={() => (highlight = i)} onpointerleave={() => (highlight = null)}
+                    onfocus={() => (highlight = i)} onblur={() => (highlight = null)} onclick={() => (highlight = highlight === i ? null : i)}
+                    aria-label={c.label}></button>{c.label}</li>
+      {/each}
+    </ul>
+  {:else if classes.breaks.length}
     <ol class="steps" aria-label={title} onpointerleave={() => (highlight = null)}>
       {#each classes.colors as c, i (i)}
         <li>
@@ -92,6 +103,9 @@
   .sw[aria-pressed='true'] { outline: 2px solid var(--ink); outline-offset: 1px; }
   .tick { position: absolute; top: 15px; right: 0; transform: translateX(50%); font-size: 11px; color: var(--muted); white-space: nowrap; }
   .hint { margin: 0; color: var(--muted); font-size: 11.5px; }
+  .cats { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .cats li { display: inline-flex; align-items: center; gap: 6px; }
+  .sw.cat { width: 18px; height: 12px; border-radius: 3px; border: 1px solid var(--line-strong); }
   .keys { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; }
   .keys li { display: inline-flex; align-items: center; gap: 6px; }
   .k-flow { stroke: var(--flow-all); stroke-width: 3; fill: none; }

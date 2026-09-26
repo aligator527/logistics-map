@@ -7,7 +7,10 @@
 // The national zip holds 47 prefecture zips; only the DBF is needed (mesh code gives the position).
 // Meshes on a prefecture border appear in both files with their own share, so values are summed
 // per mesh. SHICODE may list several municipalities ("01202_01236"): the mesh is split evenly.
-// Output rows: [lat, lon, population, municipality codes…] at the mesh centre.
+// Also the projections of the same dataset (国立社会保障・人口問題研究所 based, R6 国政局推計):
+// PTN_2025/2035/2050 total, PTB_* 15–64 years, PTC_* 65+.
+// Output rows: [lat, lon, pop2020, pop2025, pop2035, pop2050, work2025, work2050, old2025, municipality codes…].
+export const FIELDS = ['PTN_2020', 'PTN_2025', 'PTN_2035', 'PTN_2050', 'PTB_2025', 'PTB_2050', 'PTC_2025'];
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -43,12 +46,16 @@ for (const z of readdirSync(inner).filter((f) => /_\d{2}_SHP\.zip$/.test(f)).sor
   execFileSync('unzip', ['-q', '-o', resolve(inner, z), '*.dbf', '-d', dir]);
   const dbf = execFileSync('find', [dir, '-name', '*.dbf']).toString().trim().split('\n')[0];
   const csv = resolve(dir, 'p.csv');
-  execFileSync(resolve(root, 'node_modules/.bin/mapshaper'), ['-i', dbf, 'encoding=utf8', '-filter-fields', 'MESH_ID,SHICODE,PTN_2020', '-o', csv, 'force'], { stdio: 'ignore' });
-  for (const line of readFileSync(csv, 'utf8').trim().split('\n').slice(1)) {
-    const [id, shi, pop] = line.split(',');
-    const v = Number(pop) || 0;
-    const m = byMesh.get(id) ?? byMesh.set(id, { pop: 0, codes: new Set() }).get(id);
-    m.pop += v;
+  execFileSync(resolve(root, 'node_modules/.bin/mapshaper'), ['-i', dbf, 'encoding=utf8', '-filter-fields', `MESH_ID,SHICODE,${FIELDS.join(',')}`, '-o', csv, 'force'], { stdio: 'ignore' });
+  const lines = readFileSync(csv, 'utf8').trim().split('\n');
+  const head = lines[0].split(',');
+  const at = (k) => head.indexOf(k);
+  for (const line of lines.slice(1)) {
+    const r = line.split(',');
+    const id = r[at('MESH_ID')], shi = r[at('SHICODE')];
+    const m = byMesh.get(id) ?? byMesh.set(id, { pop: 0, v: FIELDS.map(() => 0), codes: new Set() }).get(id);
+    FIELDS.forEach((f, k) => { m.v[k] += Number(r[at(f)]) || 0; });
+    m.pop = m.v[0];
     for (const c of String(shi).split('_')) if (/^\d{5}$/.test(c)) m.codes.add(c);
   }
   rmSync(dir, { recursive: true, force: true });
@@ -60,7 +67,7 @@ let total = 0;
 for (const [id, m] of byMesh) {
   if (m.pop <= 0) continue;
   const [lat, lon] = meshCenter(id);
-  rows.push([+lat.toFixed(5), +lon.toFixed(5), Math.round(m.pop * 10) / 10, ...m.codes]);
+  rows.push([+lat.toFixed(5), +lon.toFixed(5), ...m.v.map((x) => Math.round(x * 10) / 10), ...m.codes]);
   total += m.pop;
 }
 writeFileSync(resolve(RAW, 'pop2020.json'), JSON.stringify(rows));

@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
 import { GridIndex, km, muniPoints } from './lib/geo-ll.mjs';
 import { muniAt } from './lib/planar.mjs';
-import { project } from './lib/project.mjs';
+import { project, r10 } from './lib/project.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = resolve(root, 'data/raw');
@@ -47,7 +47,9 @@ const areaKm2 = new Map(feature(topo, topo.objects.muni).features.map((f) => {
 }));
 
 // ------------------------------------------------------------------ 1) population grid
-const mesh = JSON.parse(readFileSync(resolve(RAW, 'mesh/pop2020.json'), 'utf8')).map(([lat, lon, pop, ...codes]) => ({ lat, lon, pop, codes }));
+// rows: [lat, lon, pop2020, pop2025, pop2035, pop2050, work2025, work2050, old2025, codes…] (scripts/etl-mesh.mjs)
+const mesh = JSON.parse(readFileSync(resolve(RAW, 'mesh/pop2020.json'), 'utf8'))
+  .map(([lat, lon, pop, p25, p35, p50, w25, w50, o25, ...codes]) => ({ lat, lon, pop, proj: [p25, p35, p50, w25, w50, o25], codes }));
 // Meshes whose code is not a 2025 municipality — 福島県 浜通り pooled as 「07999」 in this dataset,
 // 浜松市's pre-2024 wards — are placed by point-in-polygon on the current boundaries.
 // Mesh centres on the sea (coast of 浜通り) fall outside every polygon: nearest municipality.
@@ -62,14 +64,22 @@ for (const m of mesh) {
 console.log(`grid: ${relocated} meshes relocated (${nearestFallback} to the nearest municipality)`);
 const meshIdx = new GridIndex(mesh, 0.1);
 const pop = Array(N).fill(0), sx = Array(N).fill(0), sy = Array(N).fill(0);
-for (const m of mesh) {
-  const share = m.pop / (m.codes.length || 1);
-  for (const c of m.codes) {
-    const i = idxOf.get(c);
-    if (i === undefined) continue;
-    pop[i] += share; sx[i] += share * m.lon; sy[i] += share * m.lat;
+/** [pop2025, pop2035, pop2050, work2025 (15–64), work2050, old2025 (65+)] per municipality */
+const proj = Array.from({ length: N }, () => [0, 0, 0, 0, 0, 0]);
+function accumulate() {
+  pop.fill(0); sx.fill(0); sy.fill(0); proj.forEach((a) => a.fill(0));
+  for (const m of mesh) {
+    const k = m.codes.length || 1;
+    for (const c of m.codes) {
+      const i = idxOf.get(c);
+      if (i === undefined) continue;
+      const share = m.pop / k;
+      pop[i] += share; sx[i] += share * m.lon; sy[i] += share * m.lat;
+      m.proj.forEach((v, j) => { proj[i][j] += v / k; });
+    }
   }
 }
+accumulate();
 const centre = MUNIS.map((m, i) => (pop[i] > 0 ? { lat: sy[i] / pop[i], lon: sx[i] / pop[i] } : inner.get(m.code) ?? null));
 const popWithin = (q, r) => meshIdx.within(q, r).reduce((s, p) => s + p.pop, 0);
 console.log(`grid: ${mesh.length} meshes; municipalities without grid population: ${pop.filter((v) => !v).length}`);
@@ -88,14 +98,15 @@ function readGeojsonFromZip(zip, re) {
   return JSON.parse(execFileSync('unzip', ['-p', zip, name], { maxBuffer: 512 * 1024 * 1024 }).toString('utf8'));
 }
 const land = [];
-for (const [zip, f] of [['L01-26_GML.zip', { code: 'L01_001', use: 'L01_002', price: 'L01_008' }], ['L02-26_GML.zip', { code: 'L02_020', use: 'L02_001', price: 'L02_006' }]]) {
+for (const [zip, f] of [['L01-26_GML.zip', { code: 'L01_001', use: 'L01_002', price: 'L01_008', chg: 'L01_009' }], ['L02-26_GML.zip', { code: 'L02_020', use: 'L02_001', price: 'L02_006', chg: 'L02_007' }]]) {
   const gj = readGeojsonFromZip(resolve(RAW, 'land', zip), /\.geojson$/);
   for (const ft of gj.features) {
     const p = ft.properties;
     if (String(p[f.use]).padStart(3, '0') !== '009') continue;
     const price = Number(p[f.price]);
     if (!(price > 0)) continue;
-    land.push({ code: String(p[f.code]).padStart(5, '0'), price, lon: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1] });
+    const chg = p[f.chg] === null || p[f.chg] === '' ? NaN : Number(p[f.chg]); // year-on-year %, empty for new points
+    land.push({ code: String(p[f.code]).padStart(5, '0'), price, chg, lon: ft.geometry.coordinates[0], lat: ft.geometry.coordinates[1] });
   }
 }
 const landIdx = new GridIndex(land, 0.1);
@@ -108,6 +119,13 @@ MUNIS.forEach((m, i) => {
   const near = centre[i] ? landIdx.within(centre[i], 15).map((p) => p.price) : [];
   if (near.length >= 2) { landVal.push(median(near)); landEst.push(1); return; }
   landVal.push(NaN); landEst.push(2); // filled with the prefecture median below
+});
+// industrial land price change (YoY %): own points, else within 15 km
+const landChg = MUNIS.map((m, i) => {
+  const own = land.filter((l) => l.code === m.code).map((l) => l.chg).filter(Number.isFinite);
+  if (own.length) return median(own);
+  const near = centre[i] ? landIdx.within(centre[i], 15).map((p) => p.chg).filter(Number.isFinite) : [];
+  return near.length >= 2 ? median(near) : NaN;
 });
 const prefLand = Array.from({ length: 47 }, (_, k) => median(land.filter((l) => Number(l.code.slice(0, 2)) === k + 1).map((l) => l.price)));
 // landEst: 0 = own points, 1 = median of points within 15 km, 2 = prefecture median
@@ -147,76 +165,105 @@ function spreadToWards(values, cityName, prefCode, total, weight) {
   return wards.length;
 }
 
-// ------------------------------------------------------------------ 4) industrial zoning (ha)
-const zoneHa = Array(N).fill(NaN);
+// ------------------------------------------------------------------ 4) city planning (ha): industrial zoning, 市街化区域, 市街化調整区域
+// 都市計画現況調査 lists every municipality of each 都市計画区域 (a municipality may appear in
+// several; summed). Designated cities are listed as a whole: their figure is spread over the
+// wards by ward area. Municipalities outside any 都市計画区域 have 0 industrial zoning and no
+// 市街化区域 (NaN for 市街化 when the area is not split into 市街化 / 調整 = 非線引き).
+const zoneHa = Array(N).fill(NaN), urbanHa = Array(N).fill(NaN), controlHa = Array(N).fill(NaN);
 {
   const wb = XLSX.read(readFileSync(resolve(RAW, 'land/toshikeikaku_R7.xls')), { type: 'buffer' });
   const a = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
   const head = a[2].map(norm);
-  const cols = ['準工業地域', '工業地域', '工業専用地域'].map((h) => head.indexOf(h));
-  if (cols.some((c) => c < 0)) throw new Error('zoning: header not found');
+  const ind = ['準工業地域', '工業地域', '工業専用地域'].map((h) => head.indexOf(h));
+  // NFKC turns 「⑥」 into 「6」
+  const cUrban = head.findIndex((h) => /^(⑥|6)面積$/.test(h)), cControl = head.findIndex((h) => /^(⑪|11)面積$/.test(h));
+  if (ind.some((c) => c < 0) || cUrban < 0 || cControl < 0) throw new Error('city planning: header not found');
   const byName = new Map();
   for (const r of a.slice(17)) {
     const pref = norm(r[0]), name = norm(r[3]);
     if (!pref || !name || !/[市町村区]$/.test(name)) continue;
-    const ha = cols.reduce((s, c) => s + (Number(r[c]) || 0), 0);
     const key = `${pref}|${name}`;
-    byName.set(key, (byName.get(key) ?? 0) + ha);
+    const cur = byName.get(key) ?? { ind: 0, urban: NaN, control: NaN };
+    cur.ind += ind.reduce((t, c) => t + (Number(r[c]) || 0), 0);
+    const u = Number(r[cUrban]), c = Number(r[cControl]);
+    if (r[cUrban] !== '' && Number.isFinite(u)) cur.urban = (Number.isFinite(cur.urban) ? cur.urban : 0) + u;
+    if (r[cControl] !== '' && Number.isFinite(c)) cur.control = (Number.isFinite(cur.control) ? cur.control : 0) + c;
+    byName.set(key, cur);
   }
   const PREF_NAMES = topo.objects.pref.geometries.sort((x, y) => Number(x.id) - Number(y.id)).map((g) => g.properties.n);
-  // municipalities inside a 都市計画区域 but with no 用途地域 have 0; outside any 都市計画区域 → 0 as well
   let matched = 0;
   const cityDone = new Set();
+  const byArea = (mm) => areaKm2.get(mm.code) ?? 1;
   MUNIS.forEach((m, i) => {
     const pref = PREF_NAMES[Number(m.code.slice(0, 2)) - 1];
-    if (byName.has(`${pref}|${m.name}`)) { zoneHa[i] = byName.get(`${pref}|${m.name}`); matched++; return; }
+    const own = byName.get(`${pref}|${m.name}`);
+    if (own) { zoneHa[i] = own.ind; urbanHa[i] = own.urban; controlHa[i] = own.control; matched++; return; }
     const city = cityOfWard.get(m.code);
-    if (city && byName.has(`${pref}|${city}`) && !cityDone.has(`${pref}|${city}`)) {
+    const cityRow = city && byName.get(`${pref}|${city}`);
+    if (cityRow && !cityDone.has(`${pref}|${city}`)) {
       cityDone.add(`${pref}|${city}`);
-      matched += spreadToWards(zoneHa, city, m.code.slice(0, 2), byName.get(`${pref}|${city}`), (mm) => areaKm2.get(mm.code) ?? 1);
+      matched += spreadToWards(zoneHa, city, m.code.slice(0, 2), cityRow.ind, byArea);
+      if (Number.isFinite(cityRow.urban)) spreadToWards(urbanHa, city, m.code.slice(0, 2), cityRow.urban, byArea);
+      if (Number.isFinite(cityRow.control)) spreadToWards(controlHa, city, m.code.slice(0, 2), cityRow.control, byArea);
       return;
     }
     if (!Number.isFinite(zoneHa[i])) zoneHa[i] = 0;
   });
-  console.log(`zoning: ${byName.size} names in the table, matched ${matched}/${N} municipalities (others: no 用途地域 = 0)`);
+  console.log(`city planning: ${byName.size} names in the table, matched ${matched}/${N}; 市街化区域 known for ${urbanHa.filter(Number.isFinite).length}`);
 }
 
-// ------------------------------------------------------------------ 5) workers (residence) in 輸送・機械運転 + 運搬・清掃・包装
-const workers = Array(N).fill(NaN);
+// ------------------------------------------------------------------ 5) workers in 輸送・機械運転 + 運搬・清掃・包装 (residence), all employed (residence / work)
+const workers = Array(N).fill(NaN), empRes = Array(N).fill(NaN), empWork = Array(N).fill(NaN);
 {
   const wb = XLSX.read(readFileSync(resolve(RAW, 'census2020/000032214569.xlsx')), { type: 'buffer' });
   const a = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
-  // occupation = 「I_輸送・機械運転従事者」 + 「K_運搬・清掃・包装等従事者」 (letters of the 2020 classification)
-  const occ = new Map(), cityByName = new Map();
+  // occupation = 「I_輸送・機械運転従事者」 + 「K_運搬・清掃・包装等従事者」 (letters of the 2020 classification);
+  // 「0_総数」 row: column 6 = by residence, column 18 = by place of work
+  const occ = new Map(), res = new Map(), work = new Map();
+  const cOcc = new Map(), cRes = new Map(), cWork = new Map();
   for (const r of a.slice(10)) {
     if (norm(r[0]) === '9' || norm(r[3]) !== '0_総数' || norm(r[4]) !== '0_総数') continue;
     const [code, name] = norm(r[2]).split('_');
     const o = norm(r[5]);
-    if (!/^\d{5}$/.test(code) || !(/^I_/.test(o) || /^K_/.test(o))) continue;
-    const v = (Number(r[6]) || 0) + (occ.get(code) ?? 0);
-    occ.set(code, v);
-    if (/市$/.test(name)) cityByName.set(`${code.slice(0, 2)}|${name}`, v);
+    if (!/^\d{5}$/.test(code)) continue;
+    const city = /市$/.test(name) ? `${code.slice(0, 2)}|${name}` : null;
+    if (/^I_/.test(o) || /^K_/.test(o)) {
+      const v = (Number(r[6]) || 0) + (occ.get(code) ?? 0);
+      occ.set(code, v); if (city) cOcc.set(city, v);
+    } else if (/^0_/.test(o)) {
+      res.set(code, Number(r[6]) || 0); work.set(code, Number(r[18]) || 0);
+      if (city) { cRes.set(city, Number(r[6]) || 0); cWork.set(city, Number(r[18]) || 0); }
+    }
   }
-  assign(workers, occ, cityByName, 'workers (第12表)');
+  assign(workers, occ, cOcc, 'workers (第12表)');
+  assign(empRes, res, cRes, 'employed by residence');
+  assign(empWork, work, cWork, 'employed by place of work');
 }
 
-// ------------------------------------------------------------------ 6) logistics employees (道路貨物運送業 + 倉庫業, 2021)
-const logi = Array(N).fill(NaN);
+// ------------------------------------------------------------------ 6) logistics employees (2021): 道路貨物運送業, 倉庫業, of which 冷蔵倉庫業
+const logi = Array(N).fill(NaN), truckEmp = Array(N).fill(NaN), whEmp = Array(N).fill(NaN), coldEmp = Array(N).fill(NaN);
 {
   const wb = XLSX.read(readFileSync(resolve(RAW, 'census2020/000040067885.xlsx')), { type: 'buffer' });
   const a = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
   const hr = a.findIndex((r) => r.some((v) => /^44_道路貨物運送業/.test(norm(v))));
-  const c44 = a[hr].findIndex((v) => /^44_道路貨物運送業/.test(norm(v)));
-  const c47 = a[hr].findIndex((v) => /^47_倉庫業/.test(norm(v)));
-  const byCode = new Map(), cityByName = new Map();
+  const col = (re) => a[hr].findIndex((v) => re.test(norm(v)));
+  const c44 = col(/^44_道路貨物運送業/), c47 = col(/^47_倉庫業/), c472 = col(/^472_冷蔵倉庫業/);
+  if ([c44, c47, c472].some((c) => c < 0)) throw new Error('経済センサス: columns not found');
+  const maps = { all: [new Map(), new Map()], t: [new Map(), new Map()], w: [new Map(), new Map()], c: [new Map(), new Map()] };
   for (const r of a.slice(hr + 1)) {
     const [code, name] = norm(r[1]).split('_');
     if (!/^\d{5}$/.test(code) || norm(r[0]) === '9') continue;
-    const v = (Number(r[c44]) || 0) + (Number(r[c47]) || 0);
-    byCode.set(code, v);
-    if (/市$/.test(name ?? '')) cityByName.set(`${code.slice(0, 2)}|${name}`, v);
+    const vals = { t: Number(r[c44]) || 0, w: Number(r[c47]) || 0, c: Number(r[c472]) || 0 };
+    const city = /市$/.test(name ?? '') ? `${code.slice(0, 2)}|${name}` : null;
+    for (const [k, v] of [['all', vals.t + vals.w], ['t', vals.t], ['w', vals.w], ['c', vals.c]]) {
+      maps[k][0].set(code, v); if (city) maps[k][1].set(city, v);
+    }
   }
-  assign(logi, byCode, cityByName, 'logistics employees (経済センサス)');
+  assign(logi, ...maps.all, 'logistics employees (経済センサス)');
+  assign(truckEmp, ...maps.t, '道路貨物運送業');
+  assign(whEmp, ...maps.w, '倉庫業');
+  assign(coldEmp, ...maps.c, '冷蔵倉庫業');
 }
 
 // ------------------------------------------------------------------ 7) radius sums from municipality centres
@@ -303,13 +350,26 @@ const out = {
     workers: workers.map((v) => round(v)), pool30: pool30.map((v) => round(v)),
     logi: logi.map((v) => round(v)), cluster20: cluster20.map((v) => round(v)),
     quake: quake.map((v) => round(v, 1)),
+    // added for the municipal data explorer
+    pop2050: proj.map((a, i) => (pop[i] > 0 ? round((a[2] / pop[i] - 1) * 100, 1) : null)),       // % change 2020→2050
+    pop2035: proj.map((a, i) => (pop[i] > 0 ? round((a[1] / pop[i] - 1) * 100, 1) : null)),       // % change 2020→2035
+    work2050: proj.map((a) => (a[3] > 0 ? round((a[4] / a[3] - 1) * 100, 1) : null)),              // 15–64: % change 2025→2050
+    old2025: proj.map((a) => (a[0] > 0 ? round((a[5] / a[0]) * 100, 1) : null)),                   // 65+ share 2025 (%)
+    commute: empRes.map((v, i) => (v > 0 && Number.isFinite(empWork[i]) ? round((empWork[i] / v) * 100, 0) : null)), // workers by workplace / by residence (%)
+    truck: truckEmp.map((v) => round(v)), wh: whEmp.map((v) => round(v)), cold: coldEmp.map((v) => round(v)),
+    landChg: landChg.map((v) => round(v, 1)),
+    urban: urbanHa.map((v) => round(v, 0)), control: controlHa.map((v) => round(v, 0)),
+    area: MUNIS.map((m) => round(areaKm2.get(m.code), 1)),
   },
+  /** population centre in map coordinates (metres, insets laid out) — news markers etc. */
+  xy: centre.map((q) => (q ? r10(project([q.lon, q.lat])) : null)),
   prefLand: prefLand.map((v) => round(v)),
   sites,
   siteMedian,
   sources: {
     mesh: { ja: '国土数値情報 1kmメッシュ別将来推計人口（R6国政局推計）の2020年国勢調査人口', en: 'MLIT 1 km mesh population (2020 census base, mesh1000r6)', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-mesh1000r6.html' },
     land: { ja: '国土数値情報 地価公示（2026年）・都道府県地価調査（2026年）の工業地', en: 'MLIT official land prices 2026 (L01, L02), industrial sites', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-L01-2026.html' },
+    proj: { ja: '国土数値情報 1kmメッシュ別将来推計人口（R6国政局推計）', en: 'MLIT 1 km mesh population projections (2024)', url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-mesh1000r6.html' },
     zone: { ja: '国土交通省 都市計画現況調査（2025年3月31日現在）', en: 'MLIT city planning survey (31 Mar 2025)', url: 'https://www.mlit.go.jp/toshi/tosiko/toshi_tosiko_tk_000217.html' },
     workers: { ja: '令和2年国勢調査 従業地・通学地集計 第12表（常住地、輸送・機械運転従事者＋運搬・清掃・包装等従事者）', en: '2020 Census, occupation by residence (transport/machine operators + carrying/cleaning/packaging)', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200521' },
     logi: { ja: '令和3年経済センサス‐活動調査 第9-1B表（道路貨物運送業＋倉庫業の従業者）', en: '2021 Economic Census, employees in road freight + warehousing', url: 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553' },

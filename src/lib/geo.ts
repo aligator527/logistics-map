@@ -7,6 +7,7 @@ import { geoIdentity, geoPath } from 'd3-geo';
 import { feature, mesh, neighbors } from 'topojson-client';
 import type { GeometryCollection, Topology } from 'topojson-specification';
 import type { Roads } from './data';
+import type { Layout } from './project';
 
 export const WIDTH = 1000;
 
@@ -38,6 +39,8 @@ export interface GeoData {
   adjacent: Set<string>;
   /** SVG units per metre on the mainland (× inset scale in Okinawa / Ogasawara) */
   unitsPerMetre: number;
+  /** inset layout, for projecting lon/lat in the browser (src/lib/project.ts) */
+  layout?: Layout;
   insetScale: { okinawa: number; ogasawara: number };
   source: string;
 }
@@ -45,7 +48,7 @@ export interface GeoData {
 type Meta = {
   bounds: { x0: number; y0: number; x1: number; y1: number };
   insets: Record<string, { x0: number; y0: number; x1: number; y1: number }>;
-  layout?: { okinawa: { k: number }; ogasawara: { k: number } };
+  layout?: Layout;
   source: string;
 };
 
@@ -111,6 +114,7 @@ export async function loadGeo(): Promise<GeoData> {
     muniBorders: () => '',
     P,
     unitsPerMetre: k,
+    layout: topo.meta.layout,
     insetScale: { okinawa: topo.meta.layout?.okinawa.k ?? 1, ogasawara: topo.meta.layout?.ogasawara.k ?? 1 },
     adjacent: (() => {
       const set = new Set<string>();
