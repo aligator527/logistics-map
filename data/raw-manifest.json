@@ -800,6 +800,13 @@
    "script": "etl-multimodal"
   },
   {
+   "file": "data/raw/rent/202607_data.csv",
+   "bytes": 11275,
+   "sha256": "eb7ace07a413686a9f29bb04075f6dea4bc261e4d35f7fcaf2f3ee210c0245fe",
+   "source": "https://www.ichigo-re.co.jp/report/report-market/ (物流施設の賃貸マーケットに関する調査, _data.csv)",
+   "script": "etl-rent"
+  },
+  {
    "file": "data/raw/roadcensus/kasyo01.csv",
    "bytes": 3130569,
    "sha256": "6a9d5b94bb771b80b7b4c298c825577a3b61d67d6c937c6a69f6caf54ed2b2e5",
