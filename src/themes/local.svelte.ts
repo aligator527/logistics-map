@@ -3,6 +3,7 @@
 
 import { app } from '../lib/state.svelte';
 import { userData } from '../lib/userdata.svelte';
+import { regionOfPref, latest, type RentRegion } from '../lib/rent';
 import type { Label } from '../lib/data';
 import { SEQ, fmtCompact, fmtMinutes, fmtNum, makeClasses, type Classes } from '../lib/scale';
 import { hubGroups, Reach, type Grid, type HubItem, type Place, type Router } from '../lib/travel';
@@ -278,6 +279,19 @@ export class LocalTheme implements ThemeView {
         { key: 'dLogi', ja: '重要物流道路までの距離', en: 'Distance to a key logistics road', group: 'access' as const, get: v('dLogi'), fmt: (x: number) => `${fmtNum(L, x, 1)} km`, better: -1 as const,
           hint: { ja: '人口重心から最寄りの重要物流道路まで（直線）。国際海上コンテナ車（40ft背高）の通行が確保される幹線', en: 'From the population centre (straight line): trunk roads fit for 40 ft high-cube container trucks' }, source: src('bcpRoads') },
       ] : []),
+      ...(store.rent ? (() => {
+        const rent = store.rent!, code = this.d.codes;
+        const at = (f: (g: RentRegion) => number) => (i: number) => { const g = regionOfPref(rent, Number(code[i].slice(0, 2))); return g ? f(g) : NaN; };
+        const src2 = `${rent.source[L]}`;
+        return [
+          { key: 'rentRegion', ja: '物流施設の募集賃料（圏域）', en: 'Logistics asking rent (region)', group: 'land' as const, get: at((g) => latest(g.rent)),
+            fmt: (x: number) => `${fmtNum(L, x, 0)}${L === 'ja' ? '円/坪' : ' ¥/tsubo'}`, better: -1 as const,
+            hint: { ja: '1万㎡以上の賃貸物流施設、募集1,000㎡以上の中央値（月額・税別）。東京圏・関西圏・中京圏・九州圏のみ、圏域の値', en: 'Median asking rent of rental logistics facilities (monthly, before tax); only the four covered regions, one value per region' }, source: src2 },
+          { key: 'vacRegion', ja: '物流施設の空室率（圏域）', en: 'Logistics vacancy (region)', group: 'land' as const, get: at((g) => latest(g.vacancy)),
+            fmt: (x: number) => `${fmtNum(L, x, 1)}%`, better: -1 as const,
+            hint: { ja: '1万㎡以上の賃貸物流施設の空室率。圏域の値（借りやすさの目安。高いと供給過剰で賃料が下がりやすい）', en: 'Vacancy of rental logistics facilities of 10,000 m²+, per region (easier to lease; high = oversupply)' }, source: src2 },
+        ];
+      })() : []),
       ...('whStart' in m ? [
         { key: 'trStart', ja: '運輸業用建築物の着工床面積（直近2年）', en: 'Transport-industry floor area started (2 years)', group: 'land' as const, get: v('trStart'),
           fmt: (x: number) => `${fmtCompact(L, x)}㎡`, better: -1 as const,

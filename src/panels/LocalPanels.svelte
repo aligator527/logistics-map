@@ -12,6 +12,7 @@
   import CostPanel from './CostPanel.svelte';
   import UserDataPanel from './UserDataPanel.svelte';
   import RoutePanel from './RoutePanel.svelte';
+  import RentPanel from './RentPanel.svelte';
   import { commuteFrom } from '../lib/labour';
   import { LocalTheme } from '../themes/local.svelte';
   const L = $derived(app.lang);
@@ -146,6 +147,7 @@
       <MuniProfile rows={lt.profile(app.muni)} lang={L} current={app.lmet} onmetric={(k) => (app.lmet = k)} />
     </section>
   {/if}
+  {#if part === 'metrics'}<RentPanel />{/if}
   {#if part === 'metrics' && !(app.muni && lt.indexOf(app.muni) >= 0)}
     <section class="panel"><p class="help">{tt('pickMuniForMetrics')}</p></section>
   {/if}

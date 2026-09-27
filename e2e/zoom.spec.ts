@@ -212,9 +212,28 @@ test('your own data from a CSV becomes a demand', async ({ page }, info) => {
   expect(errors).toEqual([]);
 });
 
+test('rental market: regional trends and a lease in the total cost', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  const errors = await open(page, 't=local&mu=23206&tb=metrics');
+  const panel = page.getByTestId('rent-panel');
+  await expect(panel).toContainText('中京圏');
+  await expect(panel.locator('svg[role="slider"]')).toHaveCount(2);
+  // outside the four regions there is no panel
+  await open(page, 't=local&mu=01100&tb=metrics');
+  await expect(page.locator('aside .panel').first()).toBeVisible();
+  await expect(page.getByTestId('rent-panel')).toHaveCount(0);
+  await open(page, 't=local&mu=23206&tb=calc');
+  await page.locator('details.cost summary').click();
+  await page.getByTestId('tenure').selectOption('lease');
+  await expect(page.getByTestId('lease-rent')).toContainText('中京圏');
+  await expect(page.getByTestId('lease-rent')).toContainText('億円');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('costInputs')!).tenure)).toBe('lease');
+  expect(errors).toEqual([]);
+});
+
 test('phone: the new panels fit the screen', async ({ page }, info) => {
   test.skip(info.project.name !== 'phone', 'phone layout');
-  for (const hash of ['t=local&mu=23206&io=muni:23206&lk=iso&tb=calc', 't=local&tb=short', 't=local&tb=screen&fx=zone.ge.20']) {
+  for (const hash of ['t=local&mu=23206&io=muni:23206&lk=iso&tb=calc', 't=local&tb=short', 't=local&tb=screen&fx=zone.ge.20', 't=local&mu=23206&tb=metrics']) {
     await open(page, hash);
     await page.evaluate(() => document.querySelectorAll('aside details').forEach((d) => ((d as HTMLDetailsElement).open = true)));
     await noHorizontalScroll(page);

@@ -157,6 +157,7 @@
       }).catch((e) => console.warn('muni', e));
       fetch(`${import.meta.env.BASE_URL}data/multimodal.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (s.hubs = d)).catch(() => {});
       fetch(`${import.meta.env.BASE_URL}data/news.json`).then((r) => (r.ok ? r.json() : null)).then((n) => (s.news = n)).catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}data/rent.json`).then((r) => (r.ok ? r.json() : null)).then((d) => (s.rent = d)).catch(() => {});
     } catch (e) {
       error = String(e);
     }

@@ -234,3 +234,16 @@ test('demand, wages and land trend', () => {
   assert.equal(m.landTrend.japan[m.landTrend.years.indexOf(2016)], 100);
   assert.ok(m.landTrend.japan.at(-1) > 100, 'industrial land up since 2016');
 });
+
+test('rent: 一五不動産 logistics rental market', () => {
+  const r = load('data/rent.json');
+  assert.equal(r.quarters[0], '2008-07');
+  assert.deepEqual(r.regions.map((g) => g.key), ['tokyo', 'kansai', 'chukyo', 'kyushu']);
+  for (const g of r.regions) for (const k of ['vacancy', 'rent', 'leasable']) assert.equal(g[k].length, r.quarters.length, `${g.key} ${k}`);
+  const i = r.quarters.indexOf('2020-01'), tokyo = r.regions[0];
+  assert.equal(tokyo.vacancy[0], 10.6, '東京圏 2008年7月 空室率');
+  assert.equal(tokyo.rent[i], 4370, '東京圏 2020年1月 募集賃料');
+  assert.equal(r.regions[2].vacancy[i], 9.1, '中京圏 2020年1月 空室率');
+  assert.ok(r.regions.every((g) => g.rent.at(-1) > 2000 && g.rent.at(-1) < 8000), 'latest rents');
+  assert.ok(/一五不動産/.test(r.source.ja));
+});

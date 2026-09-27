@@ -1,4 +1,4 @@
-# Weekly: new minimum wages and a new edition of the large-vehicle route maps. A change goes to a branch
+# Weekly: new minimum wages, a new edition of the large-vehicle route maps and a new quarter of logistics rents. A change goes to a branch
 # (checked by the data tests) and an issue links to it, so it is reviewed before it reaches main.
 # (Pull requests are not opened directly: Actions may not create them in this repository's settings.)
 name: Update hand-kept sources

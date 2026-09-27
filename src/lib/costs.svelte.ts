@@ -4,6 +4,7 @@
 import { store } from './store.svelte';
 import { fare, co2Kg, regionOf, type Vehicle } from './fares';
 import { demandArray } from './userdata.svelte';
+import { regionOfPref, latest, TSUBO_M2 } from './rent';
 
 export type DemandKey = 'pop' | 'hh' | 'retail' | 'mailorder' | 'mfgShip' | 'wsEmp' | 'user';
 export interface CostInputs {
@@ -14,11 +15,16 @@ export interface CostInputs {
   wageBasis: WageBasis;
   /** total cost over years (present value): horizon in years, discount rate % */
   years: number; discount: number;
+  /** buy the land and build, or lease a rental logistics facility (一五不動産 regional asking rents);
+   *  warehouse floor area ㎡, building cost 円/㎡ (buy), rent 円/坪・月 (lease; 0 = the region's median) */
+  tenure: Tenure; floor: number; buildCost: number; rent: number;
 }
+export type Tenure = 'buy' | 'lease';
 export type WageBasis = 'min' | 'handling' | 'truckL' | 'truck' | 'part';
 const KEY = 'costInputs';
 const DEFAULTS: CostInputs = { plot: 20000, staff: 60, hours: 2000, premium: 25, km: 2000, kmPerL: 4, days: 300,
-  vehicle: 'l', runs: 20, load: 60, limit: 240, demand: 'pop', wageBasis: 'handling', years: 10, discount: 3 };
+  vehicle: 'l', runs: 20, load: 60, limit: 240, demand: 'pop', wageBasis: 'handling', years: 10, discount: 3,
+  tenure: 'buy', floor: 30000, buildCost: 100000, rent: 0 };
 function read(): CostInputs {
   try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) ?? '{}') }; } catch { return { ...DEFAULTS }; }
 }
@@ -77,7 +83,29 @@ export function transport(i: number, c: CostInputs = costs.inputs): TransportEst
   return { yearly: (sf / sw) * runs, perRun: sf / sw, km: sk / sw, co2: (sc / sw) * runs, served: sw / all, region };
 }
 
-export interface Tco { total: number; land: number; residual: number; staff: number; transport: number; wageGrowth: number; landGrowth: number; years: number }
+export interface Lease {
+  /** 円/坪・月 used, whether it is the region's median, the region's name, yen a year, yearly rent trend (last 5 years) */
+  rent: number; regional: boolean; region: { ja: string; en: string } | null; yearly: number; growth: number;
+}
+/** a rental facility of `floor` ㎡ at the region's median asking rent (or the user's own) */
+export function lease(i: number, c: CostInputs = costs.inputs): Lease | null {
+  const m = store.muni;
+  if (!m || i < 0) return null;
+  const g = regionOfPref(store.rent, Number(m.codes[i].slice(0, 2)));
+  const own = c.rent > 0;
+  const rent = own ? c.rent : g ? latest(g.rent) : NaN;
+  // 20 quarters back, when the series reaches that far
+  const hist = g?.rent ?? [], k = hist.length - 1;
+  const growth = g && hist[k] && hist[k - 20] ? (hist[k]! / hist[k - 20]!) ** (1 / 5) - 1 : 0;
+  return { rent, regional: !own && !!g, region: g ? { ja: g.ja, en: g.en } : null, yearly: (c.floor / TSUBO_M2) * rent * 12, growth };
+}
+
+/** 鉄骨造の倉庫: 法定耐用年数 31 years, straight line — only for what the building is still worth at the horizon */
+const BUILDING_LIFE = 31;
+export interface Tco {
+  total: number; land: number; residual: number; staff: number; transport: number; wageGrowth: number; landGrowth: number; years: number;
+  tenure: Tenure; building: number; buildingResidual: number; rent: number; rentGrowth: number;
+}
 /** yen, present value over `years`: land bought now less its value at the end (the local 5-year price trend), staff
  *  growing with the prefecture's minimum-wage trend (last 5 years), and the delivery runs; discounted at `discount` % */
 export function tco(i: number, c: CostInputs = costs.inputs, run: TransportEstimate | null = transport(i, c)): Tco | null {
@@ -89,14 +117,25 @@ export function tco(i: number, c: CostInputs = costs.inputs, run: TransportEstim
   const l5 = m.m.land5?.[i];
   const landGrowth = l5 !== null && l5 !== undefined && isFinite(l5) ? (1 + l5 / 100) ** (1 / 5) - 1 : 0;
   const r = c.discount / 100, n = Math.max(1, Math.round(c.years));
-  let staff = 0, transportPv = 0;
+  const buy = c.tenure !== 'lease';
+  const ls = buy ? null : lease(i, c);
+  const rentGrowth = ls?.growth ?? 0;
+  let staff = 0, transportPv = 0, rent = 0;
   for (let y = 1; y <= n; y++) {
     const df = 1 / (1 + r) ** y;
     staff += (isFinite(e.staff) ? e.staff : 0) * (1 + wageGrowth) ** (y - 1) * df;
     transportPv += (run?.yearly ?? 0) * df;
+    if (ls) rent += ls.yearly * (1 + rentGrowth) ** (y - 1) * df;
   }
-  const land = isFinite(e.land) ? e.land : 0;
+  const land = buy && isFinite(e.land) ? e.land : 0;
   const residual = (land * (1 + landGrowth) ** n) / (1 + r) ** n;
-  // no demand within the delivery area: the runs are unknown, so is the total (a zero would favour places out of reach)
-  return { total: run ? land - residual + staff + transportPv : NaN, land, residual, staff, transport: run ? transportPv : NaN, wageGrowth, landGrowth, years: n };
+  const building = buy ? c.floor * c.buildCost : 0;
+  const buildingResidual = (building * Math.max(0, 1 - n / BUILDING_LIFE)) / (1 + r) ** n;
+  const fixed = buy ? land - residual + building - buildingResidual : rent;
+  // no demand within the delivery area: the runs are unknown, so is the total (a zero would favour places out of reach);
+  // a lease outside the surveyed regions has no rent unless the user gives one
+  return {
+    total: run && isFinite(fixed) ? fixed + staff + transportPv : NaN, land, residual, staff, transport: run ? transportPv : NaN, wageGrowth, landGrowth, years: n,
+    tenure: buy ? 'buy' : 'lease', building, buildingResidual, rent: ls ? rent : 0, rentGrowth,
+  };
 }

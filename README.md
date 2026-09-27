@@ -78,8 +78,10 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
 - **経路と中継 (route and relay)** — the quickest path from the reach origin to the selected municipality: time, km, the
   trunk roads in order (common names first), and — when the run is longer than a day trip — the fewest relay points at
   named interchanges so that every leg is a day trip for its driver; the route and relay points are drawn on the map.
-- **Total cost over time** — present value over N years (default 10, discount 3%): land bought now less its value at the
-  end (the local 5-year land-price trend), staff growing with the prefecture's minimum-wage trend (last 5 years),
+- **Total cost over time** — present value over N years (default 10, discount 3%). *Buy*: land bought now less its value
+  at the end (the local 5-year land-price trend), plus the building (floor area × cost per ㎡) less what is left of it
+  after straight-line depreciation over 31 years. *Lease*: a rental logistics facility of the same floor area at the
+  region's median asking rent (or your own), following the region's 5-year rent trend. Then staff growing with the prefecture's minimum-wage trend (last 5 years),
   delivery runs. Staff pay can be the minimum wage or actual pay (賃金構造基本統計調査 2025: warehouse and handling
   workers, truck drivers, part-time in transport).
 - **Labour** — transport and handling workers (census 2020, by residence) within a 20/30/45-minute car commute of a site;
@@ -87,6 +89,9 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
 - **New supply** — warehouse floor area started per prefecture (建築着工統計, 2015 – mid-2026) and its ratio to the
   commercial warehouse stock; per municipality, transport-industry buildings started (a proxy: there is no municipal
   warehouse figure).
+- **Rental market (物流施設の賃貸市場)** — vacancy and median asking rent of rental logistics facilities (10,000 ㎡+) in
+  Greater Tokyo, Kansai, Chukyo and Kyushu, quarterly since 2008 (一五不動産情報サービス); shown as metrics for the
+  municipalities of those regions (one value per region) and as trends in the metrics tab.
 - **Your weighting and scenarios** — pick criteria and weights (0–5) for the shortlist and get a 0–100 score and a
   ranking (presets: cost, reach, labour, safety first); save the current settings with each candidate's results as a
   scenario, compare scenarios side by side and apply one back.
@@ -174,6 +179,7 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
 | Industrial zoning | 国土数値情報 A29 (2019) | `npm run zoning` | `public/geo/zoning/NN.json` |
 | Logistics pay | 賃金構造基本統計調査 2025, prefecture tables (full-time by occupation, part-time by industry) | `npm run etl:wages` | `public/data/muni.json` |
 | New warehouse supply | 建築着工統計調査 tables 1 and 7-2 | `npm run etl:supply` | `public/data/muni.json` |
+| Logistics rents and vacancy | 一五不動産情報サービス「物流施設の賃貸マーケットに関する調査」(CSV of the latest report) | `npm run etl:rent` | `public/data/rent.json` |
 | Road network, travel times | N06 + 道路交通センサス 2021 speeds + ferries | `npm run network` | `public/geo/network.json`, `grid.bin.gz` |
 | Emergency / key logistics roads | 国土数値情報 N10 (2024), N12 (2021) | `npm run bcp-roads` | `public/geo/logiroads.json` |
 | Ports, airports, rail stations | 国土数値情報 C28 / C02 / P31, 港湾統計, 空港管理状況調書 | `npm run etl:multimodal` | `public/data/multimodal.json` |
@@ -225,7 +231,8 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   layers, J-SHIS, the large-vehicle route maps, the age of the DPL snapshot …).
 - Before an automatic data commit, `scripts/check-data.mjs` stops the job if a file shrank, a series got shorter or many
   numbers moved by more than 30%.
-- Weekly `update-manual.yml` looks for a new minimum-wage year and a new edition of the large-vehicle route maps; a
+- Weekly `update-manual.yml` looks for a new minimum-wage year, a new edition of the large-vehicle route maps and a new
+  quarter of the rental market survey; a
   change goes to a branch (after the data tests) and an issue links to it for review. (The MLIT map server does not
   answer GitHub's runners, so that part works only in local runs of `check-sources`.)
 - Weekly `update-data.yml` refreshes the warehouse statistics, specified skilled workers and job-opening ratios; daily
@@ -236,6 +243,9 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   (`etl:multimodal --noncommercial`; drop the flag for a commercial deployment). **Emergency transport roads (N10)** and
   **key logistics roads (N12)** are also 非商用: they are published only as class-merged, simplified lines with the source
   named. Parcel tiles (KotobaMedia) are free for non-commercial use.
+- **Rental market** — 一五不動産情報サービス allows reprinting with the source named, except for commercial use or
+  material marked 「無断転載を禁じます」 (their FAQ); the survey data carries no such mark and the source is shown with
+  every figure. A commercial deployment needs their permission.
 - **Large-vehicle routes (大型車誘導区間)** are not drawn: there is no open data, and the official condition maps (PDF) may
   only be read, not reused. The site memo links to the prefecture's map instead.
 - News: headlines, links, a short excerpt (≤ 110 characters) and the preview image URL only — no article text or copied

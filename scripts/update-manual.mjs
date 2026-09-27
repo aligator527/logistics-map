@@ -5,6 +5,7 @@
 //
 //   最低賃金      MHLW 地域別最低賃金改定状況 (xlsx linked from the 一覧 page): a new fiscal year -> public/data/muni.json `wage`
 //   大型車誘導区間 condition maps (PDF, linked from the site memo): a new edition -> the file names in src/lib/karte.ts
+//   物流施設の賃貸市場 (一五不動産, quarterly): a new quarter -> public/data/rent.json (scripts/etl-rent.mjs)
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -52,5 +53,15 @@ try {
     changes.push({ source: '大型車誘導区間マップ', from: have, to: now });
   }
 } catch (e) { changes.push({ source: '大型車誘導区間マップ', error: String(e.message ?? e) }); }
+
+// ------------------------------------------------------------------ 物流施設の賃貸市場
+try {
+  const file = resolve(root, 'public/data/rent.json');
+  const before = JSON.parse(readFileSync(file, 'utf8'));
+  execFileSync(process.execPath, [resolve(root, 'scripts/etl-rent.mjs')], { stdio: ['ignore', 'ignore', 'inherit'] });
+  const after = JSON.parse(readFileSync(file, 'utf8'));
+  if (after.quarters.at(-1) !== before.quarters.at(-1)) changes.push({ source: '物流施設の賃貸市場', from: before.quarters.at(-1), to: after.quarters.at(-1) });
+  else writeFileSync(file, JSON.stringify(before)); // same quarter: keep the file as it was (no new `generated` date)
+} catch (e) { changes.push({ source: '物流施設の賃貸市場', error: String(e.message ?? e) }); }
 
 console.log(JSON.stringify(changes));

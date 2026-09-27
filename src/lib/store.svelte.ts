@@ -56,6 +56,8 @@ class Store {
   risk = $state.raw<Risk | null>(null);
   diesel = $state.raw<Diesel | null>(null);
   facilities = $state.raw<Facility[] | null>(null);
+  /** logistics rental market by region (一五不動産情報サービス) */
+  rent = $state.raw<import('./rent').Rent | null>(null);
 
   wh = $state.raw<WarehouseTheme | null>(null);
   fl = $state.raw<FlowsTheme | null>(null);

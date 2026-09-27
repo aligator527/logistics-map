@@ -24,6 +24,8 @@
     if (dpl) out.push({ name: 'DPL', asOf: `${dpl.source.updated}（${ja('取得', 'retrieved')} ${dpl.source.retrieved}）`, cadence: ja('随時（手動）', 'As published (manual)'), next: '–', stale: days(dpl.source.retrieved) > 120 });
     if (jobs) out.push({ name: ja('有効求人倍率（職業別）', 'Job-opening ratios'), asOf: jobs.periods.at(-1)![L], cadence: ja('年度（自動）', 'Fiscal year (automatic)'), next: ja('翌年度の6月頃', 'around June'), auto: true });
     if (ssw) out.push({ name: ja('特定技能', 'Specified skilled workers'), asOf: ssw.periods.at(-1)![L], cadence: ja('半年（自動）', 'Half-yearly (automatic)'), next: ja('約6か月後', 'about 6 months later'), auto: true });
+    const rent = s.rent;
+    if (rent) { const q = rent.quarters.at(-1)!; out.push({ name: ja('物流施設の賃貸市場（一五不動産）', 'Logistics rental market (Ichigo)'), asOf: q, cadence: ja('四半期（毎週確認）', 'Quarterly (checked weekly)'), next: ja('約3か月後', 'about 3 months later'), auto: true, stale: days(`${q}-01`) > 200 }); }
     // updated by hand when a release appears
     const manual: [string, string, string, string, string, string, string, string][] = [
       ['行政区域（N03）', 'Boundaries (N03)', '2026-01-01', '2026-01-01', '毎年', 'Yearly', '2027年春', 'spring 2027'],
