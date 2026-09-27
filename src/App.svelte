@@ -387,9 +387,18 @@
     app.closures = app.closures.includes(key) ? app.closures.filter((c) => c !== key) : [...app.closures, key].slice(-20);
     if (app.lmet !== 'iso' && app.lmet !== 'shift' && app.lmet !== 'delay') app.lmet = 'delay';
   }
+  /** the route to the selected municipality (経路と中継): along the interchanges passed */
+  const routeTrack = $derived.by(() => {
+    const rt = lt?.routeToMuni, ll = lt?.router?.net.nodeLL;
+    if (!geo || !rt || !ll || rt.direct || app.layer !== 'local') return [];
+    const o = lt!.originPlaces(lt!.originKey)[0], d = muni ? s.muniLonLat(rt.dest) : null;
+    const pts = [o?.ll, ...rt.nodes.map((n) => ll[n]), d].filter((p): p is [number, number] => !!p);
+    const xy = pts.map(([lon, lat]) => geo!.P(projectLL(lon, lat, geo!.layout).p));
+    return [{ key: 'route', d: xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(4)},${y.toFixed(4)}`).join(''), kind: 'route' as const }];
+  });
   const tracks = $derived.by(() => {
-    if (!geo || app.layer !== 'now') return closureTracks;
-    const out: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' }[] = [];
+    if (!geo || app.layer !== 'now') return [...routeTrack, ...closureTracks];
+    const out: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' | 'route' }[] = [];
     for (const t of live.typhoons) {
       // only the part of the track in the same map space as the storm now (the Okinawa inset is
       // enlarged and moved, so points outside it would be drawn somewhere misleading)
@@ -562,7 +571,17 @@
   }
   function onnewsplace(code: string) { onpick(code); }
   $effect(() => { if (!app.showNews) { newsPins = []; newsFocus = null; } });
-  const pois = $derived.by(() => [...userPois, ...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois, ...inspectPois]);
+  const pois = $derived.by(() => [...relayPois, ...userPois, ...facPois, ...hubPois, ...livePois, ...newsPois, ...originPois, ...inspectPois]);
+  /** the relay point of the route (経路と中継) */
+  const relayPois = $derived.by((): Poi[] => {
+    const rt = lt?.routeToMuni, ll = lt?.router?.net.nodeLL;
+    if (!geo || !rt?.relays.length || !ll) return [];
+    return rt.relays.map((x, k): Poi => {
+      const [lon, lat] = ll[x.node], name = lt!.router!.net.nodeName?.[x.node] ?? '';
+      return { key: `relay${k}`, kind: 'origin', xy: geo!.P(projectLL(lon, lat, geo!.layout).p), r: 6, label: `${tt('relayTitle')} ${k + 1}: ${name}`, major: true,
+        tip: { title: `${tt('relayTitle')} ${k + 1}: ${name}`, sub: `${fmtMinutes(L, x.t)} / ${fmtMinutes(L, rt.t)}` } };
+    });
+  });
   /** the user's own places (自社データ): size by volume */
   const userPois = $derived.by((): Poi[] => {
     const d = userData.data;

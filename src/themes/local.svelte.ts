@@ -110,6 +110,28 @@ export class LocalTheme implements ThemeView {
     this.rt();
     return Float32Array.from(t, (x, i) => (isFinite(open[i]) ? (isFinite(x) ? x - open[i] : 600) : NaN));
   });
+  /** the quickest path from the origin to the selected municipality, with a relay point when it is not a day trip */
+  readonly routeToMuni = $derived.by(() => {
+    const r = this.router, key = this.originKey, dest = app.muni;
+    if (!r || !key || key.startsWith('net:') || !dest || key === `muni:${dest}`) return null;
+    const i = this.indexOf(dest), o = this.originPlaces(key);
+    if (i < 0 || !o.length) return null;
+    void this.isoTimes;
+    const res = this.rt().route(o, r.muni(i));
+    if (!res) return null;
+    // relays: the fewest legs that each fit a day trip (up to 4 relay points), at named interchanges near the splits
+    const relays: { node: number; t: number }[] = [];
+    if (!res.direct && tripClass(res.t) > 1 && res.times) {
+      let legs = 2;
+      while (legs < 5 && tripClass(res.t / legs) > 1) legs++;
+      for (let q = 1; q < legs; q++) {
+        let bd = Infinity, pick: { node: number; t: number } | null = null;
+        res.nodes.forEach((n, k) => { const name = r.net.nodeName?.[n]; const d = Math.abs(res.times![k] - (res.t * q) / legs); if (name && d < bd) { bd = d; pick = { node: n, t: res.times![k] }; } });
+        if (pick) relays.push(pick);
+      }
+    }
+    return { ...res, dest, relays };
+  });
   /** road km along the quickest path from the origin (for distance-based fares) */
   readonly isoKm = $derived.by(() => {
     const o = this.originPlaces(this.originKey);

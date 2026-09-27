@@ -17,6 +17,9 @@ export interface Network {
   edgePeak?: number[];
   edgeKm?: number[];
   nodeLL?: [number, number][];
+  nodeName?: string[];
+  edgeRoute?: number[];
+  routeNames?: string[];
   speedSource?: { ja: string; en: string; url: string; measuredShare: number };
   generated: string;
 }
@@ -86,8 +89,10 @@ export class Router {
   }
 
   /** node -> minutes from the nearest origin (multi-source Dijkstra with a binary heap) */
-  private spread(origins: Place[], withKm = false) {
+  private spread(origins: Place[], withKm = false, withPrev = false) {
     const dist = new Float64Array(this.net.nodes).fill(Infinity);
+    // the directed edge each node was reached by (-1: an origin's access leg)
+    const prev = withPrev ? new Int32Array(this.net.nodes).fill(-1) : null;
     // road km along the quickest path (access legs: straight line × detour)
     const dkm = withKm ? new Float64Array(this.net.nodes).fill(Infinity) : null;
     const W = this.peak ? this.wPeak : this.w, closed = this.closed.size ? this.closed : null;
@@ -122,11 +127,40 @@ export class Router {
         if (!this.ferries && this.ferry[e]) continue;
         if (closed && closed.has(this.eid[e])) continue;
         const nd = d + W[e];
-        if (nd < dist[this.to[e]]) { dist[this.to[e]] = nd; if (dkm) dkm[this.to[e]] = dkm[n] + this.kmE[e]; push(nd, this.to[e]); }
+        if (nd < dist[this.to[e]]) { dist[this.to[e]] = nd; if (dkm) dkm[this.to[e]] = dkm[n] + this.kmE[e]; if (prev) { prev[this.to[e]] = e; this.from[e] = n; } push(nd, this.to[e]); }
       }
     }
     this.lastKm = dkm;
+    this.lastPrev = prev;
     return dist;
+  }
+  private lastPrev: Int32Array | null = null;
+  /** the node an edge leaves from (filled while tracking paths) */
+  private from = new Int32Array(0);
+
+  /** the quickest path from the nearest origin to a place: nodes passed (with names and times), trunk roads used */
+  route(origins: Place[], p: Place) {
+    if (this.from.length !== this.to.length) this.from = new Int32Array(this.to.length);
+    const dist = this.spread(origins, true, true), dkm = this.lastKm!, prev = this.lastPrev!;
+    const t = this.reach(dist, origins, p);
+    if (!isFinite(t)) return null;
+    // the entry of the destination the quickest path comes in by
+    let end = -1, best = Infinity;
+    for (let k = 0; k < p.acc.length; k += 2) { const x = dist[p.acc[k]] + p.acc[k + 1] / 10; if (x < best) { best = x; end = p.acc[k]; } }
+    if (end < 0 || best > t + 1e-6) return { direct: true, t, km: this.reachKm(dist, origins, p), nodes: [], roads: [] };
+    const nodes: number[] = [], edges: number[] = [];
+    for (let n = end; n >= 0;) { nodes.push(n); const e = prev[n]; if (e < 0) break; edges.push(e); n = this.from[e]; }
+    nodes.reverse(); edges.reverse();
+    // trunk roads in order, with the km on each
+    const roads: { name: string; km: number; ferry?: boolean }[] = [];
+    for (const e of edges) {
+      const id = this.eid[e], ferry = this.ferry[e] === 1;
+      const name = ferry ? 'ferry' : id >= 0 && this.net.edgeRoute && this.net.routeNames ? this.net.routeNames[this.net.edgeRoute[id]] ?? '' : '';
+      const km = this.kmE[e];
+      const last = roads.at(-1);
+      if (last && last.name === name) last.km += km; else roads.push({ name, km, ...(ferry ? { ferry } : {}) });
+    }
+    return { direct: false, t, km: this.reachKm(dist, origins, p), nodes, times: nodes.map((n) => dist[n]), roads: roads.filter((r) => r.km > 0.5 || r.ferry) };
   }
   private lastKm: Float64Array | null = null;
   /** road km of an ordinary-road leg that takes t minutes (the inverse of local()) */

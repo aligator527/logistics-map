@@ -64,7 +64,7 @@
     /** selected municipality (muni level) */
     selMuni?: string | null;
     /** polylines in map space (typhoon tracks): d in viewBox units */
-    tracks?: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' }[];
+    tracks?: { key: string; d: string; kind: 'past' | 'forecast' | 'closed' | 'route' }[];
     /** municipal comparison outlines */
     muniA?: string | null;
     muniB?: string | null;
@@ -1454,6 +1454,7 @@
   .bcp .e1 { stroke: var(--bcp-emerg); stroke-width: 1.8; }
   .bcp .e2 { stroke: var(--bcp-emerg); stroke-width: 1.1; stroke-dasharray: 4 2; }
   .bcp .e3 { stroke: var(--bcp-emerg); stroke-width: 0.8; stroke-opacity: 0.6; stroke-dasharray: 2 2; }
+  .track.route { stroke: var(--accent); stroke-width: 4; stroke-opacity: 0.85; stroke-linecap: round; stroke-linejoin: round; }
   .track.closed { stroke: #d33; stroke-width: 5; stroke-dasharray: 6 4; stroke-linecap: round; }
   .track.forecast { stroke-dasharray: 5 4; }
   .nw { fill: var(--ink); stroke: var(--surface); stroke-width: 1.5; }

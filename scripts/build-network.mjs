@@ -161,6 +161,8 @@ let census = { matched: 0, chains: 0, edgesKm: 0, measuredKm: 0 };
   console.log(`census speeds: ${census.matched}/${census.chains} stretches laid on the graph; measured ${(census.measuredKm / census.edgesKm * 100).toFixed(0)}% of expressway km, route average ${(avgKm / census.edgesKm * 100).toFixed(0)}%, flat speed the rest`);
   for (const n of nodes) for (const a of n.adj) { const e = a[4]; a[1] = (e.km / e.day) * 60; a[2] = (e.km / e.peak) * 60; }
 }
+// interchange names on their nodes (for route descriptions)
+for (const f of joints) { const k = key(f.geometry.coordinates); if (nodeOf.has(k)) nodes[nodeOf.get(k)].name ??= f.properties.N06_018; }
 // entries: IC and smart IC (not JCT), and dead ends where a section runs into ordinary roads
 for (const [k, kind] of jointAt) if (kind !== '3' && nodeOf.has(k)) nodes[nodeOf.get(k)].entry = true;
 for (const [k, n] of ends) if (n === 1 && !jointAt.has(k)) nodes[nodeOf.get(k)].entry = true;
@@ -175,23 +177,27 @@ console.log(`road pieces before contraction: ${pieces(nodes)}`);
 // contract pass-through nodes (two neighbours, not an entry) to keep the file small
 for (const [i, n] of nodes.entries()) {
   if (n.entry || n.adj.length !== 2 || n.adj[0][0] === n.adj[1][0]) continue;
-  const [[a, ta, pa, ka], [b, tb, pb, kb]] = n.adj;
+  const [[a, ta, pa, ka, ea], [b, tb, pb, kb, eb]] = n.adj;
+  const e = (ka ?? 0) >= (kb ?? 0) ? ea : eb;
   if (a === i || b === i) continue;
   const A = nodes[a], B = nodes[b];
   A.adj = A.adj.filter(([x]) => x !== i); B.adj = B.adj.filter(([x]) => x !== i);
-  A.adj.push([b, ta + tb, pa + pb, ka + kb]); B.adj.push([a, ta + tb, pa + pb, ka + kb]);
+  A.adj.push([b, ta + tb, pa + pb, ka + kb, e]); B.adj.push([a, ta + tb, pa + pb, ka + kb, e]);
   n.adj = []; n.gone = true;
 }
 const keep = nodes.map((n, i) => [n, i]).filter(([n]) => !n.gone && n.adj.length);
 const newId = new Map(keep.map(([, i], j) => [i, j]));
-const edges = [], edgePeak = [], edgeKm = [];
+const edges = [], edgePeak = [], edgeKm = [], edgeRoute = [];
+const routeNames = [], routeId = new Map();
+const routeOf = (e) => { const r = e?.route; if (!r) return -1; if (!routeId.has(r)) { routeId.set(r, routeNames.length); routeNames.push(r); } return routeId.get(r); };
 /** an edge: minutes (daytime trucks), rush-hour minutes and road km (for distance fares) */
-const addEdge = (a, b, t, tp = t, dkm = 0) => {
+const addEdge = (a, b, t, tp = t, dkm = 0, e = null) => {
+  edgeRoute.push(routeOf(e));
   edges.push(a, b, Math.max(1, Math.round(t * 10)));
   edgePeak.push(Math.max(1, Math.round(tp * 10)));
   edgeKm.push(Math.round(dkm * 10));
 };
-for (const [n, i] of keep) for (const [to, t, tp, len] of n.adj) if (i < to && newId.has(to)) addEdge(newId.get(i), newId.get(to), t, tp, len);
+for (const [n, i] of keep) for (const [to, t, tp, len, e] of n.adj) if (i < to && newId.has(to)) addEdge(newId.get(i), newId.get(to), t, tp, len, e);
 const graph = keep.map(([n]) => n);
 console.log(`road pieces after: ${pieces(nodes)}`);
 console.log(`network: ${graph.length} nodes (${graph.filter((n) => n.entry).length} entries), ${edges.length / 3} edges`);
@@ -366,6 +372,10 @@ writeJson(resolve(root, 'public/geo/network.json'), {
   edgeKm,
   /** node positions [lon, lat] (to draw and pick closed stretches) */
   nodeLL: graph.map((n) => [r4(n.lon), r4(n.lat)]),
+  /** interchange / terminal name per node ('' elsewhere), N06 route name index per edge (-1: ordinary road) */
+  nodeName: graph.map((n) => n.name ?? (n.terminal ? `${n.terminal}港` : '')),
+  edgeRoute,
+  routeNames,
   speedSource: {
     ja: '令和3年度全国道路・街路交通情勢調査 一般交通量調査（国土交通省）の大型車旅行速度を加工して作成',
     en: '2021 Road Traffic Census (MLIT): truck travel speeds, processed',

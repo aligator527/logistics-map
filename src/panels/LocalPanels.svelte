@@ -11,6 +11,7 @@
   import SimPanel from './SimPanel.svelte';
   import CostPanel from './CostPanel.svelte';
   import UserDataPanel from './UserDataPanel.svelte';
+  import RoutePanel from './RoutePanel.svelte';
   import { commuteFrom } from '../lib/labour';
   import { LocalTheme } from '../themes/local.svelte';
   const L = $derived(app.lang);
@@ -135,6 +136,7 @@
       </p>
     </section>
   {/if}
+  <RoutePanel />
   <CostPanel />
   <SimPanel />
   {/if}
