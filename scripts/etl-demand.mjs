@@ -18,6 +18,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
+import { parseMinWage } from './lib/minwage.mjs';
 import { execFileSync } from 'node:child_process';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -132,23 +133,8 @@ const mfgShip = Array(N).fill(null);
 }
 
 // ------------------------------------------------------------------ minimum wage per prefecture (H14–R7)
-const wage = { years: [], perPref: [], effective: [] };
-{
-  const rows = sheet('wage/mw.xlsx');
-  const yearRow = rows[0].map(String);
-  // column pairs: (amount, effective date) per fiscal year
-  const cols = yearRow.map((y, j) => (/年度/.test(y) ? j : -1)).filter((j) => j > 0);
-  wage.years = cols.map((j) => yearRow[j].replace(/\s/g, ''));
-  const PREFS = ['北海道', '青森', '岩手', '宮城', '秋田', '山形', '福島', '茨城', '栃木', '群馬', '埼玉', '千葉', '東京', '神奈川', '新潟', '富山', '石川', '福井', '山梨', '長野', '岐阜', '静岡', '愛知', '三重', '滋賀', '京都', '大阪', '兵庫', '奈良', '和歌山', '鳥取', '島根', '岡山', '広島', '山口', '徳島', '香川', '愛媛', '高知', '福岡', '佐賀', '長崎', '熊本', '大分', '宮崎', '鹿児島', '沖縄'];
-  for (const p of PREFS) {
-    const r = rows.find((x) => String(x[0]).replace(/\s|　/g, '') === p);
-    if (!r) throw new Error(`minimum wage: no row for ${p}`);
-    wage.perPref.push(cols.map((j) => num(r[j])));
-    const d = r[cols.at(-1) + 1];
-    wage.effective.push(typeof d === 'number' ? new Date(Math.round((d - 25569) * 864e5)).toISOString().slice(0, 10) : String(d));
-  }
-  console.log(`最低賃金: ${wage.years.length} years, latest ${wage.years.at(-1)}: 東京 ${wage.perPref[12].at(-1)}, 秋田 ${wage.perPref[4].at(-1)}`);
-}
+const wage = parseMinWage(readFileSync(resolve(RAW, 'wage/mw.xlsx')));
+console.log(`最低賃金: ${wage.years.length} years, latest ${wage.years.at(-1)}: 東京 ${wage.perPref[12].at(-1)}, 秋田 ${wage.perPref[4].at(-1)}`);
 
 // ------------------------------------------------------------------ industrial land price trend (地価公示 L01, 1983–2026)
 // Every L01 point carries its price series (L01_062 = 1983 … L01_105 = 2026). Per municipality: the

@@ -1,0 +1,57 @@
+# Weekly: new minimum wages and a new edition of the large-vehicle route maps. A change goes to a branch
+# (checked by the data tests) and an issue links to it, so it is reviewed before it reaches main.
+# (Pull requests are not opened directly: Actions may not create them in this repository's settings.)
+name: Update hand-kept sources
+
+on:
+  schedule:
+    - cron: '30 1 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: update-manual
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: run
+        name: Look for new releases
+        run: |
+          out=$(node scripts/update-manual.mjs)
+          echo "$out"
+          echo "summary=$out" >> "$GITHUB_OUTPUT"
+          if git diff --quiet; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Data tests
+        if: steps.run.outputs.changed == 'true'
+        run: npm test
+      - name: Branch and issue
+        if: steps.run.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SUMMARY: ${{ steps.run.outputs.summary }}
+        run: |
+          branch="auto/manual-$(date +%Y%m%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git commit -am "Update hand-kept sources: $(echo "$SUMMARY" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).filter(c=>!c.error).map(c=>`${c.source} ${c.to}`).join(", ")))')"
+          git push -u origin "$branch"
+          gh issue create --title "New source release: review $branch" --body "The weekly check found new data and put it on \`$branch\` (data tests passed).
+
+          \`\`\`json
+          $SUMMARY
+          \`\`\`
+
+          Create the pull request: https://github.com/${{ github.repository }}/compare/main...$branch?expand=1"
