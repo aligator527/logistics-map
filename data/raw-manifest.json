@@ -597,6 +597,146 @@
    "script": "etl-jobs"
   },
   {
+   "file": "data/raw/kenchiku/t1_2015.xls",
+   "bytes": 976896,
+   "sha256": "1b390069b34393d5618b44387f042b36f7937b793c9b506db0144ca7c1e83012",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2016.xls",
+   "bytes": 976896,
+   "sha256": "a30057be6ecdba4b763cc374a0efdab552daa0bf39f80698a403c69479bce6e6",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2017.xls",
+   "bytes": 977920,
+   "sha256": "be78e5be391821a19a0a0d550db4712c9965730e3f1c324c73f1e4d1aee686b4",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2018.xls",
+   "bytes": 976896,
+   "sha256": "650e9109de7758e32360d59ff4a20ce76d7abb3566014fb555734b26dec5590f",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2019.xls",
+   "bytes": 984576,
+   "sha256": "269ce715cfa9425c7f5b1f79a2faa9ad862b9d0d460c4085f8ddde02c50621d8",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2020.xls",
+   "bytes": 976384,
+   "sha256": "a063c783352a3ff5c02044ef451a1114b220758c523313c82cfc127ed73c48e2",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2021.xls",
+   "bytes": 976384,
+   "sha256": "4d55bebaedbef2f740e1a9addc5d93062fd52d39f9fa28cd1334d89a570bd785",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2022.xls",
+   "bytes": 971264,
+   "sha256": "00fbd0e51d8b609d31454753be7f874211b1e77f5741216bf60076e504b3eab5",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2023.xls",
+   "bytes": 971264,
+   "sha256": "58c6261c5619e17206fd56dce4b0248c8deb9ea5ac1fa824658da19e7a65b1cb",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2024.xls",
+   "bytes": 971264,
+   "sha256": "96b952f44a388fba73a6c232aae561f140df0eadb3685ed0181425996b0c58c0",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2025.xls",
+   "bytes": 1799680,
+   "sha256": "77a85dfb52e529930e56a795891c192514b8be8e9bead25530a11a1d930c8ed9",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-01.xls",
+   "bytes": 657920,
+   "sha256": "805c52dcd2244570b7e4a7c22c4658d18f48b4854a5e14e6a69104c01fcb480f",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-02.xls",
+   "bytes": 687104,
+   "sha256": "2f2b9cbd38fd126b90d43e2dca0f6d6f9988a7a7cfe6b532248bae2e6ec09fba",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-03.xls",
+   "bytes": 655872,
+   "sha256": "e0a21c4ab57da134d8a511b2e652551b263756a9877393c39788cb76ecd65762",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-04.xls",
+   "bytes": 658432,
+   "sha256": "4bbb05a4686b84fecfee5b90da86e21a65e9da6a1a7a86b44ec72b09439a8acf",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-05.xls",
+   "bytes": 655872,
+   "sha256": "995dd5cb3743cfba5cba198af5879e8882ec5419791d66431459e7dfbeccc747",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-06.xls",
+   "bytes": 658944,
+   "sha256": "7fa3244901885d599bae62f6cb934d69902565afd753bb663b0268346a3c4bf7",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_2026-07.xls",
+   "bytes": 657920,
+   "sha256": "f481d67a09d28cc333eca43d819c88f13752e10bd83d97646cb6a3f1156a54e6",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_m2024.xls",
+   "bytes": 749568,
+   "sha256": "576e5bc96707d6151a00fd09f727a2b492fc84caa33c1f140ecc765ed34ad25c",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
+   "file": "data/raw/kenchiku/t1_m2025.xls",
+   "bytes": 824320,
+   "sha256": "8e0a083cb83391acf20b89f65f6cf24eda2eee29a27c256a889416461fd5aaec",
+   "source": "https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)",
+   "script": "etl-supply"
+  },
+  {
    "file": "data/raw/land/L01-26_GML.zip",
    "bytes": 20898568,
    "sha256": "fad8bbe76d25b682ccf761a492ddc2de001e0345569e044481d62ea84233faf8",

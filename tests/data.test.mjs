@@ -221,6 +221,10 @@ test('demand, wages and land trend', () => {
   assert.equal(m.wageOcc.perPref.length, 47);
   for (const k of ['truckL', 'truck', 'handling']) assert.ok(m.wageOcc.perPref.every((p) => p[k]?.hourly > 1000 && p[k].hourly < 4000), `hourly pay of ${k}`);
   assert.equal(m.wageOcc.partTimeTransport.filter((v) => !(v > 900)).length, 0, 'part-time pay in every prefecture');
+  // warehouse starts: national 2025 ≈ 9.76 M㎡ (建築着工統計), a series for every prefecture
+  assert.ok(Math.abs(m.supply.japan[m.supply.years.indexOf('2025')] - 9_756_510) < 1, '倉庫着工 2025');
+  assert.equal(m.supply.perPref.length, 47);
+  assert.ok(m.m.trStart.some((v) => v > 100_000), '運輸業用 starts');
   assert.ok(m.m.mfgEmp[ix('22138')] > 10_000 && m.m.retail[ix('22139')] > 0, '浜松市 new wards filled');
   assert.ok(m.m.income[ix('13101')] > 1000, '千代田区: income per taxpayer > 1,000万円');
   assert.equal(m.m.income[ix('14101')], m.m.income[ix('14102')], 'wards of 横浜市 take the city figure');

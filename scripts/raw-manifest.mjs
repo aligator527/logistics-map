@@ -24,6 +24,7 @@ const SOURCES = [
   [/^data\/raw\/census\//, 'https://www.mlit.go.jp/statistics/details/t-other-2_tk_000196.html (物流センサス; 2021: e-Stat)', 'etl-census'],
   [/^data\/raw\/census2020\/000032214569/, 'https://www.e-stat.go.jp/stat-search/files?toukei=00200521 (国勢調査2020 第12表)', 'etl-muni'],
   [/^data\/raw\/census2020\/000040067885/, 'https://www.e-stat.go.jp/stat-search/files?toukei=00200553 (経済センサス2021 第9-1B表)', 'etl-muni'],
+  [/^data\/raw\/kenchiku\//, 'https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)', 'etl-supply'],
   [/^data\/raw\/wage\/wss_/, 'https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)', 'etl-wages'],
   [/^data\/raw\/roads\//, 'https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)', 'build-bcp-roads'],
   [/^data\/raw\/roadcensus\//, 'https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)', 'build-network'],
