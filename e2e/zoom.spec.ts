@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { open } from './helpers';
+import { open, noHorizontalScroll } from './helpers';
 
 test('street-level view from the URL: detail boundaries, auto background map, scale bar', async ({ page }) => {
   const detail = page.waitForResponse(/geo\/detail\/13\.json/);
@@ -210,4 +210,13 @@ test('your own data from a CSV becomes a demand', async ({ page }, info) => {
   // a metric of its own in the indicator list
   await expect(page.locator('section.controls select option', { hasText: '自社データ（需要）' }).first()).toBeAttached();
   expect(errors).toEqual([]);
+});
+
+test('phone: the new panels fit the screen', async ({ page }, info) => {
+  test.skip(info.project.name !== 'phone', 'phone layout');
+  for (const hash of ['t=local&mu=23206&io=muni:23206&lk=iso&tb=calc', 't=local&tb=short', 't=local&tb=screen&fx=zone.ge.20']) {
+    await open(page, hash);
+    await page.evaluate(() => document.querySelectorAll('aside details').forEach((d) => ((d as HTMLDetailsElement).open = true)));
+    await noHorizontalScroll(page);
+  }
 });

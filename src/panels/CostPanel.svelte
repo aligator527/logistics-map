@@ -116,7 +116,7 @@
   .warn { color: var(--ink); font-weight: 600; }
   .res tr.sum th, .res tr.sum td { font-weight: 700; border-top: 2px solid var(--line-strong); }
   .basis { display: grid; gap: 2px; margin: 6px 0; }
-  .basis select { min-height: 32px; }
+  .basis select { min-height: 32px; width: 100%; }
   .res { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }
   .res th, .res td { padding: 4px 2px; border-bottom: 1px solid var(--line); text-align: right; }
   .res th:first-child { text-align: left; color: var(--ink-2); font-weight: 500; }

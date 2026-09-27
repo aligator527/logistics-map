@@ -70,6 +70,26 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
     total. Ferries are off in this mode (ferry fares are not in the table).
   Candidates can be restricted to industrial zoning ≥ 20 ha, flood share < 50%, one prefecture or the screened set.
   Runs in a Web Worker (about a second).
+- **Your own data (自社データ)** — load a CSV / TSV (UTF-8 or Shift_JIS, as Excel saves it) of customers, stores or
+  destinations with coordinates or an address (geocoded by the GSI address search) and a volume. Points are assigned to
+  the municipality whose outline contains them; the volumes per municipality become a demand for the delivery cost, the
+  simulation (both objectives) and the screening, and the points are drawn on the map. The file stays in the browser
+  (only address lookups leave it) and is never put in links.
+- **経路と中継 (route and relay)** — the quickest path from the reach origin to the selected municipality: time, km, the
+  trunk roads in order (common names first), and — when the run is longer than a day trip — the fewest relay points at
+  named interchanges so that every leg is a day trip for its driver; the route and relay points are drawn on the map.
+- **Total cost over time** — present value over N years (default 10, discount 3%): land bought now less its value at the
+  end (the local 5-year land-price trend), staff growing with the prefecture's minimum-wage trend (last 5 years),
+  delivery runs. Staff pay can be the minimum wage or actual pay (賃金構造基本統計調査 2025: warehouse and handling
+  workers, truck drivers, part-time in transport).
+- **Labour** — transport and handling workers (census 2020, by residence) within a 20/30/45-minute car commute of a site;
+  competition for them: logistics jobs within 30 km per such worker living within 30 km.
+- **New supply** — warehouse floor area started per prefecture (建築着工統計, 2015 – mid-2026) and its ratio to the
+  commercial warehouse stock; per municipality, transport-industry buildings started (a proxy: there is no municipal
+  warehouse figure).
+- **Your weighting and scenarios** — pick criteria and weights (0–5) for the shortlist and get a 0–100 score and a
+  ranking (presets: cost, reach, labour, safety first); save the current settings with each candidate's results as a
+  scenario, compare scenarios side by side and apply one back.
 - **Shortlist (候補)** — prefectures, municipalities, DPL sites, map points and measured plots; status (candidate / site
   visit / negotiating / on hold / dropped) and notes; side-by-side comparison with the best value marked in each row;
   CSV; a share link (with statuses); browser notifications when a candidate gets a JMA warning.
@@ -95,6 +115,9 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
   Tile geometry is projected once and kept as `Path2D`.
 - **Emergency transport roads (N10) and key logistics roads (N12)** — a layer, distances per municipality and in the
   site memo.
+- **More hazards** — liquefaction tendency by landform (MLIT, 250 m mesh), flood duration (maximum scenario) and
+  pluvial flooding (only the 65 municipalities that publish it) at any point; per municipality, residents on
+  liquefaction-prone land and where floods last 3 days or more.
 - **Industrial zoning (A29)** and **other developers' facilities** — a registry built from developer press releases
   (stages with dates, floor area, geocoded address checked against the place in the name; manual fixes in
   `data/facilities-overrides.json`).
@@ -149,6 +172,8 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
 | Municipal metrics | the grid + L01/L02 2026 + 都市計画現況調査 + census 2020 + economic census 2021 + N06 + J-SHIS | `npm run etl:muni` | `public/data/muni.json` |
 | Demand, wages, land trend | 住民基本台帳, 課税状況, economic census 2021, 経済構造実態調査 2025 (2024 shipments), minimum wages, L01 | `npm run etl:demand` | `public/data/muni.json` |
 | Industrial zoning | 国土数値情報 A29 (2019) | `npm run zoning` | `public/geo/zoning/NN.json` |
+| Logistics pay | 賃金構造基本統計調査 2025, prefecture tables (full-time by occupation, part-time by industry) | `npm run etl:wages` | `public/data/muni.json` |
+| New warehouse supply | 建築着工統計調査 tables 1 and 7-2 | `npm run etl:supply` | `public/data/muni.json` |
 | Road network, travel times | N06 + 道路交通センサス 2021 speeds + ferries | `npm run network` | `public/geo/network.json`, `grid.bin.gz` |
 | Emergency / key logistics roads | 国土数値情報 N10 (2024), N12 (2021) | `npm run bcp-roads` | `public/geo/logiroads.json` |
 | Ports, airports, rail stations | 国土数値情報 C28 / C02 / P31, 港湾統計, 空港管理状況調書 | `npm run etl:multimodal` | `public/data/multimodal.json` |
@@ -200,6 +225,9 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   layers, J-SHIS, the large-vehicle route maps, the age of the DPL snapshot …).
 - Before an automatic data commit, `scripts/check-data.mjs` stops the job if a file shrank, a series got shorter or many
   numbers moved by more than 30%.
+- Weekly `update-manual.yml` looks for a new minimum-wage year and a new edition of the large-vehicle route maps; a
+  change goes to a branch (after the data tests) and an issue links to it for review. (The MLIT map server does not
+  answer GitHub's runners, so that part works only in local runs of `check-sources`.)
 - Weekly `update-data.yml` refreshes the warehouse statistics, specified skilled workers and job-opening ratios; daily
   `update-news.yml` refreshes the news and the facility registry.
 

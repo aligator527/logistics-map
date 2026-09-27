@@ -106,7 +106,7 @@
   .plain { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
   .int { display: inline-block; min-width: 30px; text-align: center; border-radius: 4px; font-weight: 700; font-size: 12px; padding: 0 4px; margin-right: 6px; }
   .memo { margin: 12px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .acts { display: inline-flex; gap: 12px; }
+  .acts { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
   .short { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .short li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-height: 36px; border-bottom: 1px solid var(--line); }
   .short .kind { font-size: 11.5px; color: var(--muted); }
@@ -209,3 +209,5 @@
 .hist { display: inline-flex; gap: 0; }
 .hist .btn { min-width: 34px; padding: 0 8px; }
 .k-bcp { stroke: var(--bcp-emerg); stroke-width: 2; fill: none; }
+/* form controls in the side panel never wider than it (option texts can be long) */
+aside select, aside input:not([type='checkbox']):not([type='radio']):not([type='range']) { max-width: 100%; }
