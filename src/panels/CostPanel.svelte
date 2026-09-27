@@ -3,7 +3,7 @@
   import { store as s } from '../lib/store.svelte';
   import { t, type Key } from '../lib/i18n';
   import { fmtNum } from '../lib/scale';
-  import { costs, estimate, transport, type DemandKey, type WageBasis } from '../lib/costs.svelte';
+  import { costs, estimate, transport, tco, type DemandKey, type WageBasis } from '../lib/costs.svelte';
   import { VEHICLES, REGION_NAMES } from '../lib/fares';
   import { userData } from '../lib/userdata.svelte';
 
@@ -24,6 +24,7 @@
   const DEMANDS = $derived<[DemandKey, Key][]>([['pop', 'dmPop'], ['hh', 'dmHh'], ['retail', 'dmRetail'], ['mailorder', 'dmMail'], ['mfgShip', 'dmMfg'], ['wsEmp', 'dmWs'], ...(userData.perMuni ? [['user', 'dmUser'] as [DemandKey, Key]] : [])]);
   const LIMITS = [60, 120, 180, 240, 360, 600];
   const WAGES: [WageBasis, Key][] = [['handling', 'wbHandling'], ['part', 'wbPart'], ['truckL', 'wbTruckL'], ['truck', 'wbTruck'], ['min', 'wbMin']];
+  const tc = $derived.by(() => { void costs.inputs.years; void costs.inputs.discount; void costs.inputs.wageBasis; void costs.inputs.staff; void costs.inputs.hours; void costs.inputs.plot; void costs.inputs.premium; return i >= 0 ? tco(i, costs.inputs, tr) : null; });
   const oku = (y: number) => (isFinite(y) ? (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`) : '–');
   const FIELDS: [keyof typeof costs.inputs, Key, string][] = [
     ['plot', 'costPlot', '㎡'], ['staff', 'costStaff', ''], ['hours', 'costHours', 'h'], ['premium', 'costPremium', '%'],
@@ -78,6 +79,26 @@
         <p class="src">{tt('trNote').replace('{r}', REGION_NAMES[tr.region] ?? tr.region)}
           <a href="https://www.mlit.go.jp/jidosha/jidosha_tk4_000118.html">{tt('trSource')}</a> · <a href="https://www.greenpartnership.jp/co2">{tt('co2Source')}</a></p>
       {:else if s.lt && !s.lt.router}<p class="src" role="status">{tt('loadingNetwork')}</p>{/if}
+      {#if tc}
+        <p class="sub-eyebrow">{tt('tcoTitle').replace('{n}', String(tc.years))}</p>
+        <div class="grid">
+          <label><span class="small">{tt('tcoYears')}</span>
+            <span class="in"><input type="number" min="1" max="30" step="1" bind:value={costs.inputs.years} onchange={() => costs.save()} /><span class="u">{L === 'ja' ? '年' : 'yrs'}</span></span></label>
+          <label><span class="small">{tt('tcoDiscount')}</span>
+            <span class="in"><input type="number" min="0" max="15" step="0.5" bind:value={costs.inputs.discount} onchange={() => costs.save()} /><span class="u">%</span></span></label>
+        </div>
+        <table class="res">
+          <tbody>
+            <tr><th>{tt('costLand')}</th><td class="tnum">{oku(tc.land)}</td></tr>
+            <tr><th>{tt('tcoResidual')}（{fmtNum(L, tc.landGrowth * 100, 1)}%/{L === 'ja' ? '年' : 'yr'}）</th><td class="tnum">−{oku(tc.residual)}</td></tr>
+            <tr><th>{tt('costStaffYear').replace(/（年）|\(a year\)/, '')}（+{fmtNum(L, tc.wageGrowth * 100, 1)}%/{L === 'ja' ? '年' : 'yr'}）</th><td class="tnum">{oku(tc.staff)}</td></tr>
+            <tr><th>{tt('trYearly').replace(/年間|a year/, '')}</th><td class="tnum">{isFinite(tc.transport) ? oku(tc.transport) : '–'}</td></tr>
+            <tr class="sum"><th>{tt('tcoTotal')}</th><td class="tnum">{isFinite(tc.total) ? oku(tc.total) : '–'}</td></tr>
+          </tbody>
+        </table>
+        {#if !isFinite(tc.total)}<p class="src warn">{tt('tcoNoRuns')}</p>{/if}
+        <p class="src">{tt('tcoNote')}</p>
+      {/if}
       <p class="src">{L === 'ja' ? `地価 ${fmtNum(L, e.landPrice, 0)}円/㎡ · 時給 ${fmtNum(L, e.wage, 0)}円（最低賃金 ${fmtNum(L, e.minWage, 0)}円） · 軽油 ${fmtNum(L, e.diesel, 1)}円/L` : `Land ¥${fmtNum(L, e.landPrice, 0)}/m² · hourly ¥${fmtNum(L, e.wage, 0)} (minimum ¥${fmtNum(L, e.minWage, 0)}) · diesel ¥${fmtNum(L, e.diesel, 1)}/L`}.
         {tt('costNote')} <button type="button" class="linkish" onclick={() => costs.reset()}>{tt('costReset')}</button></p>
     </details>
@@ -92,6 +113,8 @@
   .in input { width: 100%; min-height: 32px; padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); }
   .u { font-size: 11px; color: var(--muted); }
   .grid select { width: 100%; min-height: 32px; }
+  .warn { color: var(--ink); font-weight: 600; }
+  .res tr.sum th, .res tr.sum td { font-weight: 700; border-top: 2px solid var(--line-strong); }
   .basis { display: grid; gap: 2px; margin: 6px 0; }
   .basis select { min-height: 32px; }
   .res { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0; }

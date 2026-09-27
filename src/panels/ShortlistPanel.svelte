@@ -10,8 +10,10 @@
   import { WARN_COLORS } from '../lib/warncolors';
   import type { DossierTable, DossierSection } from '../components/Dossier.svelte';
   import { pointInfo, groundRisk, addressAt, type PointInfo } from '../lib/pointinfo';
-  import { estimate, costs, transport } from '../lib/costs.svelte';
+  import { estimate, costs, transport, tco } from '../lib/costs.svelte';
   import { commuteFrom } from '../lib/labour';
+  import { shortWeights, WEIGHT_PRESETS, normalise } from '../lib/shortweights.svelte';
+  import { scenarios } from '../lib/scenarios.svelte';
   const statusName = (st: Status | undefined) => tt(`st_${st ?? 'cand'}` as Key);
   let noteOpen = $state<string | null>(null);
   let hideDropped = $state(false);
@@ -173,20 +175,75 @@
     const b = dir === 1 ? Math.max(...f.map((x) => x.v)) : Math.min(...f.map((x) => x.v));
     return f.filter((x) => x.v === b).map((x) => x.i);
   };
+  const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : ptOf(it) ? pointMuni.get(ptOf(it)!) ?? '' : '');
+  const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'site' ? sites[Number(it.code)]?.pref ?? 0 : Number((muniOf(it) || '0').slice(0, 2)));
+  /** a local metric for an item: its municipality, or the median over a prefecture's municipalities */
+  const metricOf = (it: ShortItem, get: (i: number) => number) => {
+    if (!lt) return NaN;
+    if (it.kind === 'pref') return median(lt.codes.map((c, i) => (Number(c.slice(0, 2)) === Number(it.code) ? get(i) : NaN)));
+    const i = lt.indexOf(muniOf(it));
+    return i >= 0 ? get(i) : NaN;
+  };
+  // ------------------------------------------------------------ your own weighting of the candidates
+  /** criteria you can weight: municipal metrics with a better direction, plus the 10-year cost and the commute pool */
+  const criteria = $derived.by(() => {
+    const ms = (lt?.metrics ?? []).filter((m) => m.better && !m.category && m.key !== 'iso' && m.key !== 'shift' && m.key !== 'delay')
+      .map((m) => ({ key: m.key, label: m[L], dir: m.better as 1 | -1, fmt: m.fmt, value: (it: ShortItem) => metricOf(it, m.get) }));
+    const oku = (y: number) => (L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億円` : `¥${fmtNum(L, y / 1e6, 0)}m`);
+    const extra = [
+      { key: 'tco', label: tt('tcoTotal'), dir: -1 as const, fmt: oku, value: (it: ShortItem) => {
+        const mc = muniOf(it); if (!mc || !lt) return NaN;
+        return tco(lt.indexOf(mc), it.kind === 'plot' ? { ...costs.inputs, plot: plotArea(it) } : costs.inputs)?.total ?? NaN; } },
+      { key: 'commute30', label: `${tt('commuteTitle')} 30${L === 'ja' ? '分' : ' min'}`, dir: 1 as const, fmt: (v: number) => `${fmtCompact(L, v)}${L === 'ja' ? '人' : ''}`, value: (it: ShortItem) => {
+        const mc = muniOf(it), r = lt?.router ? lt.rt() : null, i = mc && lt ? lt.indexOf(mc) : -1;
+        return r && i >= 0 ? commuteFrom(r.toMunis([r.muni(i)]))?.[1].workers ?? NaN : NaN; } },
+    ];
+    return [...extra, ...ms];
+  });
+  /** per candidate: weighted score 0–100 and the parts */
+  const scored = $derived.by(() => {
+    const keys = shortWeights.keys.filter((k) => (shortWeights.w[k] ?? 0) > 0);
+    const cs = keys.map((k) => criteria.find((c) => c.key === k)).filter((c): c is (typeof criteria)[number] => !!c);
+    if (!cs.length || shortlist.items.length < 2) return null;
+    const items = shortlist.items;
+    const parts = cs.map((c) => ({ c, raw: items.map((it) => c.value(it)), norm: [] as number[] }));
+    for (const p of parts) p.norm = normalise(p.raw, p.c.dir);
+    const score = items.map((_, k) => {
+      let s = 0, w = 0;
+      for (const p of parts) { const v = p.norm[k], wt = shortWeights.w[p.c.key]; if (isFinite(v)) { s += v * wt; w += wt; } }
+      return w ? s / w : NaN;
+    });
+    return { parts, score };
+  });
+  let addCrit = $state('');
+  // ------------------------------------------------------------ scenarios
+  let scName = $state('');
+  function saveScenario() {
+    const items = shortlist.items;
+    const results = items.map((it, k) => {
+      const mc = muniOf(it), i = mc && lt ? lt.indexOf(mc) : -1;
+      const ci = it.kind === 'plot' ? { ...costs.inputs, plot: plotArea(it) } : costs.inputs;
+      const tr = i >= 0 ? transport(i, ci) : null;
+      return { label: shortLabel(it), score: scored && isFinite(scored.score[k]) ? Math.round(scored.score[k]) : null,
+        tco: i >= 0 ? tco(i, ci, tr)?.total ?? null : null, delivery: tr?.yearly ?? null };
+    });
+    const notes = [app.peak ? tt('peakSpeed') : '', app.closures.length ? `${tt('closedCount')} ${app.closures.length}` : '', app.screen.length ? `${tt('screenTitle')} ${app.screen.length}` : ''].filter(Boolean);
+    scenarios.add({ name: scName.trim() || `${tt('scDefault')} ${scenarios.list.length + 1}`, at: new Date().toISOString().slice(0, 16).replace('T', ' '),
+      hash: location.hash.slice(1), costs: { ...costs.inputs }, weights: { ...shortWeights.w }, screened: s.screened?.keep.size ?? null, results, notes });
+    scName = '';
+  }
+  const scLabels = $derived([...new Set(scenarios.list.flatMap((x) => x.results.map((r) => r.label)))]);
+
   const compareTable = $derived.by((): DossierTable | null => {
     if (!compareOpen || !lt) return null;
     const items = shortlist.items;
-    const muniOf = (it: ShortItem) => (it.kind === 'muni' ? it.code : it.kind === 'site' ? sites[Number(it.code)]?.muni ?? '' : ptOf(it) ? pointMuni.get(ptOf(it)!) ?? '' : '');
-    const prefOf = (it: ShortItem) => (it.kind === 'pref' ? Number(it.code) : it.kind === 'site' ? sites[Number(it.code)]?.pref ?? 0 : Number((muniOf(it) || '0').slice(0, 2)));
-    /** a local metric for an item: its municipality, or the median over a prefecture's municipalities */
-    const metricOf = (it: ShortItem, get: (i: number) => number) => {
-      if (it.kind === 'pref') return median(lt!.codes.map((c, i) => (Number(c.slice(0, 2)) === Number(it.code) ? get(i) : NaN)));
-      const i = lt!.indexOf(muniOf(it));
-      return i >= 0 ? get(i) : NaN;
-    };
     const row = (label: string, vals: number[], fmt: (v: number) => string, dir?: 1 | -1) =>
       ({ label, cells: vals.map((v) => (isFinite(v) ? fmt(v) : '–')), best: bestOf(vals, dir) });
     const groups: DossierTable['groups'] = [];
+    if (scored) groups.push({ title: tt('swTitle'), rows: [
+      row(tt('swScore'), scored.score, (v) => fmtNum(L, v, 0), 1),
+      ...scored.parts.map((p) => row(`${p.c.label} ×${shortWeights.w[p.c.key]}`, p.raw, p.c.fmt, p.c.dir)),
+    ] });
     groups.push({ title: tt('cmpBasics'), rows: [
       { label: tt('cmpKind'), cells: items.map((it) => shortKind(it)) },
       { label: tt('status'), cells: items.map((it) => statusName(it.status)) },
@@ -237,6 +294,8 @@
             row(tt('trYearly'), trs.map((x) => x?.yearly ?? NaN), oku, -1),
             row(tt('trPerRun'), trs.map((x) => x?.km ?? NaN), (v) => `${fmtNum(L, v, 0)} km`, -1),
             row(tt('trCo2'), trs.map((x) => (x ? x.co2 / 1000 : NaN)), (v) => `${fmtNum(L, v, 0)} t`, -1),
+            row(tt('tcoTotal'), items.map((it, k) => { const mc = muniOf(it); const ci = it.kind === 'plot' ? { ...costs.inputs, plot: plotArea(it) } : costs.inputs;
+              return mc ? tco(lt!.indexOf(mc), ci, trs[k])?.total ?? NaN : NaN; }), oku, -1),
             ...(() => {
               // labour: transport / handling workers within a 30-minute drive, from each candidate's municipality
               const r = lt!.router ? lt!.rt() : null;
@@ -289,6 +348,62 @@
     {#if shortlist.items.some((it) => it.status === 'drop')}
       <label class="chk small"><input type="checkbox" bind:checked={hideDropped} /> {tt('hideDropped')}</label>
     {/if}
+    {#if shortlist.items.length > 1 && lt}
+      <details class="sw">
+        <summary class="sub-eyebrow">{tt('swTitle')}{scored ? ` · ${tt('swTop')}：${shortLabel(shortlist.items[scored.score.indexOf(Math.max(...scored.score.filter(isFinite)))])}` : ''}</summary>
+        <p class="src">{tt('swHint')}</p>
+        <p class="memo">{#each WEIGHT_PRESETS as pr (pr.key)}<button type="button" class="btn chip" onclick={() => shortWeights.replace(pr.w)}>{pr[L]}</button>{/each}</p>
+        {#each shortWeights.keys as k (k)}
+          {@const c = criteria.find((x) => x.key === k)}
+          {#if c}
+            <div class="sw-row"><span class="nm">{c.label}</span>
+              <input type="range" min="0" max="5" step="1" value={shortWeights.w[k]} aria-label={c.label} oninput={(e) => shortWeights.set(k, Number(e.currentTarget.value))} />
+              <output class="tnum">{shortWeights.w[k]}</output>
+              <button type="button" class="linkish" aria-label={`${tt('remove')} ${c.label}`} onclick={() => shortWeights.remove(k)}>×</button></div>
+          {/if}
+        {/each}
+        <select bind:value={addCrit} onchange={() => { if (addCrit) shortWeights.set(addCrit, 3); addCrit = ''; }} aria-label={tt('swAdd')}>
+          <option value="">＋ {tt('swAdd')}</option>
+          {#each criteria.filter((c) => !(c.key in shortWeights.w)) as c (c.key)}<option value={c.key}>{c.label}</option>{/each}
+        </select>
+        {#if scored}
+          <ol class="sw-rank">
+            {#each shortlist.items.map((it, k) => ({ it, s: scored.score[k] })).sort((a, b) => (isFinite(b.s) ? b.s : -1) - (isFinite(a.s) ? a.s : -1)) as x (x.it.kind + x.it.code)}
+              <li><span>{shortLabel(x.it)}</span><span class="bar"><span style:width="{isFinite(x.s) ? x.s : 0}%"></span></span><strong class="tnum">{isFinite(x.s) ? fmtNum(L, x.s, 0) : '–'}</strong></li>
+            {/each}
+          </ol>
+        {/if}
+      </details>
+    {/if}
+    <details class="sc">
+      <summary class="sub-eyebrow">{tt('scTitle')}{scenarios.list.length ? `（${scenarios.list.length}）` : ''}</summary>
+      <p class="src">{tt('scHint')}</p>
+      <form class="sc-add" onsubmit={(e) => { e.preventDefault(); saveScenario(); }}>
+        <input type="text" bind:value={scName} maxlength="30" placeholder={tt('scName')} aria-label={tt('scName')} />
+        <button type="submit" class="btn">{tt('scSave')}</button>
+      </form>
+      {#if scenarios.list.length}
+        {@const oku = (y: number | null) => (y === null ? '–' : L === 'ja' ? `${fmtNum(L, y / 1e8, 1)}億` : `¥${fmtNum(L, y / 1e6, 0)}m`)}
+        <div class="sc-wrap">
+          <table class="sc-tbl">
+            <thead><tr><th></th>{#each scenarios.list as x (x.name)}<th>{x.name}
+              <span class="small">{x.at}</span>
+              <button type="button" class="linkish" onclick={() => scenarios.apply(x)}>{tt('scApply')}</button>
+              <button type="button" class="linkish" aria-label={`${tt('remove')} ${x.name}`} onclick={() => scenarios.remove(x.name)}>×</button></th>{/each}</tr></thead>
+            <tbody>
+              <tr><th>{tt('scSettings')}</th>{#each scenarios.list as x (x.name)}<td class="small">{[...x.notes, `${tt('trRuns')} ${x.costs.runs}`, tt(`wb${x.costs.wageBasis === 'min' ? 'Min' : x.costs.wageBasis === 'part' ? 'Part' : x.costs.wageBasis === 'truckL' ? 'TruckL' : x.costs.wageBasis === 'truck' ? 'Truck' : 'Handling'}` as Key).split('（')[0]].join('・')}</td>{/each}</tr>
+              {#if scenarios.list.some((x) => x.screened !== null)}<tr><th>{tt('screenResult')}</th>{#each scenarios.list as x (x.name)}<td class="tnum">{x.screened ?? '–'}</td>{/each}</tr>{/if}
+              {#each scLabels as lab (lab)}
+                <tr class="grp"><th colspan={scenarios.list.length + 1}>{lab}</th></tr>
+                <tr><th>{tt('swScore')}</th>{#each scenarios.list as x (x.name)}{@const r = x.results.find((y) => y.label === lab)}<td class="tnum">{r?.score ?? '–'}</td>{/each}</tr>
+                <tr><th>{tt('tcoTotal')}</th>{#each scenarios.list as x (x.name)}{@const r = x.results.find((y) => y.label === lab)}<td class="tnum">{oku(r?.tco ?? null)}</td>{/each}</tr>
+                <tr><th>{tt('trYearly')}</th>{#each scenarios.list as x (x.name)}{@const r = x.results.find((y) => y.label === lab)}<td class="tnum">{oku(r?.delivery ?? null)}</td>{/each}</tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </details>
     <ul class="short">
       {#each shown as it (it.kind + it.code)}
         {@const al = shortAlert(it)}
@@ -333,6 +448,24 @@
 <style>
   .shared { border: 1px solid var(--line-strong); border-left: 3px solid var(--blue); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 13px; }
   .shared p { margin: 0; }
+  .sw summary, .sc summary { cursor: pointer; }
+  .sc-add { display: flex; gap: 6px; margin: 6px 0; }
+  .sc-add input { flex: 1; min-width: 0; min-height: 30px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); }
+  .sc-wrap { overflow-x: auto; margin-bottom: 10px; }
+  .sc-tbl { border-collapse: collapse; font-size: 12px; min-width: 100%; }
+  .sc-tbl th, .sc-tbl td { padding: 3px 6px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+  .sc-tbl th:first-child { text-align: left; font-weight: 500; color: var(--ink-2); }
+  .sc-tbl thead th { font-weight: 600; }
+  .sc-tbl thead th .small { display: block; font-weight: 400; color: var(--muted); }
+  .sc-tbl tr.grp th { text-align: left; color: var(--ink); font-weight: 600; background: var(--surface-2); }
+  .sw-row { display: grid; grid-template-columns: 1fr 110px 18px 20px; gap: 6px; align-items: center; font-size: 12.5px; }
+  .sw-row .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sw-row input { accent-color: var(--blue); }
+  .sw select { margin: 6px 0; min-height: 30px; max-width: 100%; }
+  .sw-rank { margin: 6px 0 10px; padding-left: 18px; display: grid; gap: 3px; font-size: 13px; }
+  .sw-rank li span:first-child { display: inline-block; width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+  .sw-rank .bar { display: inline-block; width: 35%; height: 6px; background: var(--surface-2); border-radius: 3px; vertical-align: middle; margin: 0 6px; }
+  .sw-rank .bar span { display: block; height: 100%; background: var(--blue); border-radius: 3px; }
   .meta-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; margin: -2px 0 6px; }
   .st { font-size: 12px; min-height: 26px; padding: 0 4px; border-radius: 4px; }
   .note-btn { font-size: 12px; color: var(--ink-2); text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
