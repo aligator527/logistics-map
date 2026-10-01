@@ -28,6 +28,7 @@ const SOURCES = [
   [/^data\/raw\/kenchiku\//, 'https://www.e-stat.go.jp/stat-search/files?toukei=00600120 (建築着工統計調査 第1表・第7-2表)', 'etl-supply'],
   [/^data\/raw\/wage\/wss_/, 'https://www.e-stat.go.jp/stat-search/files?toukei=00450091&tstat=000001011429 (賃金構造基本統計調査 令和7年, 都道府県別)', 'etl-wages'],
   [/^data\/raw\/roads\//, 'https://nlftp.mlit.go.jp/ksj/ (国土数値情報 N10-24 緊急輸送道路 / N12-21 重要物流道路, 非商用)', 'build-bcp-roads'],
+  [/^data\/raw\/roadcensus\/geom\//, 'https://www.mlit.go.jp/road/ir/ir-data/census_visualizationR3/ (道路交通センサス WEBマップ, section shapes; matching only, per 道路局 道路経済調査室 2026-10 — never publish)', 'fetch-census-geom, build-network'],
   [/^data\/raw\/roadcensus\//, 'https://www.mlit.go.jp/road/census/r3/index.html (令和3年度 道路交通センサス 箇所別基本表 CSV)', 'build-network'],
   [/^data\/raw\/industry\/2025-k4-data/, 'https://www.e-stat.go.jp/stat-search/files?toukei=00200555 (経済構造実態調査2025 製造業 参考表, statInfId 000040480531)', 'etl-demand'],
   [/^data\/raw\/jobs\//, 'https://www.e-stat.go.jp/stat-search/files?toukei=00450222 (職業安定業務統計)', 'etl-jobs'],
@@ -61,14 +62,25 @@ function walk(dir, out = []) {
   return out;
 }
 const sha = (p) => createHash('sha256').update(readFileSync(resolve(root, p))).digest('hex');
+// folders of many small files: one entry each (bytes, file count, SHA-256 over the sorted names and contents)
+const BUNDLES = ['data/raw/roadcensus/geom/'];
+const bundleOf = (f) => BUNDLES.find((b) => f.startsWith(b));
+function bundleEntry(dir) {
+  const files = walk(resolve(root, dir)).sort(), h = createHash('sha256');
+  let bytes = 0;
+  for (const f of files) { const b = readFileSync(resolve(root, f)); bytes += b.length; h.update(f).update(b); }
+  return { bytes, count: files.length, sha256: h.digest('hex') };
+}
 
 const prev = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')) : { files: [] };
 if (process.argv.includes('--update')) {
-  const files = [...walk(resolve(root, 'data/raw')), ...walk(resolve(root, 'data/geo'))].filter(isSource).sort();
+  const all = [...walk(resolve(root, 'data/raw')), ...walk(resolve(root, 'data/geo'))].filter(isSource);
+  const files = [...new Set(all.map((f) => bundleOf(f) ?? f))].sort();
   const entries = files.map((f) => {
     const src = SOURCES.find(([re]) => re.test(f));
     const old = prev.files.find((x) => x.file === f);
-    return { file: f, bytes: statSync(resolve(root, f)).size, sha256: sha(f), source: old?.source ?? src?.[1] ?? '', script: src?.[2] ?? '' };
+    const meta = bundleOf(f) ? bundleEntry(f) : { bytes: statSync(resolve(root, f)).size, sha256: sha(f) };
+    return { file: f, ...meta, source: old?.source ?? src?.[1] ?? '', script: src?.[2] ?? '' };
   });
   writeFileSync(OUT, JSON.stringify({ note: 'raw inputs of the published data; verify with: node scripts/raw-manifest.mjs', files: entries }, null, 1) + '\n');
   console.log(`raw-manifest: ${entries.length} files, ${(entries.reduce((s, e) => s + e.bytes, 0) / 1e6).toFixed(0)} MB; without a source: ${entries.filter((e) => !e.source).map((e) => e.file).join(', ') || 'none'}`);
@@ -77,7 +89,8 @@ if (process.argv.includes('--update')) {
   for (const e of prev.files) {
     const p = resolve(root, e.file);
     if (!existsSync(p)) { missing++; console.log(`missing  ${e.file}  ← ${e.source}`); continue; }
-    if (statSync(p).size !== e.bytes || sha(e.file) !== e.sha256) { changed++; console.log(`changed  ${e.file}  (${e.script})`); }
+    const now = e.count !== undefined ? bundleEntry(e.file) : null;
+    if (now ? now.sha256 !== e.sha256 : statSync(p).size !== e.bytes || sha(e.file) !== e.sha256) { changed++; console.log(`changed  ${e.file}  (${e.script})`); }
   }
   console.log(`raw-manifest: ${prev.files.length} files, ${missing} missing, ${changed} changed`);
   if (process.argv.includes('--strict') && (missing || changed)) process.exit(1);

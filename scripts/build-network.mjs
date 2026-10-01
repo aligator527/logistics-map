@@ -80,23 +80,26 @@ const roadEdges = [];
 for (const f of sections) {
   const type = Number(f.properties.N06_008), route = f.properties.N06_007;
   for (const line of f.geometry.coordinates) {
-    let from = node(line[0]), len = 0;
+    let from = node(line[0]), len = 0, start = 0;
     for (let i = 1; i < line.length; i++) {
       len += km({ lon: line[i - 1][0], lat: line[i - 1][1] }, { lon: line[i][0], lat: line[i][1] });
       const k = key(line[i]);
       if (i === line.length - 1 || uses.get(k) > 1 || jointAt.has(k)) {
         const to = node(line[i]);
-        const e = { a: from, b: to, km: len, type, route, day: NaN, peak: NaN };
+        const e = { a: from, b: to, km: len, type, route, day: NaN, peak: NaN, pts: line.slice(start, i + 1) };
         roadEdges.push(e);
         nodes[from].adj.push([to, 0, 0, len, e]); nodes[to].adj.push([from, 0, 0, len, e]);
-        from = to; len = 0;
+        from = to; len = 0; start = i;
       }
     }
   }
 }
 
 // ------------------------------------------------------------------ 1b. measured truck speeds (道路交通センサス 2021)
-// Each census IC-to-IC stretch is laid on the shortest road path between joints of the same names whose
+// First by shape: the section lines of the census WEBマップ (data/raw/roadcensus/geom, scripts/fetch-census-geom.mjs —
+// used for this matching only, as 道路経済調査室 allowed in writing; never published) are laid over each graph edge:
+// points every 100 m along the edge take the nearest census section within GEOM_M; an edge with most of its length
+// covered takes their speeds (time-weighted). Then, for edges still without a speed, each census IC-to-IC stretch is laid on the shortest road path between joints of the same names whose
 // length agrees within 30%; its edges take the stretch's truck speeds. Edges no stretch reached take their
 // route's average; roads the census does not cover keep SPEED.
 const CENSUS_DIR = resolve(root, 'data/raw/roadcensus');
@@ -108,8 +111,57 @@ let census = { matched: 0, chains: 0, edgesKm: 0, measuredKm: 0 };
     if (!nodeOf.has(k)) continue;
     for (const n of icNames(f.properties.N06_018)) (jointNames.get(n) ?? jointNames.set(n, new Set()).get(n)).add(nodeOf.get(k));
   }
-  const { chains } = censusChains(CENSUS_DIR);
+  const { chains, sections: cs } = censusChains(CENSUS_DIR);
   census.chains = chains.length;
+  // --- by shape
+  const GEOM = resolve(CENSUS_DIR, 'geom'), GEOM_M = 45, CELL = 0.005;
+  const segs = new Map(); // grid cell -> [ax, ay, bx, by, section]
+  let shapes = 0;
+  for (const s of cs) {
+    const f = resolve(GEOM, `${s.id}.geojson`);
+    if (!existsSync(f)) continue;
+    const g = read(f.replace(root + '/', '')).features?.[0]?.geometry;
+    if (!g) continue;
+    shapes++;
+    for (const line of g.type === 'LineString' ? [g.coordinates] : g.coordinates) for (let i = 1; i < line.length; i++) {
+      const [a, b] = [line[i - 1], line[i]];
+      for (let x = Math.floor(Math.min(a[0], b[0]) / CELL); x <= Math.floor(Math.max(a[0], b[0]) / CELL); x++)
+        for (let y = Math.floor(Math.min(a[1], b[1]) / CELL); y <= Math.floor(Math.max(a[1], b[1]) / CELL); y++) {
+          const k = `${x}|${y}`; (segs.get(k) ?? segs.set(k, []).get(k)).push([a[0], a[1], b[0], b[1], s]);
+        }
+    }
+  }
+  /** the census section nearest a point, within GEOM_M metres */
+  const nearestSection = (lon, lat) => {
+    const kx = 111320 * Math.cos((lat * Math.PI) / 180), ky = 110574;
+    const cx = Math.floor(lon / CELL), cy = Math.floor(lat / CELL);
+    let best = null, bd = GEOM_M;
+    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const [ax0, ay0, bx0, by0, s] of segs.get(`${cx + dx}|${cy + dy}`) ?? []) {
+      const ax = (ax0 - lon) * kx, ay = (ay0 - lat) * ky, bx = (bx0 - lon) * kx, by = (by0 - lat) * ky;
+      const ddx = bx - ax, ddy = by - ay, L2 = ddx * ddx + ddy * ddy;
+      const u = L2 ? Math.max(0, Math.min(1, -(ax * ddx + ay * ddy) / L2)) : 0;
+      const d = Math.hypot(ax + u * ddx, ay + u * ddy);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  };
+  let byShapeKm = 0;
+  for (const e of roadEdges) {
+    let all = 0, hit = 0, tDay = 0, tPeak = 0;
+    for (let i = 1; i < (e.pts?.length ?? 0); i++) {
+      const [a, b] = [e.pts[i - 1], e.pts[i]], len = km({ lon: a[0], lat: a[1] }, { lon: b[0], lat: b[1] });
+      const n = Math.max(1, Math.round(len / 0.1));
+      for (let j = 0; j < n; j++) {
+        const f = (j + 0.5) / n, s = nearestSection(a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f), l = len / n;
+        all += l;
+        if (s) { hit += l; tDay += l / s.day; tPeak += l / s.peak; }
+      }
+    }
+    if (all > 0 && hit / all >= 0.6) { e.day = hit / tDay; e.peak = hit / tPeak; e.byShape = true; byShapeKm += e.km; }
+  }
+  census.byShapeKm = byShapeKm;
+  console.log(`census shapes: ${shapes}/${cs.length} sections with a speed have a shape; ${byShapeKm.toFixed(0)} km of edges matched by shape`);
+  // --- by interchange names, for the edges still without a speed
   // bounded Dijkstra by length from one node; returns distance and the edge used to reach each node
   const shortest = (src, limit) => {
     const dist = new Map([[src, 0]]), via = new Map(), done = new Set(), heap = [[0, src]];

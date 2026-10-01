@@ -66,5 +66,7 @@ export function censusChains(dir) {
       if (r.to && icNames(r.to).length) { const to = r.to; close(to); cur = { route: r.name, a: icNames(to), km: 0, kmKnown: 0, tDay: 0, tPeak: 0 }; }
     }
   }
-  return { rows: rows.length, chains };
+  // each section with its own speeds (for matching by shape, scripts/build-network.mjs)
+  const sections = rows.filter((r) => isFinite(r.day)).map(({ id, day, peak, km, name }) => ({ id, day, peak: isFinite(peak) ? peak : day, km, name }));
+  return { rows: rows.length, chains, sections };
 }

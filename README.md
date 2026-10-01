@@ -204,9 +204,13 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   their own points, 454 take the median within 15 km, 628 the prefecture median (marked). Zoning of designated-city wards
   is the city's split by ward area. Hamamatsu's wards were redrawn in 2024: earlier figures are shared by population.
 - **Travel times** — `scripts/build-network.mjs` builds a graph from N06 sections in service. Truck speeds come from the
-  2021 road census (箇所別基本表): IC-to-IC stretches (大型車, daytime and rush hour) are laid on the graph by interchange
-  names, accepted when the path length agrees within 30% — 73% of expressway km are measured, 20% take their route's
-  average, the rest keep flat speeds (80 / 65 / 60 / 45 km/h by road type). Access legs are straight lines × 1.3 at
+  2021 road census (箇所別基本表, 大型車, daytime and rush hour). Each census section is matched to the graph by its
+  shape: the section lines of the census WEBマップ (`scripts/fetch-census-geom.mjs`) are laid over the N06 edges (points
+  every 100 m, within 45 m). 道路局 道路経済調査室 allowed this use in writing (2026-10) for matching only — the lines and
+  the positions of the survey points are never published; they stay in `data/raw` and only speeds per N06 edge reach the
+  site. Edges left over take IC-to-IC stretches matched by interchange names (path length within 30%). 97% of
+  expressway km are measured, 1% take their route's average, the rest keep flat speeds (80 / 65 / 60 / 45 km/h by road
+  type). Access legs are straight lines × 1.3 at
   30 km/h (40 in Hokkaido) up to 80 km, only through interchanges; ordinary-road trips up to 30 km. Roads never cross the
   sea: both ends must be on the same "land piece". 22 long-distance ferry routes (sailing time + 90 min check-in) can be
   switched off. Dijkstra runs in the browser (`src/lib/travel.ts`, about 5 ms). It is an estimate, not a route planner:

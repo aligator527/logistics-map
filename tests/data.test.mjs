@@ -262,6 +262,9 @@ test('非商用 layers: pictures and derived values only', async () => {
     const [x, y] = ix['10'][0].split('/');
     assert.ok(existsSync(new URL(`../public/tiles/${dir}/10/${x}/${y}.png`, import.meta.url)), `${dir}: indexed tile exists`);
   }
+  // census speeds matched by shape (the shapes themselves stay in data/raw)
+  assert.ok(net.speedSource.measuredShare >= 0.9, `measured share ${net.speedSource.measuredShare}`);
+  assert.ok(!JSON.stringify(net).includes('R03cen'), 'no census geometry in the network');
   const { gunzipSync } = await import('node:zlib');
   const g = gunzipSync(readFileSync(new URL('../public/geo/grid.bin.gz', import.meta.url)));
   const d = gunzipSync(readFileSync(new URL('../public/geo/logidist.bin.gz', import.meta.url)));
