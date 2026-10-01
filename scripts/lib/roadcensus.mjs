@@ -36,8 +36,10 @@ export function censusChains(dir) {
       if (!(type === '1' || type === '2' || (type === '3' && r[C.motorway] === '1'))) continue;
       const day = both(num(r[C.dayUpL]) || num(r[C.dayUpAll]), num(r[C.dayDnL]) || num(r[C.dayDnAll])) || both(num(r[C.avgUp]), num(r[C.avgDn]));
       const peak = both(num(r[C.peakUpL]) || num(r[C.peakUpAll]), num(r[C.peakDnL]) || num(r[C.peakDnAll])) || day;
-      rows.push({ id: r[C.id], key: `${type}|${r[C.route]}|${r[C.name]}`, name: r[C.name], km: num(r[C.km]) || 0, day, peak,
-        from: r[C.fromNote], to: r[C.toNote], fromKind: r[C.fromKind], toKind: r[C.toKind], pref: r[C.id].slice(0, 2) });
+      // kasyo01–09 lose the leading zero of the 11-digit 交通調査基本区間番号 (1110500780 = 01110500780)
+      const id = r[C.id].padStart(11, '0');
+      rows.push({ id, key: `${type}|${r[C.route]}|${r[C.name]}`, name: r[C.name], km: num(r[C.km]) || 0, day, peak,
+        from: r[C.fromNote], to: r[C.toNote], fromKind: r[C.fromKind], toKind: r[C.toKind], pref: id.slice(0, 2) });
     }
   }
   // chains per route, in section order (the id runs from the route's start to its end; prefectures in code order)
