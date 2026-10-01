@@ -65,8 +65,8 @@ const SOURCES = [
   developer('kasumigaseki', 48076, '霞ヶ関キャピタル', 'Kasumigaseki Capital'),
   developer('tlc', 91164, '東京流通センター', 'Tokyo Ryutsu Center'),
   // --- trade media: disabled until the publisher allows headline links (see their terms)
-  { key: 'lnews', ja: 'LNEWS', en: 'LNEWS', enabled: false, url: 'https://www.lnews.jp/institution/feed',
-    terms: 'https://www.lnews.jp/contents/appropriation.html', keep: (it) => !/^【PR】/.test(it.title) },
+  // LNEWS (メディアビズ) declined in writing (2026-10): their RSS is linked only to incorporated partners, so not for
+  // projects run by individuals, commercial or not. Left out for good; do not re-enable.
   { key: 'weekly', ja: '物流ウィークリー', en: 'Butsuryu Weekly', enabled: false, url: 'https://weekly-net.co.jp/feed/',
     terms: 'https://weekly-net.co.jp/copyright/', keep: () => true },
   { key: 'logitoday', ja: 'LOGISTICS TODAY', en: 'LOGISTICS TODAY', enabled: false, url: 'https://www.logi-today.com/feed',

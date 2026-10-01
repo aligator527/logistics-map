@@ -26,7 +26,7 @@
   import type { Diesel } from './themes/now.svelte';
   import { live, WARN, INT_COLOR, jmaCourse, jmaLocation } from './lib/live.svelte';
   import type { Network } from './lib/travel';
-  import { TILE_LAYERS } from './lib/tiles';
+  import { TILE_LAYERS, LOGIROAD_TILES, HUB_TILES, withIndex, type TileLayer } from './lib/tiles';
   import { pointInfo, groundRisk, type PointInfo } from './lib/pointinfo';
   import { unproject } from './lib/project';
   import PointPanel from './panels/PointPanel.svelte';
@@ -605,11 +605,14 @@
   // zoomed in close without a background map: the pale map comes in on its own (the choice itself is unchanged)
   let mapZ = $state(0);
   // 緊急輸送道路・重要物流道路: loaded when switched on
-  let bcpData = $state.raw<import('./lib/bcp').BcpRoads | null>(null);
-  $effect(() => { if (app.showBcp && !bcpData) import('./lib/bcp').then((m) => m.loadBcp()).then((d) => (bcpData = d)); });
-  const bcpLayer = $derived.by(() => (app.showBcp && bcpData && geo ? bcpPathsFn?.(geo, bcpData) ?? null : null));
-  let bcpPathsFn = $state.raw<typeof import('./lib/bcp').bcpPaths | null>(null);
-  $effect(() => { if (app.showBcp && !bcpPathsFn) import('./lib/bcp').then((m) => (bcpPathsFn = m.bcpPaths)); });
+  // 非商用 layers come as pictures only (see src/lib/bcp.ts): roads, ports and rail stations
+  let bcpData = $state.raw<import('./lib/bcp').BcpSource | null>(null);
+  $effect(() => { if (app.showBcp && !bcpData) import('./lib/bcp').then((m) => m.loadBcpSource()).then((d) => (bcpData = d)); });
+  let roadTiles = $state.raw<TileLayer | null>(null), hubTiles = $state.raw<TileLayer | null>(null);
+  $effect(() => { if (app.showBcp && !roadTiles) withIndex(LOGIROAD_TILES).then((l) => (roadTiles = l)); });
+  const hasHubTiles = $derived(!!hubs?.items.some((h) => h.kind !== 'air'));
+  $effect(() => { if (app.showHubs && hasHubTiles && !hubTiles) withIndex(HUB_TILES).then((l) => (hubTiles = l)); });
+  const overlays = $derived([...(app.showBcp && roadTiles ? [roadTiles] : []), ...(app.showHubs && hubTiles ? [hubTiles] : [])]);
   /** measured plots in the shortlist, outlined on the map */
   const plots = $derived(shortlist.items.filter((it) => it.kind === 'plot').map((it) => {
     const ring = plotRing(it.code);
@@ -679,14 +682,15 @@
     const maxT = { air: 0, port: 0, rail: 1 };
     for (const h of hubs.items) if (h.t && h.t > maxT[h.kind]) maxT[h.kind] = h.t;
     const label = { air: tt('hubAir'), port: tt('hubPort'), rail: tt('hubRail') };
-    return hubs.items.map((h, i) => {
+    // ports and rail stations (非商用) are picture tiles: only airports carry coordinates
+    return hubs.items.filter((h) => h.kind === 'air' && h.p).map((h, i) => {
       const r = h.kind === 'rail' ? 4 : 4 + 7 * Math.sqrt((h.t ?? 0) / (maxT[h.kind] || 1));
       const rows: [string, string][] = [];
       if (h.t) rows.push([tt('cargoTons'), `${fmtCompact(L, h.t)}${L === 'ja' ? 'トン' : ' t'}`]);
       if (h.intl && h.t) rows.push([tt('intlShare'), fmtPct(L, (h.intl / h.t) * 100, 0)]);
       if (h.teu) rows.push([tt('teu'), fmtCompact(L, h.teu)]);
       const src = hubs!.sources[h.kind];
-      return { key: `${h.kind}${i}`, kind: h.kind, xy: geo!.P(h.p), r, label: h.name, major: (h.t ?? 0) > (h.kind === 'air' ? 50_000 : 30_000_000),
+      return { key: `${h.kind}${i}`, kind: h.kind, xy: geo!.P(h.p!), r, label: h.name, major: (h.t ?? 0) > (h.kind === 'air' ? 50_000 : 30_000_000),
                tip: { title: h.name, sub: `${label[h.kind]} · ${h.cls}`, rows, source: src ? src[L] : undefined } };
     }).sort((a, b) => a.r - b.r);
   });
@@ -1197,7 +1201,7 @@
           {raster} pickPoint={(s.pickArmed && !!lt?.grid) || s.inspectArmed || s.closeArmed} onpoint={onpointAny} {zoning}
           tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
           bind:zoomZ={mapZ} mv={app.mv} onmv={(v) => (app.mv = v)}
-          showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
+          showBld={app.showBld} showFude={app.showFude} {plots} keep={s.screened?.keep ?? null} {overlays}
           syncT={split ? syncT : null} onsync={(v) => { if (split) syncT = v; }}
         />
         {#if split}<p class="split-cap">{view.legend.title}</p>{/if}
@@ -1212,7 +1216,7 @@
               {onpick} onclear={clearFocus} {onsite}
               tileLayer={mapTile} fillOpacity={mapTile ? app.fillOp : 1} dark={app.dark}
               {syncT} onsync={(v) => (syncT = v)} follower
-              showBld={app.showBld} showFude={false} {plots} keep={s.screened?.keep ?? null} bcp={bcpLayer}
+              showBld={app.showBld} showFude={false} {plots} keep={s.screened?.keep ?? null} {overlays}
             />
             <div class="split-cap">
               <select class="sel" value={app.lk2} aria-label={tt('splitMetric')} onchange={(e) => (app.lk2 = e.currentTarget.value)}>
@@ -1270,7 +1274,7 @@
         {/if}
         <p class="src">{tt('source')}：<a href={view.source.url}>{view.source.text}</a>
           {#if mapTile} · <a href="https://maps.gsi.go.jp/development/ichiran.html">{tt('tilesSource')}（{mapTile[L]}{mapTile.thematic ? `・${TILE_LAYERS[0][L]}` : ''}）</a>{/if}
-          {#if app.showBcp && bcpData} · <a href={bcpData.source.emergency.url}>{bcpData.source.emergency[L]}</a> · <a href={bcpData.source.logistics.url}>{bcpData.source.logistics[L]}</a>（{bcpData.source.note[L]}） · <a href="https://www.tokusya.ktr.mlit.go.jp/PR/download/oogatasya_map.html">{L === 'ja' ? '大型車誘導区間 通行条件マップ（国交省・PDF）' : 'Large-vehicle route maps (MLIT, PDF)'}</a>{/if}
+          {#if app.showBcp && bcpData} · <a href={bcpData.emergency.url}>{bcpData.emergency[L]}</a> · <a href={bcpData.logistics.url}>{bcpData.logistics[L]}</a>（{bcpData.note[L]}） · <a href="https://www.tokusya.ktr.mlit.go.jp/PR/download/oogatasya_map.html">{L === 'ja' ? '大型車誘導区間 通行条件マップ（国交省・PDF）' : 'Large-vehicle route maps (MLIT, PDF)'}</a>{/if}
           {#if app.showBld && mapZ >= 15} · <a href="https://github.com/gsi-cyberjapan/optimal_bvmap">{tt('bldSource')}</a>{/if}
           {#if app.showFude && mapZ >= 16} · <a href="https://www.moj.go.jp/MINJI/minji05_00494.html">{tt('fudeSource')}</a>（<a href="https://tiles.kmproj.com">KotobaMedia</a>）{/if}</p>
       </div>

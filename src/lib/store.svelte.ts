@@ -31,7 +31,7 @@ export interface MuniData {
 /** airports (+ ports / rail freight stations in a non-commercial build) */
 export interface Hubs {
   noncommercial: boolean;
-  items: { kind: 'air' | 'port' | 'rail'; name: string; cls: string; t: number | null; intl?: number | null; teu?: number | null; p: [number, number] }[];
+  items: { kind: 'air' | 'port' | 'rail'; name: string; cls: string; t: number | null; intl?: number | null; teu?: number | null; /** airports only: ports and rail stations are 非商用 and drawn from tiles */ p?: [number, number] }[];
   sites: Record<string, { air: { n: string; km: number } | null; port?: { n: string; km: number } }>;
   sources: Record<string, { ja: string; en: string; url: string }>;
 }

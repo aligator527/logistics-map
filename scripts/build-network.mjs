@@ -16,7 +16,7 @@
 //     or the Izu islands do not).
 // Each origin or destination (municipality centre, port, airport, freight station, DPL site) gets
 // its access legs here; the browser runs Dijkstra over the graph (src/lib/travel.ts).
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -355,7 +355,12 @@ console.log(`municipalities: ${munis.length}; without an expressway entry within
 
 const mm = read('public/data/multimodal.json');
 const pois = {};
-for (const it of mm.items) pois[`${it.kind}:${it.name}`] = place(it.lon, it.lat);
+// ports and rail stations (非商用, scripts/etl-multimodal.mjs): their access legs come from the true position, but the
+// published position is only the 0.01° (~1 km) cell, used for short direct trips
+const nc = existsSync(resolve(root, 'data/geo/hubs-nc.json')) ? read('data/geo/hubs-nc.json') : [];
+const r2 = (v) => Math.round(v * 100) / 100;
+for (const it of mm.items) if (it.kind === 'air') pois[`${it.kind}:${it.name}`] = place(it.lon, it.lat);
+for (const it of nc) { const q = place(it.lon, it.lat); pois[`${it.kind}:${it.name}`] = { ...q, ll: [r2(it.lon), r2(it.lat)] }; }
 for (const s of read('public/data/dpl.json').sites) pois[`site:${s.name}`] = place(s.lon, s.lat);
 
 writeJson(resolve(root, 'public/geo/network.json'), {

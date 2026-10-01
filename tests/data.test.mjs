@@ -247,3 +247,26 @@ test('rent: 一五不動産 logistics rental market', () => {
   assert.ok(r.regions.every((g) => g.rent.at(-1) > 2000 && g.rent.at(-1) < 8000), 'latest rents');
   assert.ok(/一五不動産/.test(r.source.ja));
 });
+
+test('非商用 layers: pictures and derived values only', async () => {
+  // 国土情報提供サイト運営事務局 (2026-10): no data the viewer could download as coordinates
+  assert.ok(!existsSync(new URL('../public/geo/logiroads.json', import.meta.url)), 'no road lines as data');
+  const mm = load('data/multimodal.json');
+  assert.equal(mm.items.filter((x) => x.kind !== 'air' && ('lat' in x || 'lon' in x || 'p' in x)).length, 0, 'ports / stations without coordinates');
+  assert.ok(mm.items.some((x) => x.kind === 'port' && x.name === '名古屋港' && x.teu > 1_000_000));
+  const net = load('geo/network.json');
+  for (const [k, v] of Object.entries(net.pois)) if (/^(port|rail):/.test(k)) assert.ok(v.ll.every((c) => Math.abs(c * 100 - Math.round(c * 100)) < 1e-6), `${k}: 0.01° cell only`);
+  for (const dir of ['logiroads', 'hubs']) {
+    const ix = load(`tiles/${dir}/index.json`);
+    assert.ok(ix['10'].length > 10, `${dir} tiles at z10`);
+    const [x, y] = ix['10'][0].split('/');
+    assert.ok(existsSync(new URL(`../public/tiles/${dir}/10/${x}/${y}.png`, import.meta.url)), `${dir}: indexed tile exists`);
+  }
+  const { gunzipSync } = await import('node:zlib');
+  const g = gunzipSync(readFileSync(new URL('../public/geo/grid.bin.gz', import.meta.url)));
+  const d = gunzipSync(readFileSync(new URL('../public/geo/logidist.bin.gz', import.meta.url)));
+  assert.equal(d.length, g.length / 2, 'two distances per grid cell');
+  const m = load('data/muni.json'), ix = (c) => m.codes.indexOf(c);
+  assert.ok(m.m.dEmerg[ix('13101')] < 1, '千代田区 on a primary emergency road');
+  assert.ok(m.m.dEmerg[ix('13307')] > 3, '檜原村 farther away');
+});

@@ -38,7 +38,7 @@
         markers = [], site = -1, roads = null, showRoads = true, flows = [], mutedMarkers = false, zoomFocus = true, level = 'pref', selMuni = null, rings = [], pois = [], muniA = null, muniB = null, tracks = [],
         news = [], newsCards = false, newsPins = [], newsFocus = null, newsAuto = 3, onnews, onnewsclose, onnewsplace, onnewshover,
         onnewspin, relatedFor, timelineFor, locateNews, newsOpen = $bindable(null), raster = null, pickPoint = false, onpoint, zoning = null, tileLayer = null, fillOpacity = 1, dark = false,
-        zoomZ = $bindable(0), mv = '', onmv, syncT = null, onsync, follower = false, showBld = true, showFude = true, plots = [], keep = null, bcp = null,
+        zoomZ = $bindable(0), mv = '', onmv, syncT = null, onsync, follower = false, showBld = true, showFude = true, plots = [], keep = null, overlays = [],
         prefTip, muniTip, siteTip, onpick, onclear, onsite }: {
     geo: GeoData;
     /** shown value per prefecture code "01".."47" */
@@ -120,7 +120,8 @@
     /** the second map of a pair: never frames itself, passes on only the user's own moves */
     follower?: boolean;
     /** 緊急輸送道路 (e1–e3) and 重要物流道路 (l1, l2 alternatives): SVG paths in viewBox units */
-    bcp?: { e1: string; e2: string; e3: string; l1: string; l2: string } | null;
+    /** picture layers of this site (scripts/lib/raster-tiles.mjs), drawn over the areas */
+    overlays?: TileLayer[];
     /** screening: only these municipalities stay in colour (null = all) */
     keep?: Set<string> | null;
     /** plots saved in the shortlist: rings in lon/lat */
@@ -670,18 +671,24 @@
   // ------------------------------------------------------------ 地理院タイル
   let baseCanvas: HTMLCanvasElement | undefined = $state();
   let themeCanvas: HTMLCanvasElement | undefined = $state();
+  /** this site's own picture layers (logistics roads, ports and rail stations), over the areas */
+  let ovlCanvas: HTMLCanvasElement | undefined = $state();
   let tileTick = $state(0);
   let tileFrame = 0;
   /** zoomed out too far for a thematic layer (its tiles start at a larger scale) */
   let tilesTooFar = $state(false);
   const P0 = $derived(geo.P([0, 0])), Pk = $derived(geo.P([1, 0])[0] - geo.P([0, 0])[0]);
   const toPlanar = (vx: number, vy: number): [number, number] => [(vx - P0[0]) / Pk, -(vy - P0[1]) / Pk];
-  function drawTiles(cv: HTMLCanvasElement | undefined, layer: TileLayer | null, W: number, H: number, tr: ZoomTransform, f: typeof fit) {
+  function drawTiles(cv: HTMLCanvasElement | undefined, layers: TileLayer | null | TileLayer[], W: number, H: number, tr: ZoomTransform, f: typeof fit) {
     if (!cv) return;
     const dpr = Math.min(2, devicePixelRatio || 1);
     cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
     const ctx = cv.getContext('2d');
-    if (!ctx || !layer || !geo.layout) return;
+    if (!ctx || !geo.layout) return;
+    if (Array.isArray(layers)) { for (const l of layers) drawLayer(ctx, l, dpr, W, H, tr, f, false); return; }
+    if (layers) drawLayer(ctx, layers, dpr, W, H, tr, f, true);
+  }
+  function drawLayer(ctx: CanvasRenderingContext2D, layer: TileLayer, dpr: number, W: number, H: number, tr: ZoomTransform, f: typeof fit, hint: boolean) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // the visible map rectangle in planar metres, and the insets on screen
     const [vx0, vy0] = tr.invert([(0 - f.ox) / f.s, (0 - f.oy) / f.s]), [vx1, vy1] = tr.invert([(W - f.ox) / f.s, (H - f.oy) / f.s]);
@@ -690,9 +697,9 @@
     const insetKeys = inView.map((r) => r.key).filter((k): k is 'okinawa' | 'ogasawara' => k === 'okinawa' || k === 'ogasawara');
     const k = tr.k * f.s, ox = f.ox + tr.x * f.s, oy = f.oy + tr.y * f.s;
     const scr = (p: [number, number]) => { const [vx, vy] = geo.P(p); return [ox + vx * k, oy + vy * k]; };
-    const { tiles, tooFar } = visibleTiles(layer, geo.layout, { x0, y0, x1, y1 }, insetKeys, k * geo.unitsPerMetre * dpr);
-    if (layer.thematic) tilesTooFar = tooFar;
-    if (tooFar && layer.thematic) return;
+    const { tiles, tooFar } = visibleTiles(layer, geo.layout!, { x0, y0, x1, y1 }, insetKeys, k * geo.unitsPerMetre * dpr);
+    if (layer.thematic && hint) tilesTooFar = tooFar;
+    if (tooFar && layer.thematic && hint) return;
     const insetRects = geo.insets.map((r) => ({ key: r.key, x: ox + r.x * k, y: oy + r.y * k, w: r.w * k, h: r.h * k }));
     for (const space of ['main', 'okinawa', 'ogasawara'] as const) {
       const list = tiles.filter((t) => t.space === space);
@@ -702,6 +709,7 @@
       if (space === 'main') { ctx.rect(0, 0, W, H); for (const r of insetRects) ctx.rect(r.x, r.y, r.w, r.h); ctx.clip('evenodd'); }
       else { const r = insetRects.find((q) => q.key === space); if (r) { ctx.rect(r.x, r.y, r.w, r.h); ctx.clip(); } }
       for (const t of list) {
+        if (layer.has && !layer.has.has(t.key)) continue;
         const img = tileImage(tileUrl(layer, t.z, t.x, t.y), () => (tileTick++));
         if (!img) continue;
         const pts = t.grid.map(scr), n = t.n, cell = 256 / n;
@@ -719,12 +727,13 @@
   }
   $effect(() => {
     const layer = tileLayer, tr = paint, f = fit, W = boxW, H = boxH;
-    void tileTick;
+    void tileTick; void overlays; void ovlCanvas;
     cancelAnimationFrame(tileFrame);
     tileFrame = requestAnimationFrame(() => {
       const base = layer?.thematic ? TILE_LAYERS[0] : layer;
       drawTiles(baseCanvas, base ?? null, W, H, tr, f);
       drawTiles(themeCanvas, layer?.thematic ? layer : null, W, H, tr, f);
+      drawTiles(ovlCanvas, overlays, W, H, tr, f);
     });
     return () => cancelAnimationFrame(tileFrame);
   });
@@ -1073,13 +1082,6 @@
           {/each}
         </g>
       {/if}
-      {#if bcp}
-        <g class="bcp" aria-hidden="true">
-          <path class="l1" d={bcp.l1} /><path class="l2" d={bcp.l2} />
-          {#if paint.k >= 2}<path class="e3" d={bcp.e3} />{/if}
-          <path class="e2" d={bcp.e2} /><path class="e1" d={bcp.e1} />
-        </g>
-      {/if}
       {#if roads && showRoads}
         <g class="roads" class:far={paint.k < 2} aria-hidden="true">
           <path class="halo" d={(detailRoads ?? roads.d)[1] + (detailRoads ?? roads.d)[2] + (detailRoads ?? roads.d)[3]} />
@@ -1116,6 +1118,9 @@
     </g>
   </svg>
 
+  {#if overlays.length}
+    <canvas class="raster ovl" bind:this={ovlCanvas} style:transform={cssT} style:width="{boxW}px" style:height="{boxH}px" aria-hidden="true"></canvas>
+  {/if}
   {#if raster}
     <canvas class="raster" bind:this={rasterCanvas} style:transform={cssT} style:width="{boxW}px" style:height="{boxH}px" style:opacity={0.35 + 0.65 * fade} aria-hidden="true"></canvas>
   {/if}
@@ -1448,12 +1453,6 @@
   .ty { fill: color-mix(in oklab, var(--clay) 30%, transparent); stroke: var(--clay); stroke-width: 1.6; }
   .ty-g { fill: none; stroke: var(--clay); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
   .track { fill: none; stroke: var(--clay); stroke-width: 1.8; vector-effect: non-scaling-stroke; pointer-events: none; }
-  .bcp path { fill: none; vector-effect: non-scaling-stroke; pointer-events: none; stroke-linejoin: round; stroke-linecap: round; }
-  .bcp .l1 { stroke: var(--bcp-logi); stroke-width: 6; stroke-opacity: 0.4; }
-  .bcp .l2 { stroke: var(--bcp-logi); stroke-width: 3; stroke-opacity: 0.35; stroke-dasharray: 5 3; }
-  .bcp .e1 { stroke: var(--bcp-emerg); stroke-width: 1.8; }
-  .bcp .e2 { stroke: var(--bcp-emerg); stroke-width: 1.1; stroke-dasharray: 4 2; }
-  .bcp .e3 { stroke: var(--bcp-emerg); stroke-width: 0.8; stroke-opacity: 0.6; stroke-dasharray: 2 2; }
   .track.route { stroke: var(--accent); stroke-width: 4; stroke-opacity: 0.85; stroke-linecap: round; stroke-linejoin: round; }
   .track.closed { stroke: #d33; stroke-width: 5; stroke-dasharray: 6 4; stroke-linecap: round; }
   .track.forecast { stroke-dasharray: 5 4; }

@@ -4,6 +4,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const live = !!process.env.LIVE_URL;
 
+/** E2E_PORT: when 4173 is taken by another project's preview server */
+const port = Number(process.env.E2E_PORT ?? 4173);
 export default defineConfig({
   testDir: 'e2e',
   testMatch: live ? '**/live.spec.ts' : '**/*.spec.ts',
@@ -14,7 +16,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
-    baseURL: live ? process.env.LIVE_URL : 'http://localhost:4173/',
+    baseURL: live ? process.env.LIVE_URL : `http://localhost:${port}/`,
     locale: 'ja-JP',
     timezoneId: 'Asia/Tokyo',
     trace: 'retain-on-failure',
@@ -27,8 +29,8 @@ export default defineConfig({
     { name: 'phone', use: { ...devices['Pixel 7'] } },
   ],
   webServer: live ? undefined : {
-    command: 'npm run build && npx vite preview --port 4173 --strictPort',
-    url: 'http://localhost:4173/',
+    command: `npm run build && npx vite preview --port ${port} --strictPort`,
+    url: `http://localhost:${port}/`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

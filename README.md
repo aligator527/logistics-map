@@ -181,8 +181,8 @@ prefecture comparison mode, a table view and the news layer. The whole state liv
 | New warehouse supply | 建築着工統計調査 tables 1 and 7-2 | `npm run etl:supply` | `public/data/muni.json` |
 | Logistics rents and vacancy | 一五不動産情報サービス「物流施設の賃貸マーケットに関する調査」(CSV of the latest report) | `npm run etl:rent` | `public/data/rent.json` |
 | Road network, travel times | N06 + 道路交通センサス 2021 speeds + ferries | `npm run network` | `public/geo/network.json`, `grid.bin.gz` |
-| Emergency / key logistics roads | 国土数値情報 N10 (2024), N12 (2021) | `npm run bcp-roads` | `public/geo/logiroads.json` |
-| Ports, airports, rail stations | 国土数値情報 C28 / C02 / P31, 港湾統計, 空港管理状況調書 | `npm run etl:multimodal` | `public/data/multimodal.json` |
+| Emergency / key logistics roads | 国土数値情報 N10 (2024), N12 (2021) | `npm run bcp-roads` | `public/tiles/logiroads/` (pictures), `public/geo/logidist.bin.gz` |
+| Ports, airports, rail stations | 国土数値情報 C28 / C02 / P31, 港湾統計, 空港管理状況調書 | `npm run etl:multimodal` | `public/data/multimodal.json`, `public/tiles/hubs/` (ports and stations as pictures) |
 | News, facility registry | RSS (see below) | `npm run news` | `public/data/news.json`, `facilities.json` |
 
 `npm run data` rebuilds everything. Large inputs (`data/raw`, `data/geo`) are not committed; `data/raw-manifest.json`
@@ -239,10 +239,15 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   `update-news.yml` refreshes the news and the facility registry.
 
 ## Licences and limits
-- The site is non-commercial. Ports (C02) and rail freight stations (P31) are included under non-commercial terms
-  (`etl:multimodal --noncommercial`; drop the flag for a commercial deployment). **Emergency transport roads (N10)** and
-  **key logistics roads (N12)** are also 非商用: they are published only as class-merged, simplified lines with the source
-  named. Parcel tiles (KotobaMedia) are free for non-commercial use.
+- The site is non-commercial. Ports (C02), rail freight stations (P31), **emergency transport roads (N10)** and **key
+  logistics roads (N12)** are 国土数値情報 licensed 非商用 (`etl:multimodal --noncommercial`; drop the flag for a
+  commercial deployment). The 国土情報提供サイト運営事務局 confirmed with MLIT (2026-10) that showing such data as a
+  map layer is not redistribution, but that a state where viewers can obtain the data (vector tiles, APIs) may be. So
+  these layers are published only as **picture tiles** (`public/tiles/logiroads`, `public/tiles/hubs`, drawn by
+  `scripts/lib/raster-tiles.mjs`); the browser never receives their coordinates. What is published as data are GIS
+  results allowed by 規約 3条2項: distances per municipality and per 1 km grid cell (`public/geo/logidist.bin.gz`), the
+  road time to each port / station, and its 0.01° cell for short trips. Parcel tiles (KotobaMedia) are free for
+  non-commercial use.
 - **Rental market** — 一五不動産情報サービス allows reprinting with the source named, except for commercial use or
   material marked 「無断転載を禁じます」 (their FAQ); the survey data carries no such mark and the source is shown with
   every figure. A commercial deployment needs their permission.
@@ -250,7 +255,8 @@ records each file's size, SHA-256, source page and the script that reads it (`np
   only be read, not reused. The site memo links to the prefecture's map instead.
 - News: headlines, links, a short excerpt (≤ 110 characters) and the preview image URL only — no article text or copied
   images. Sources: MLIT press releases, e-Gov public comments and logistics developers' own PR TIMES feeds. Trade media
-  (LNEWS, 物流ウィークリー, LOGISTICS TODAY) are wired in `scripts/fetch-news.mjs` but disabled until permission is given;
+  (物流ウィークリー, LOGISTICS TODAY) are wired in `scripts/fetch-news.mjs` but disabled until permission is given; LNEWS
+  (メディアビズ) declined in writing (RSS only for incorporated partners) and is not used;
   MHLW and Google News are not used (their terms do not allow it).
 - Live traffic (JARTIC) and NEXCO closures are not used: no CORS or open feeds. The diesel price page sits behind a WAF;
   when a request is refused the previous data stays.

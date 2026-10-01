@@ -177,6 +177,27 @@ test('site memo from a point on the map (GSI offline)', async ({ page }, info) =
   expect(errors).toEqual([]);
 });
 
+test('非商用 layers come as pictures: roads, ports and rail stations', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'once is enough');
+  const asked: string[] = [];
+  page.on('request', (r) => asked.push(r.url()));
+  const errors = await open(page, 't=local&bc=1&hb=1&mv=9.5/35.55/139.75');
+  await expect(page.locator('canvas.ovl')).toBeAttached();
+  await expect.poll(() => asked.filter((u) => /tiles\/logiroads\/\d+\//.test(u)).length).toBeGreaterThan(0);
+  await expect.poll(() => asked.filter((u) => /tiles\/hubs\/\d+\//.test(u)).length).toBeGreaterThan(0);
+  // no coordinates of those layers are ever fetched
+  expect(asked.filter((u) => /logiroads\.json/.test(u))).toEqual([]);
+  const mm = await page.evaluate(() => fetch('data/multimodal.json').then((r) => r.json()));
+  expect(mm.items.filter((x: { kind: string; lat?: number; p?: unknown }) => x.kind !== 'air' && (x.lat !== undefined || x.p !== undefined))).toEqual([]);
+  // the site memo still has the distances (from the 1 km grid)
+  await page.getByRole('button', { name: '地点を調べる' }).click();
+  const box = (await page.locator('div.map').first().boundingBox())!;
+  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.35);
+  await page.locator('.panel.point').getByRole('button', { name: '地点カルテを作成' }).click();
+  await expect(page.locator('.dossier-root')).toContainText(/第1次緊急輸送道路\s*約[\d.]+ km/);
+  expect(errors).toEqual([]);
+});
+
 test('phone: folded controls and the selection bar', async ({ page }, info) => {
   test.skip(info.project.name !== 'phone', 'phone layout');
   await open(page, 't=local&mu=23206');

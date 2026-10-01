@@ -17,6 +17,10 @@ export interface TileLayer extends Label {
   /** darken in the dark theme (light base maps) */
   invertDark?: boolean;
   group: 'base' | 'relief' | 'ground';
+  /** tiles served by this site (public/tiles/…), instead of GSI's */
+  base?: string;
+  /** the tiles that exist ("z/x/y"), so missing ones are never requested */
+  has?: Set<string>;
 }
 
 export const TILE_LAYERS: TileLayer[] = [
@@ -31,7 +35,25 @@ export const TILE_LAYERS: TileLayer[] = [
   { key: 'lcm', path: 'lcm25k_2012', ext: 'png', minZ: 10, maxZ: 16, ja: '土地条件図', en: 'Land condition map', group: 'ground', thematic: true },
 ];
 const BASE = 'https://cyberjapandata.gsi.go.jp/xyz';
-export const tileUrl = (l: TileLayer, z: number, x: number, y: number) => `${BASE}/${l.path}/${z}/${x}/${y}.${l.ext}`;
+export const tileUrl = (l: TileLayer, z: number, x: number, y: number) => `${l.base ?? `${BASE}/${l.path}`}/${z}/${x}/${y}.${l.ext}`;
+
+/** picture layers of this site, for 非商用 data that must not reach the browser as coordinates (scripts/lib/raster-tiles.mjs) */
+const own = (key: string, maxZ: number, ja: string, en: string): TileLayer =>
+  ({ key, path: key, ext: 'png', minZ: 5, maxZ, ja, en, group: 'ground', thematic: true, base: `${import.meta.env.BASE_URL}tiles/${key}` });
+export const LOGIROAD_TILES = own('logiroads', 12, '緊急輸送道路・重要物流道路', 'Emergency and key logistics roads');
+export const HUB_TILES = own('hubs', 16, '港湾・貨物駅', 'Ports and rail freight stations');
+const indexes = new Map<string, Promise<TileLayer | null>>();
+/** the layer with its tile index */
+export function withIndex(l: TileLayer): Promise<TileLayer | null> {
+  let p = indexes.get(l.key);
+  if (!p) {
+    p = fetch(`${l.base}/index.json`).then((r) => (r.ok ? r.json() : null)).then((ix: Record<string, string[]> | null) =>
+      ix ? { ...l, has: new Set(Object.entries(ix).flatMap(([z, keys]) => keys.map((k) => `${z}/${k}`))) } : null)
+      .catch(() => { indexes.delete(l.key); return null; });
+    indexes.set(l.key, p);
+  }
+  return p;
+}
 
 // ------------------------------------------------------------ Web Mercator tile maths
 const lon2x = (lon: number, z: number) => ((lon + 180) / 360) * 2 ** z;

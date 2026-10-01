@@ -9,13 +9,17 @@
 // (2013), both licensed for NON-COMMERCIAL use. They are left out unless --noncommercial is given
 // (only for a non-commercial deployment). Port cargo / TEU 2025: e-Stat 港湾統計（港別集計値）
 // statInfId 000040251292 (government standard terms), joined on prefecture + port name.
+// Ports and stations reach the browser only as picture tiles (public/tiles/hubs): multimodal.json keeps their names and
+// statistics but no coordinates (国土情報提供サイト運営事務局, 2026-10: data the viewer can download may count as
+// redistribution). Their positions stay in data/geo/hubs-nc.json for the road network build (not published).
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as XLSX from 'xlsx';
 import { project, r10 } from './lib/project.mjs';
 import { GridIndex } from './lib/geo-ll.mjs';
+import { renderTiles } from './lib/raster-tiles.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const RAW = resolve(root, 'data/raw/multimodal');
@@ -129,9 +133,25 @@ for (const s of dpl) {
   };
 }
 
+// 非商用 positions: tiles for the map, a private copy for build-network.mjs
+const nc = items.filter((x) => x.kind !== 'air');
+mkdirSync(resolve(root, 'data/geo'), { recursive: true });
+writeFileSync(resolve(root, 'data/geo/hubs-nc.json'), JSON.stringify(nc.map(({ kind, name, lon, lat }) => ({ kind, name, lon, lat }))));
+const TILES = resolve(root, 'public/tiles/hubs');
+if (nc.length) {
+  const maxPort = Math.max(1, ...nc.filter((x) => x.kind === 'port').map((x) => x.t ?? 0));
+  // the vector markers' sizes (App.svelte hubPois), a little smaller when zoomed far out
+  const scale = (z) => (z <= 6 ? 0.7 : z <= 8 ? 0.85 : 1);
+  const { files, bytes } = await renderTiles({ out: TILES, zooms: [5, 16], palette: ['#2e5f6e', '#ffffff', '#97afb6'],
+    points: nc.sort((a, b) => (a.t ?? 0) - (b.t ?? 0)).map((x) => ({ lon: x.lon, lat: x.lat, kind: x.kind, color: '#2e5f6e',
+      minZ: x.kind === 'rail' ? 7 : 5,
+      r: (z) => scale(z) * (x.kind === 'rail' ? 4 : 4 + 7 * Math.sqrt((x.t ?? 0) / maxPort)) })) });
+  console.log(`hub tiles: ${files} files, ${(bytes / 1024).toFixed(0)} KB`);
+} else rmSync(TILES, { recursive: true, force: true });
+
 writeFileSync(resolve(root, 'public/data/multimodal.json'), JSON.stringify({
   noncommercial: NONCOMMERCIAL,
-  items,
+  items: items.map((x) => (x.kind === 'air' ? x : { kind: x.kind, name: x.name, cls: x.cls, t: x.t, ...(x.teu !== undefined ? { teu: x.teu } : {}) })),
   sites,
   sources: {
     air: { ja: '国土数値情報 空港データ（C28, 2021年）、国土交通省航空局「空港管理状況調書」（2025年）', en: 'MLIT airports (C28, 2021); Civil Aviation Bureau airport statistics (2025)', url: 'https://www.mlit.go.jp/koku/15_bf_000185.html' },
