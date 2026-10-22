@@ -277,3 +277,8 @@ letter labels (not colour alone). Text contrast ≥ 5:1. Flow arcs: outbound in 
 - **GitHub Pages**: `.github/workflows/deploy-pages.yml`; Settings → Pages → Source = GitHub Actions. Paths are relative
   (`base: './'`), so the site works from a subfolder.
 - **Vercel**: import the repository (settings in `vercel.json`).
+
+## Author
+
+Ivan Dolgov — Tech Lead / full-stack engineer in Tokyo.
+Case studies and engineering notes: <https://aligator527.github.io/>
